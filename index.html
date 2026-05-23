@@ -266,8 +266,32 @@
   }
   .manifesto-text strong { color: var(--text); font-weight: 700; }
 
-  /* ============ Features ============ */
+  /* ============ Features + Tab-Switch ============ */
   .features { margin-top: 56px; }
+  .tab-switch {
+    display: flex; gap: 4px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 4px;
+    margin-bottom: 20px;
+  }
+  .tab {
+    flex: 1; padding: 11px 12px;
+    background: transparent; border: none;
+    color: var(--text-muted); font-weight: 600; font-size: 13px;
+    border-radius: 10px; cursor: pointer;
+    transition: background 0.25s, color 0.25s, transform 0.25s;
+    font-family: inherit;
+  }
+  .tab:hover { color: var(--text); }
+  .tab.active {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: white; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.35);
+    transform: translateY(-1px);
+  }
+  .tab-panel {
+    animation: fadeUp 0.4s ease-out backwards;
+  }
+  .tab-panel[hidden] { display: none; }
   .section-label {
     font-size: 11px; font-weight: 700; color: var(--primary);
     text-transform: uppercase; letter-spacing: 0.15em;
@@ -481,55 +505,100 @@
 
   <section class="features">
     <div class="section-label">Das kann sonst keiner</div>
-    <h2 class="section-title">Funktionen die's nur hier gibt</h2>
-    <div class="feature-grid">
-      <div class="feature-card">
-        <div class="feature-emoji">🎧</div>
-        <div class="feature-text"><strong>Vollwertiger Podcast-Player</strong><span>Jeden RSS-Feed der Welt — abonnieren, in der App hören, Lock-Screen mit Cover & Skip, Hintergrund-Wiedergabe, AirPods + Auto-Lenkrad. Kein Wechsel zu Spotify mehr.</span></div>
+    <h2 class="section-title">Was kannst du hier?</h2>
+
+    <div class="tab-switch" role="tablist">
+      <button class="tab active" role="tab" aria-selected="true" data-tab="podcaster">🎙️ Für Podcaster:innen</button>
+      <button class="tab" role="tab" aria-selected="false" data-tab="listener">🎧 Für Hörer:innen</button>
+    </div>
+
+    <div class="tab-panel active" data-panel="podcaster">
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-emoji">🌍</div>
+          <div class="feature-text"><strong>RSS-Sync für jeden Podcast</strong><span>Du hast schon eine Show? RSS rein, fertig — Cover, Episoden, Host-Name automatisch erkannt. Funktioniert mit Spotify, Apple, Anchor, Podigee, Buzzsprout. Allen.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">🎯</div>
+          <div class="feature-text"><strong>Most Wanted Board</strong><span>Hörer:innen sammeln Podcast-Wünsche. Du siehst sofort was die Community gerade braucht — fertige Content-Ideen, validated, nichts mehr ins Blaue produzieren.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">📊</div>
+          <div class="feature-text"><strong>Polls die Folgen formen</strong><span>"Welches Thema in Folge 47?" → Hörer:innen stimmen ab → du machst die Folge. Engagement wird zu Content. Co-Producing durch deine Community.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">📰</div>
+          <div class="feature-text"><strong>Newsletter direkt zu Hörer:innen</strong><span>Longform-Posts mit Bild, GIF, Polls, Episoden-Embed — wie Substack, aber direkt an Leute die dich schon kennen. Push beim Senden inkl.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">🎙️</div>
+          <div class="feature-text"><strong>Audiogram-Sharing</strong><span>Beste Stelle markieren → Story-Card mit Cover, Caption, Waveform → Insta-Story, TikTok, WhatsApp. Bringt neue Hörer:innen ohne extra Tool.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">💬</div>
+          <div class="feature-text"><strong>Direkt-Feedback an deinen Folgen</strong><span>Episode-Kommentare zeigen dir live wer was zu welcher Stelle denkt. @-Mentions, Voice-Replies — kein "vielleicht hört's wer"-Gefühl mehr.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">🏠</div>
+          <div class="feature-text"><strong>Lounge nur für Podcaster:innen</strong><span>Geschützter Channel ohne Hörer:innen-Lärm. Networking, Tipps, Gast-Anfragen, Co-Host-Suche unter Kolleg:innen.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">👥</div>
+          <div class="feature-text"><strong>Co-Hosts integriert</strong><span>Eingeladen → automatisch als Co-Host eingetragen, beide Profile gleichberechtigt, beide kriegen Engagement-Notifs. Endlich keine Solo-Show-Ungleichheit.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">📈</div>
+          <div class="feature-text"><strong>Wachstum &amp; Insights in der App</strong><span>Pro Folge: Hörer-Anzahl, Engagement, Top-Kommentar, geografische Verteilung. Kein externes Analytics-Tool nötig.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">✅</div>
+          <div class="feature-text"><strong>Verifizierungs-Badge</strong><span>Wir matchen deinen RSS-Owner mit deinem Konto — kein anderer kann sich für deine Show ausgeben. Vertrauen by default.</span></div>
+        </div>
       </div>
-      <div class="feature-card">
-        <div class="feature-emoji">💬</div>
-        <div class="feature-text"><strong>Mit der Folge reden — direkt drin</strong><span>Jede Episode hat eigene Kommentare. Du markierst andere mit @, antwortest mit Sprachnachricht (Mini-Podcast), schickst GIFs. Was Spotify nie hatte: echte Diskussion an der Folge.</span></div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-emoji">📡</div>
-        <div class="feature-text"><strong>Zwei Feeds, eine App</strong><span>"Für dich" = mixed Beiträge von allen. "Hörer" = nur was Hörer:innen schreiben. Hörer können posten, mitreden, abstimmen — nicht nur konsumieren. Das ist neu.</span></div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-emoji">📊</div>
-        <div class="feature-text"><strong>Polls die Folgen beeinflussen</strong><span>Frag deine Community: "Welches Thema in Folge 47?" — sie stimmen ab, du machst die Folge. Engagement wird Content.</span></div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-emoji">📰</div>
-        <div class="feature-text"><strong>Newsletter direkt im Feed</strong><span>Schreib Longform-Posts mit Bild, GIF, Polls, Episoden-Embeds — wie ein Substack, aber direkt zu Hörer:innen die dich schon kennen. Mit Text-to-Speech: wer keine Zeit zum Lesen hat, lässt's sich vorlesen.</span></div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-emoji">🎯</div>
-        <div class="feature-text"><strong>Most Wanted Board</strong><span>Hörer:innen sammeln Podcasts die sie sich wünschen. Als Podcaster:in siehst du was die Community gerade braucht — fertige Content-Ideen, validated.</span></div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-emoji">⚡</div>
-        <div class="feature-text"><strong>Live: was deine Leute gerade hören</strong><span>Realtime-Strip: "Anna hört gerade Folge 23 von Mach Mal Richtig." Du tippst → bist drin in der gleichen Folge. Discovery durch Freunde, nicht durch Algo.</span></div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-emoji">🏠</div>
-        <div class="feature-text"><strong>Chat-Räume pro Podcast</strong><span>Jeder Podcast hat seinen eigenen Channel. Plus eine geschützte "Lounge" nur für Podcaster:innen — fürs Networking ohne Hörer:innen-Lärm.</span></div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-emoji">🎙️</div>
-        <div class="feature-text"><strong>Audiogram-Sharing</strong><span>Beste Folgen-Stelle markieren, als Story-Card mit Cover + Caption auf Insta/TikTok teilen. Bringt neue Hörer:innen zu dir — ohne extra Tools wie Headliner.</span></div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-emoji">🔔</div>
-        <div class="feature-text"><strong>Push für jeden wichtigen Moment</strong><span>Neue Folge von wem du folgst. @-Mention in irgendeinem Kommentar. Direktnachricht. Like. Repost. Co-Host-Einladung. Alles. Push-Tap landet direkt da wo's passiert ist.</span></div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-emoji">🌍</div>
-        <div class="feature-text"><strong>RSS-Sync für jeden Podcast</strong><span>Du hast schon eine Show? RSS reingeben, fertig — Cover, Episoden, Host-Name automatisch erkannt. Funktioniert mit Spotify-, Apple-, Anchor-, Podigee-, Buzzsprout-Feeds. Allen.</span></div>
-      </div>
-      <div class="feature-card">
-        <div class="feature-emoji">#️⃣</div>
-        <div class="feature-text"><strong>Hashtags + Trending</strong><span>Themen statt nur Algo. Du folgst #truecrime oder #podcasting — der Feed zeigt alles dazu. Live trending-Liste was die Community gerade bewegt.</span></div>
+    </div>
+
+    <div class="tab-panel" data-panel="listener" hidden>
+      <div class="feature-grid">
+        <div class="feature-card">
+          <div class="feature-emoji">🎧</div>
+          <div class="feature-text"><strong>Vollwertiger Player</strong><span>Jeden RSS-Feed der Welt abonnieren, in der App hören. Lock-Screen mit Cover, Skip, Hintergrund — AirPods + Auto-Lenkrad steuern alles. Kein Spotify-Wechsel mehr.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">💬</div>
+          <div class="feature-text"><strong>Mit der Folge mitreden</strong><span>Jede Episode hat eigene Kommentare. Du markierst andere mit @, antwortest mit Sprachnachricht (Mini-Podcast), schickst GIFs. Spotify hatte das nie.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">📡</div>
+          <div class="feature-text"><strong>Eigener Feed + posten dürfen</strong><span>Hörer-Feed mit Beiträgen anderer Hörer:innen. Du postest selbst, kommentierst Podcaster, stimmst in Polls ab — du bist nicht nur Konsument:in.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">🎯</div>
+          <div class="feature-text"><strong>Most Wanted: deine Wünsche sichtbar</strong><span>Was du dir wünschst kommt aufs öffentliche Board. Podcaster:innen sehen's und antworten direkt — oder andere stimmen mit dir ab.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">⚡</div>
+          <div class="feature-text"><strong>Live: was Freunde gerade hören</strong><span>Realtime-Strip oben: "Anna hört Folge 23." Du tippst → drin in der gleichen Folge. Discovery durch Menschen die du kennst, nicht durch Algo.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">✨</div>
+          <div class="feature-text"><strong>Vibes für Folgen</strong><span>Statt nur Sterne: 🤣 lustig, 🧠 lehrreich, 😢 emotional, 🔥 banger. Schnell-Reaction pro Folge — anderen wird sichtbar wie's wirklich war.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">🏠</div>
+          <div class="feature-text"><strong>Chat-Räume pro Podcast</strong><span>Jeder Podcast hat seinen eigenen Raum. Triff andere Fans, diskutier in Echtzeit, schreib direkt mit den Hosts.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">🔔</div>
+          <div class="feature-text"><strong>Push wenn's interessant wird</strong><span>Neue Folge von deinem Podcast. Jemand zitiert dich. Antwort auf deinen Kommentar. Push-Tap landet direkt am Ziel — nicht im App-Tutorial.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">#️⃣</div>
+          <div class="feature-text"><strong>Hashtags + Trending-Themen</strong><span>Folg #truecrime, #fußball, #podcasting — Feed zeigt alles dazu. Trending-Liste zeigt was die Community gerade bewegt.</span></div>
+        </div>
+        <div class="feature-card">
+          <div class="feature-emoji">🎙️</div>
+          <div class="feature-text"><strong>Audiogram-Karten teilen</strong><span>Geile Folgen-Stelle gefunden? Markier sie, render als Story-Card, schick zu Insta/WhatsApp/Threads. Andere kommen direkt zur Folge.</span></div>
+        </div>
       </div>
     </div>
   </section>
@@ -641,6 +710,33 @@
       });
     }, { threshold: 0.5 });
     stats.forEach(function(s) { io.observe(s); });
+  })();
+
+  // Tab-Switch zwischen Podcaster- und Hörer-View
+  (function() {
+    var tabs = document.querySelectorAll('.tab');
+    var panels = document.querySelectorAll('.tab-panel');
+    tabs.forEach(function(tab) {
+      tab.addEventListener('click', function() {
+        var target = tab.getAttribute('data-tab');
+        tabs.forEach(function(t) {
+          var active = t.getAttribute('data-tab') === target;
+          t.classList.toggle('active', active);
+          t.setAttribute('aria-selected', active ? 'true' : 'false');
+        });
+        panels.forEach(function(p) {
+          var match = p.getAttribute('data-panel') === target;
+          if (match) {
+            p.hidden = false;
+            p.style.animation = 'none';
+            void p.offsetWidth;
+            p.style.animation = '';
+          } else {
+            p.hidden = true;
+          }
+        });
+      });
+    });
   })();
 
   // Subtle parallax on bubbles based on mouse
