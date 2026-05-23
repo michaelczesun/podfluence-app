@@ -134,9 +134,26 @@
   .feature-emoji { font-size: 18px; flex-shrink: 0; }
 
   footer {
-    text-align: center; padding: 32px 24px; color: var(--text-muted); font-size: 12px;
+    text-align: center; padding: 32px 24px 48px; color: var(--text-muted); font-size: 12px;
+    max-width: 480px; margin: 0 auto; position: relative; z-index: 1;
   }
   footer a { color: var(--primary); text-decoration: none; }
+
+  .legal {
+    margin-top: 24px; text-align: left;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 12px; padding: 14px 16px;
+  }
+  .legal summary {
+    cursor: pointer; font-weight: 600; color: var(--text-muted);
+    user-select: none; list-style: none;
+  }
+  .legal summary::-webkit-details-marker { display: none; }
+  .legal summary::after { content: ' ›'; transition: transform 0.2s; display: inline-block; }
+  .legal[open] summary::after { transform: rotate(90deg); }
+  .legal-content { margin-top: 14px; line-height: 1.6; color: var(--text-muted); font-size: 12px; }
+  .legal-content p { margin: 0 0 12px; }
+  .legal-content strong { color: var(--text); font-weight: 600; }
 
   .install-note {
     margin-top: 12px; padding: 12px 14px;
@@ -209,8 +226,32 @@
 </main>
 
 <footer>
-  Probleme oder Feedback?<br/>
-  Schreib direkt an <a href="mailto:michael@dasgeht.at">michael@dasgeht.at</a>
+  <p style="margin: 0 0 24px;">
+    Probleme oder Feedback?<br/>
+    Schreib direkt an <a href="mailto:michael@dasgeht.at">michael@dasgeht.at</a>
+  </p>
+
+  <details class="legal">
+    <summary>Impressum &amp; Kontakt</summary>
+    <div class="legal-content">
+      <p><strong>Webseitenbetreiber:</strong> Michael Czesun – DAS GEHT!</p>
+      <p>
+        <strong>GISA:</strong> 35981749<br/>
+        <strong>Firmenbuchgericht:</strong> Handelsgericht Hartberg<br/>
+        <strong>UID-Nr:</strong> 67343/3496<br/>
+        <strong>Gewerbeaufsichtbehörde:</strong> BH Hartberg<br/>
+        <strong>Mitgliedschaft:</strong> Mitglied der WKO
+      </p>
+      <p>
+        <strong>Kontakt:</strong><br/>
+        Telefon: <a href="tel:+436644176368">+43 664 4176368</a><br/>
+        E-Mail: <a href="mailto:michael@dasgeht.at">michael@dasgeht.at</a>
+      </p>
+      <p style="margin-top: 16px;">
+        <a href="https://dasgeht.at/impressum" target="_blank" rel="noopener">Vollständiges Impressum auf dasgeht.at →</a>
+      </p>
+    </div>
+  </details>
 </footer>
 
 <script>
