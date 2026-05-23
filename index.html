@@ -5,164 +5,354 @@
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Podfluence — Beta-Download</title>
 <meta name="description" content="Die soziale Podcast-App. iOS via TestFlight, Android als direkter APK-Download." />
-<meta property="og:title" content="Podfluence" />
+<meta property="og:title" content="Podfluence — Beta" />
 <meta property="og:description" content="Die soziale Podcast-App. Lade die Beta jetzt." />
 <meta property="og:image" content="https://media.giphy.com/media/3o6Zt6ML6BklcajjsA/giphy.gif" />
 <meta property="og:type" content="website" />
+<meta name="theme-color" content="#0B0B0F" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E🎧%3C/text%3E%3C/svg%3E" />
 <style>
   :root {
     --bg: #0B0B0F;
+    --bg-deep: #07070A;
     --surface: #16161D;
+    --surface-elev: #1C1C25;
     --border: #2A2A33;
     --primary: #8B5CF6;
-    --primary-dim: rgba(139, 92, 246, 0.18);
+    --primary-2: #A78BFA;
+    --primary-dark: #7C3AED;
+    --primary-dim: rgba(139, 92, 246, 0.15);
     --text: #FFFFFF;
     --text-muted: #9CA3AF;
+    --text-dim: #6B7280;
     --android: #3DDC84;
+    --ios: #F5F5F7;
   }
-  * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
-  body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; position: relative; }
-  main { flex: 1; max-width: 480px; margin: 0 auto; padding: 48px 24px 24px; width: 100%; position: relative; z-index: 1; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+    scroll-behavior: smooth;
+  }
+  body {
+    min-height: 100vh; min-height: 100dvh;
+    display: flex; flex-direction: column; position: relative;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(139, 92, 246, 0.18), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 100% 40%, rgba(124, 58, 237, 0.12), transparent 60%),
+      var(--bg-deep);
+  }
 
-  /* Floating Bubbles — Hommage an die Schwebebubbles im App-Feed.
-     Reine CSS-Animation, kein JS. fixed/absolute positioniert hinter
-     dem Content (z-index 0), Content liegt drüber (z-index 1). */
+  /* ============ Floating Bubbles ============ */
   .bubbles { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
   .bubble {
-    position: absolute;
-    border-radius: 50%;
-    background: linear-gradient(135deg, var(--primary), #7C3AED);
-    opacity: 0.18;
-    filter: blur(0.5px);
-    animation: float 14s ease-in-out infinite;
+    position: absolute; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, var(--primary-2), var(--primary-dark));
+    opacity: 0.15; filter: blur(2px);
+    animation: float 16s ease-in-out infinite;
+    will-change: transform;
   }
-  .bubble.glow { box-shadow: 0 0 40px rgba(139, 92, 246, 0.5); }
-  .bubble.b1 { width: 120px; height: 120px; top: 10%; left: -40px; animation-delay: 0s; animation-duration: 18s; }
-  .bubble.b2 { width: 200px; height: 200px; top: 40%; right: -80px; animation-delay: -3s; animation-duration: 22s; opacity: 0.12; }
-  .bubble.b3 { width: 80px; height: 80px; top: 65%; left: 20%; animation-delay: -7s; animation-duration: 16s; }
-  .bubble.b4 { width: 60px; height: 60px; top: 85%; right: 15%; animation-delay: -2s; animation-duration: 13s; opacity: 0.25; }
-  .bubble.b5 { width: 160px; height: 160px; top: 20%; right: 10%; animation-delay: -10s; animation-duration: 20s; opacity: 0.1; }
-  .bubble.b6 { width: 40px; height: 40px; top: 50%; left: 8%; animation-delay: -5s; animation-duration: 11s; opacity: 0.3; }
-  .bubble.b7 { width: 100px; height: 100px; bottom: 5%; left: 35%; animation-delay: -8s; animation-duration: 17s; }
+  .bubble.glow { box-shadow: 0 0 60px rgba(139, 92, 246, 0.4); opacity: 0.22; }
+  .bubble.b1 { width: 140px; height: 140px; top: 8%;  left: -50px;  animation-duration: 22s; }
+  .bubble.b2 { width: 240px; height: 240px; top: 35%; right: -100px;animation-duration: 26s; animation-delay: -4s; opacity: 0.1; }
+  .bubble.b3 { width: 90px;  height: 90px;  top: 60%; left: 20%;    animation-duration: 18s; animation-delay: -8s; }
+  .bubble.b4 { width: 70px;  height: 70px;  top: 80%; right: 12%;   animation-duration: 14s; animation-delay: -2s; opacity: 0.28; }
+  .bubble.b5 { width: 180px; height: 180px; top: 22%; right: 5%;    animation-duration: 24s; animation-delay: -11s; opacity: 0.08; }
+  .bubble.b6 { width: 45px;  height: 45px;  top: 48%; left: 6%;     animation-duration: 12s; animation-delay: -5s; opacity: 0.35; }
+  .bubble.b7 { width: 110px; height: 110px; bottom: 5%;left: 40%;   animation-duration: 19s; animation-delay: -9s; }
   @keyframes float {
-    0%, 100% { transform: translate(0, 0) scale(1); }
-    25% { transform: translate(30px, -40px) scale(1.05); }
-    50% { transform: translate(-20px, -60px) scale(0.95); }
-    75% { transform: translate(40px, -20px) scale(1.02); }
+    0%,100% { transform: translate(0,0) scale(1); }
+    33%     { transform: translate(40px,-50px) scale(1.06); }
+    66%     { transform: translate(-30px,-70px) scale(0.94); }
   }
-  /* Mobile: kleinere Bubbles damit's nicht zu busy wird */
-  @media (max-width: 480px) {
-    .bubble.b2 { width: 140px; height: 140px; }
-    .bubble.b5 { width: 110px; height: 110px; }
-  }
-  /* Respekt für reduce-motion */
-  @media (prefers-reduced-motion: reduce) {
-    .bubble { animation: none; }
+  @media (prefers-reduced-motion: reduce) { .bubble { animation: none; } }
+
+  /* ============ Layout ============ */
+  main { flex: 1; max-width: 520px; margin: 0 auto; padding: 56px 24px 40px; width: 100%; position: relative; z-index: 1; }
+  section { animation: fadeUp 0.7s ease-out backwards; }
+  section:nth-child(1) { animation-delay: 0.05s; }
+  section:nth-child(2) { animation-delay: 0.15s; }
+  section:nth-child(3) { animation-delay: 0.25s; }
+  section:nth-child(4) { animation-delay: 0.35s; }
+  section:nth-child(5) { animation-delay: 0.45s; }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(16px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 
-  .hero { text-align: center; margin-bottom: 32px; }
+  /* ============ Hero ============ */
+  .hero { text-align: center; margin-bottom: 40px; }
+  .logo-wrap { position: relative; display: inline-block; margin-bottom: 24px; }
   .logo {
-    width: 88px; height: 88px; border-radius: 22px;
-    background: linear-gradient(135deg, var(--primary), #7C3AED);
-    display: inline-flex; align-items: center; justify-content: center;
-    font-size: 44px;
-    box-shadow: 0 16px 48px rgba(139, 92, 246, 0.35);
-    margin-bottom: 20px;
-  }
-  h1 { font-size: 36px; font-weight: 800; margin: 0 0 4px; letter-spacing: -0.02em; }
-  .rename-hint {
-    color: var(--primary); font-size: 11px; font-weight: 600;
-    text-transform: uppercase; letter-spacing: 0.08em;
-    margin: 0 0 12px;
-  }
-  .tagline { color: var(--text-muted); font-size: 16px; margin: 0; line-height: 1.5; }
-  .badge {
-    display: inline-block; padding: 4px 10px; border-radius: 999px;
-    background: var(--primary-dim); color: var(--primary);
-    font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
-    margin-top: 14px;
-  }
-
-  .cards { display: flex; flex-direction: column; gap: 14px; margin-top: 32px; }
-  .card {
-    background: var(--surface);
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    padding: 20px;
-    text-decoration: none;
-    color: var(--text);
-    display: flex; align-items: center; gap: 16px;
-    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-  }
-  .card:hover, .card:active { transform: translateY(-1px); border-color: var(--primary); background: #1C1C25; }
-  .card-icon {
-    width: 52px; height: 52px; border-radius: 14px;
+    width: 96px; height: 96px; border-radius: 26px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
     display: flex; align-items: center; justify-content: center;
-    font-size: 28px; flex-shrink: 0;
+    font-size: 48px;
+    box-shadow: 0 20px 60px rgba(139, 92, 246, 0.45), 0 4px 12px rgba(0,0,0,0.3);
+    animation: breathe 4s ease-in-out infinite;
+    position: relative; z-index: 2;
   }
-  .card-icon.ios { background: rgba(255,255,255,0.08); }
-  .card-icon.android { background: rgba(61, 220, 132, 0.14); color: var(--android); }
-  .card-content { flex: 1; min-width: 0; }
-  .card-title { font-weight: 700; font-size: 17px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
-  .card-sub { font-size: 13px; color: var(--text-muted); margin: 0; line-height: 1.4; }
-  .card-arrow { color: var(--text-muted); font-size: 24px; flex-shrink: 0; }
+  .logo-glow {
+    position: absolute; inset: -20px;
+    background: radial-gradient(circle, rgba(139, 92, 246, 0.4), transparent 60%);
+    border-radius: 50%; z-index: 1;
+    animation: glowPulse 4s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%,100% { transform: scale(1) rotate(0deg); }
+    50%     { transform: scale(1.04) rotate(-1deg); }
+  }
+  @keyframes glowPulse {
+    0%,100% { opacity: 0.6; transform: scale(1); }
+    50%     { opacity: 1;   transform: scale(1.1); }
+  }
+  h1 {
+    font-size: 44px; font-weight: 800; margin: 0 0 6px;
+    letter-spacing: -0.03em; line-height: 1.05;
+    background: linear-gradient(180deg, #FFFFFF, #C4B5FD);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .rename-hint {
+    display: inline-block; padding: 3px 10px;
+    background: var(--primary-dim); border: 1px solid rgba(139, 92, 246, 0.3);
+    color: var(--primary-2); font-size: 10px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.1em;
+    border-radius: 999px; margin: 8px 0 16px;
+  }
+  .tagline {
+    color: var(--text-muted); font-size: 17px; line-height: 1.5;
+    margin: 0 auto; max-width: 360px;
+  }
+  .badge {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 5px 12px; border-radius: 999px;
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text-muted); font-size: 12px; font-weight: 500;
+    margin-top: 18px;
+  }
+  .badge-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--android); box-shadow: 0 0 8px var(--android);
+    animation: livePulse 2s ease-in-out infinite;
+  }
+  @keyframes livePulse {
+    0%,100% { opacity: 1; }
+    50%     { opacity: 0.4; }
+  }
 
+  /* ============ Download Cards ============ */
+  .cards { display: flex; flex-direction: column; gap: 12px; margin-top: 32px; }
+  .card {
+    background: linear-gradient(135deg, var(--surface), var(--surface-elev));
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 20px;
+    text-decoration: none; color: var(--text);
+    display: flex; align-items: center; gap: 16px;
+    transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.2s, box-shadow 0.2s;
+    position: relative; overflow: hidden;
+  }
+  .card::before {
+    content: ''; position: absolute; inset: 0;
+    background: linear-gradient(135deg, transparent 50%, rgba(139, 92, 246, 0.08));
+    opacity: 0; transition: opacity 0.2s;
+  }
+  .card:hover, .card:active {
+    transform: translateY(-3px);
+    border-color: var(--primary);
+    box-shadow: 0 12px 32px rgba(139, 92, 246, 0.2);
+  }
+  .card:hover::before { opacity: 1; }
+  .card-icon {
+    width: 56px; height: 56px; border-radius: 16px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 30px; flex-shrink: 0;
+    position: relative; z-index: 1;
+  }
+  .card-icon.ios { background: rgba(255,255,255,0.1); }
+  .card-icon.android { background: rgba(61, 220, 132, 0.15); color: var(--android); }
+  .card-content { flex: 1; min-width: 0; position: relative; z-index: 1; }
+  .card-title { font-weight: 700; font-size: 18px; margin: 0 0 4px; }
+  .card-sub { font-size: 13px; color: var(--text-muted); margin: 0; line-height: 1.4; }
+  .card-arrow {
+    color: var(--primary); font-size: 22px; flex-shrink: 0;
+    transition: transform 0.2s; position: relative; z-index: 1;
+  }
+  .card:hover .card-arrow { transform: translateX(4px); }
+
+  /* ============ Platform Hint ============ */
   .platform-hint {
-    margin-top: 24px; padding: 14px 16px;
+    margin-top: 18px; padding: 14px 18px;
     background: var(--primary-dim);
     border: 1px solid rgba(139, 92, 246, 0.3);
     border-radius: 14px;
     font-size: 13px; line-height: 1.5;
     color: #D8C7FF;
   }
-  .platform-hint strong { color: var(--primary); }
-
-  .features { margin-top: 36px; }
-  .features-title {
-    font-size: 13px; font-weight: 600; color: var(--text-muted);
-    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;
-  }
-  .feature {
-    display: flex; align-items: flex-start; gap: 12px;
-    padding: 10px 0;
-    border-bottom: 1px solid var(--border);
-    font-size: 14px;
-  }
-  .feature:last-child { border: none; }
-  .feature-emoji { font-size: 18px; flex-shrink: 0; }
-
-  footer {
-    text-align: center; padding: 32px 24px 48px; color: var(--text-muted); font-size: 12px;
-    max-width: 480px; margin: 0 auto; position: relative; z-index: 1;
-  }
-  footer a { color: var(--primary); text-decoration: none; }
-
-  .legal {
-    margin-top: 24px; text-align: left;
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: 12px; padding: 14px 16px;
-  }
-  .legal summary {
-    cursor: pointer; font-weight: 600; color: var(--text-muted);
-    user-select: none; list-style: none;
-  }
-  .legal summary::-webkit-details-marker { display: none; }
-  .legal summary::after { content: ' ›'; transition: transform 0.2s; display: inline-block; }
-  .legal[open] summary::after { transform: rotate(90deg); }
-  .legal-content { margin-top: 14px; line-height: 1.6; color: var(--text-muted); font-size: 12px; }
-  .legal-content p { margin: 0 0 12px; }
-  .legal-content strong { color: var(--text); font-weight: 600; }
-
+  .platform-hint strong { color: var(--primary-2); }
   .install-note {
-    margin-top: 12px; padding: 12px 14px;
-    background: rgba(61, 220, 132, 0.08);
+    margin-top: 10px; padding: 12px 14px;
+    background: rgba(61, 220, 132, 0.07);
     border: 1px solid rgba(61, 220, 132, 0.2);
     border-radius: 12px;
     font-size: 12px; color: var(--text-muted); line-height: 1.5;
   }
   .install-note strong { color: var(--android); }
+
+  /* ============ Preview Phone ============ */
+  .preview { margin-top: 48px; text-align: center; }
+  .phone {
+    display: inline-block; position: relative;
+    width: 240px; height: 480px;
+    background: linear-gradient(180deg, #1A1A22, #0E0E12);
+    border-radius: 38px;
+    border: 4px solid #2A2A33;
+    box-shadow:
+      0 30px 80px rgba(0,0,0,0.5),
+      0 8px 24px rgba(139, 92, 246, 0.15),
+      inset 0 1px 0 rgba(255,255,255,0.05);
+    padding: 12px;
+    overflow: hidden;
+    transform: perspective(1000px) rotateY(-5deg) rotateX(2deg);
+    transition: transform 0.4s ease;
+  }
+  .phone:hover { transform: perspective(1000px) rotateY(0deg) rotateX(0deg); }
+  .phone-notch {
+    position: absolute; top: 4px; left: 50%; transform: translateX(-50%);
+    width: 80px; height: 22px;
+    background: #000; border-radius: 12px;
+    z-index: 10;
+  }
+  .phone-screen {
+    width: 100%; height: 100%;
+    background: #0B0B0F; border-radius: 26px;
+    padding: 36px 12px 12px;
+    overflow: hidden; text-align: left;
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  .mock-card {
+    background: #16161D; border: 1px solid #2A2A33;
+    border-radius: 14px; padding: 12px;
+    animation: cardSlide 0.6s ease-out backwards;
+  }
+  .mock-card:nth-child(1) { animation-delay: 0.5s; }
+  .mock-card:nth-child(2) { animation-delay: 0.7s; }
+  .mock-card:nth-child(3) { animation-delay: 0.9s; }
+  @keyframes cardSlide {
+    from { opacity: 0; transform: translateX(20px); }
+    to   { opacity: 1; transform: translateX(0); }
+  }
+  .mock-row { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+  .mock-avatar { width: 24px; height: 24px; border-radius: 50%; background: linear-gradient(135deg, #8B5CF6, #EC4899); flex-shrink: 0; }
+  .mock-avatar.a2 { background: linear-gradient(135deg, #3B82F6, #06B6D4); }
+  .mock-avatar.a3 { background: linear-gradient(135deg, #F59E0B, #EF4444); }
+  .mock-name { font-size: 10px; font-weight: 600; color: #FFF; }
+  .mock-handle { font-size: 9px; color: #6B7280; }
+  .mock-line { height: 6px; background: #2A2A33; border-radius: 3px; margin: 4px 0; }
+  .mock-line.short { width: 60%; }
+  .mock-line.med { width: 80%; }
+  .mock-actions { display: flex; gap: 12px; margin-top: 8px; font-size: 9px; color: #6B7280; }
+  .mock-action { display: flex; align-items: center; gap: 3px; }
+
+  /* ============ Features ============ */
+  .features { margin-top: 56px; }
+  .section-label {
+    font-size: 11px; font-weight: 700; color: var(--primary);
+    text-transform: uppercase; letter-spacing: 0.15em;
+    margin-bottom: 8px; text-align: center;
+  }
+  .section-title {
+    font-size: 26px; font-weight: 700; margin: 0 0 24px;
+    text-align: center; letter-spacing: -0.02em;
+  }
+  .feature-grid { display: grid; gap: 10px; }
+  .feature-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    display: flex; align-items: flex-start; gap: 14px;
+    transition: border-color 0.2s, transform 0.2s;
+  }
+  .feature-card:hover { border-color: var(--primary); transform: translateX(2px); }
+  .feature-emoji {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: var(--primary-dim);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px; flex-shrink: 0;
+  }
+  .feature-text {
+    font-size: 13px; line-height: 1.5;
+    color: var(--text);
+  }
+  .feature-text strong { display: block; font-weight: 700; margin-bottom: 2px; }
+  .feature-text span { color: var(--text-muted); }
+
+  /* ============ Stats ============ */
+  .stats {
+    margin-top: 48px;
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 18px; padding: 20px 8px;
+  }
+  .stat { text-align: center; }
+  .stat-num {
+    font-size: 24px; font-weight: 800;
+    background: linear-gradient(135deg, var(--primary-2), var(--primary));
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+    margin-bottom: 2px;
+  }
+  .stat-lbl { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.08em; font-weight: 600; }
+
+  /* ============ Footer ============ */
+  footer {
+    text-align: center; padding: 32px 24px 60px;
+    color: var(--text-dim); font-size: 12px;
+    max-width: 520px; margin: 0 auto; position: relative; z-index: 1;
+  }
+  footer a { color: var(--primary-2); text-decoration: none; }
+  footer a:hover { text-decoration: underline; }
+
+  .legal {
+    margin-top: 24px; text-align: left;
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: 14px; padding: 14px 18px;
+  }
+  .legal summary {
+    cursor: pointer; font-weight: 600; color: var(--text-muted);
+    user-select: none; list-style: none;
+    display: flex; align-items: center; justify-content: space-between;
+    font-size: 13px;
+  }
+  .legal summary::-webkit-details-marker { display: none; }
+  .legal summary::after { content: '›'; transition: transform 0.2s; font-size: 16px; color: var(--primary); }
+  .legal[open] summary::after { transform: rotate(90deg); }
+  .legal-content { margin-top: 14px; line-height: 1.6; color: var(--text-muted); font-size: 12px; }
+  .legal-content p { margin: 0 0 12px; }
+  .legal-content strong { color: var(--text); font-weight: 600; }
+
+  /* ============ Sticky CTA on Scroll ============ */
+  .sticky-cta {
+    position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%) translateY(100px);
+    background: var(--primary); color: white;
+    padding: 12px 20px; border-radius: 999px;
+    font-weight: 700; font-size: 14px;
+    box-shadow: 0 12px 32px rgba(139, 92, 246, 0.5);
+    text-decoration: none; z-index: 100;
+    transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    display: none;
+  }
+  .sticky-cta.visible { transform: translateX(-50%) translateY(0); }
+
+  @media (max-width: 480px) {
+    main { padding: 40px 20px 32px; }
+    h1 { font-size: 38px; }
+    .phone { width: 200px; height: 400px; }
+  }
 </style>
 </head>
 <body>
@@ -175,23 +365,30 @@
   <div class="bubble b6 glow"></div>
   <div class="bubble b7"></div>
 </div>
-<main>
-  <div class="hero">
-    <div class="logo">🎧</div>
-    <h1>Podfluence</h1>
-    <p class="rename-hint">Name und Logo ändern sich noch.</p>
-    <p class="tagline">Die soziale Podcast-App.<br/>Hör, kommentier, vernetz dich.</p>
-    <span class="badge">Beta 1.2.0 · 24.05.2026</span>
-  </div>
 
-  <div class="cards">
+<main>
+  <section class="hero">
+    <div class="logo-wrap">
+      <div class="logo-glow"></div>
+      <div class="logo">🎧</div>
+    </div>
+    <div class="rename-hint">Name &amp; Logo ändern sich noch</div>
+    <h1>Podfluence</h1>
+    <p class="tagline">Die soziale Podcast-App.<br/>Hör, kommentier, vernetz dich.</p>
+    <div class="badge">
+      <span class="badge-dot"></span>
+      Beta 1.2.0 · live seit heute
+    </div>
+  </section>
+
+  <section class="cards">
     <a id="ios-card" class="card" href="https://testflight.apple.com/join/q6TJRyEw">
       <div class="card-icon ios">🍎</div>
       <div class="card-content">
         <p class="card-title">iPhone &amp; iPad</p>
-        <p class="card-sub">Beta via TestFlight — App Store kommt bald</p>
+        <p class="card-sub">Via TestFlight · App Store kommt bald</p>
       </div>
-      <span class="card-arrow">›</span>
+      <span class="card-arrow">→</span>
     </a>
 
     <a id="android-card" class="card" href="https://expo.dev/artifacts/eas/7a1Hb3fN8WKaNXMVuSpZCx.apk">
@@ -200,35 +397,116 @@
         <p class="card-title">Android</p>
         <p class="card-sub">Direkter APK-Download · 106 MB</p>
       </div>
-      <span class="card-arrow">›</span>
+      <span class="card-arrow">→</span>
     </a>
-  </div>
 
-  <div id="ios-hint" class="platform-hint" style="display:none">
-    Du bist auf iOS — tap auf <strong>iPhone &amp; iPad</strong>. Wenn TestFlight noch nicht installiert ist, lädt iOS die App automatisch.
-  </div>
-  <div id="android-hint" class="platform-hint" style="display:none">
-    Du bist auf Android — tap auf <strong>Android</strong>. Falls dein Browser warnt: das ist normal beim Sideload, du installierst direkt von uns ohne Play Store.
-  </div>
+    <div id="ios-hint" class="platform-hint" style="display:none">
+      Du bist auf iOS — tap auf <strong>iPhone &amp; iPad</strong>. Wenn TestFlight noch nicht installiert ist, lädt iOS die App automatisch.
+    </div>
+    <div id="android-hint" class="platform-hint" style="display:none">
+      Du bist auf Android — tap auf <strong>Android</strong>. Falls dein Browser warnt: das ist normal beim Sideload, du installierst direkt von uns ohne Play Store.
+    </div>
+    <div id="android-install-note" class="install-note" style="display:none">
+      <strong>So installierst du:</strong> APK öffnen → falls "Installation blockiert" kommt, Einstellungen öffnen → "Aus dieser Quelle erlauben" → zurück → installieren. Einmaliger Schritt pro Browser.
+    </div>
+  </section>
 
-  <div id="android-install-note" class="install-note" style="display:none">
-    <strong>So installierst du:</strong> APK öffnen → falls "Installation blockiert" kommt, Einstellungen öffnen → "Aus dieser Quelle erlauben" → zurück → installieren. Einmaliger Schritt pro Browser.
-  </div>
+  <section class="preview">
+    <div class="section-label">Ein Blick rein</div>
+    <h2 class="section-title">So fühlt sich's an</h2>
+    <div class="phone">
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+        <div class="mock-card">
+          <div class="mock-row">
+            <div class="mock-avatar"></div>
+            <div>
+              <div class="mock-name">Sebastian</div>
+              <div class="mock-handle">@machmalrichtig · 2h</div>
+            </div>
+          </div>
+          <div class="mock-line med"></div>
+          <div class="mock-line short"></div>
+          <div class="mock-actions">
+            <div class="mock-action">♥ 12</div>
+            <div class="mock-action">💬 3</div>
+            <div class="mock-action">🎙 1</div>
+          </div>
+        </div>
+        <div class="mock-card">
+          <div class="mock-row">
+            <div class="mock-avatar a2"></div>
+            <div>
+              <div class="mock-name">Anna Wendlinger</div>
+              <div class="mock-handle">@annaw · 4h</div>
+            </div>
+          </div>
+          <div class="mock-line med"></div>
+          <div class="mock-line"></div>
+          <div class="mock-line short"></div>
+        </div>
+        <div class="mock-card">
+          <div class="mock-row">
+            <div class="mock-avatar a3"></div>
+            <div>
+              <div class="mock-name">Nele &amp; Jule</div>
+              <div class="mock-handle">@nelejule · 6h</div>
+            </div>
+          </div>
+          <div class="mock-line med"></div>
+          <div class="mock-line short"></div>
+        </div>
+      </div>
+    </div>
+  </section>
 
-  <div class="features">
-    <p class="features-title">Was du bekommst</p>
-    <div class="feature"><span class="feature-emoji">🎧</span><span>Lock-Screen-Player mit Cover, Titel und Skip — wie Spotify, nur sozialer.</span></div>
-    <div class="feature"><span class="feature-emoji">💬</span><span>Kommentier Folgen, markier andere, schick Mini-Podcasts als Antwort.</span></div>
-    <div class="feature"><span class="feature-emoji">🎯</span><span>Most-Wanted: welche Podcasts sich Hörer:innen wünschen.</span></div>
-    <div class="feature"><span class="feature-emoji">📰</span><span>Newsletter im Feed — Longform-Posts, Polls, Episoden-Mentions.</span></div>
-    <div class="feature"><span class="feature-emoji">🔔</span><span>Push-Notifications für Mentions, Likes, neue Folgen.</span></div>
-  </div>
+  <section class="features">
+    <div class="section-label">Was du bekommst</div>
+    <h2 class="section-title">Funktionen die rocken</h2>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-emoji">🎧</div>
+        <div class="feature-text"><strong>Lock-Screen-Player</strong><span>Cover, Titel, Skip. AirPods und Bluetooth steuern direkt — wie Spotify, nur sozialer.</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-emoji">💬</div>
+        <div class="feature-text"><strong>Episode-Kommentare</strong><span>Diskutier zu jeder Folge. Mit @Mentions, GIFs und Mini-Podcasts als Antwort.</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-emoji">🎯</div>
+        <div class="feature-text"><strong>Most Wanted</strong><span>Welche Podcasts sich Hörer:innen wünschen. Du als Podcaster:in weißt was läuft.</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-emoji">📰</div>
+        <div class="feature-text"><strong>Newsletter im Feed</strong><span>Longform-Posts, Polls, Episoden-Empfehlungen — alles an einem Ort.</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-emoji">🔔</div>
+        <div class="feature-text"><strong>Push für alles Wichtige</strong><span>Mentions, Likes, neue Folgen — du verpasst nichts, ohne Spam.</span></div>
+      </div>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="stat">
+      <div class="stat-num" data-count="32">0</div>
+      <div class="stat-lbl">Podcasts</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num" data-count="3810">0</div>
+      <div class="stat-lbl">Episoden</div>
+    </div>
+    <div class="stat">
+      <div class="stat-num">∞</div>
+      <div class="stat-lbl">Vibes</div>
+    </div>
+  </section>
 </main>
 
 <footer>
   <p style="margin: 0 0 24px;">
     Probleme oder Feedback?<br/>
-    Schreib direkt an <a href="mailto:michael@dasgeht.at">michael@dasgeht.at</a>
+    <a href="mailto:michael@dasgeht.at">michael@dasgeht.at</a>
   </p>
 
   <details class="legal">
@@ -254,9 +532,10 @@
   </details>
 </footer>
 
+<a id="stickyCta" class="sticky-cta" href="#ios-card">↑ Jetzt downloaden</a>
+
 <script>
-  // Plattform-Detect: zeig dem User direkt was zu ihm passt, andere Card
-  // wird sanft "dimmed" damit klar ist welche aktiv ist.
+  // Plattform-Detect
   (function() {
     var ua = navigator.userAgent || '';
     var isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
@@ -269,6 +548,73 @@
       document.getElementById('android-install-note').style.display = 'block';
       document.getElementById('ios-card').style.opacity = '0.45';
     }
+  })();
+
+  // Sticky CTA — taucht auf wenn Hero out of view scrollt
+  (function() {
+    var cta = document.getElementById('stickyCta');
+    var threshold = 400;
+    function check() {
+      if (window.scrollY > threshold) cta.classList.add('visible');
+      else cta.classList.remove('visible');
+    }
+    if (window.matchMedia('(max-width: 480px)').matches) {
+      cta.style.display = 'block';
+      window.addEventListener('scroll', check, { passive: true });
+      check();
+    }
+  })();
+
+  // Animated count-up — Zahlen zählen rauf wenn die Stats in den Viewport scrollen
+  (function() {
+    var stats = document.querySelectorAll('[data-count]');
+    var animated = new WeakSet();
+    function animateValue(el, target) {
+      var start = 0;
+      var duration = 1400;
+      var startTime = performance.now();
+      function tick(now) {
+        var elapsed = now - startTime;
+        var progress = Math.min(elapsed / duration, 1);
+        var eased = 1 - Math.pow(1 - progress, 3);
+        var value = Math.floor(start + (target - start) * eased);
+        el.textContent = value.toLocaleString('de-DE');
+        if (progress < 1) requestAnimationFrame(tick);
+        else el.textContent = target.toLocaleString('de-DE');
+      }
+      requestAnimationFrame(tick);
+    }
+    var io = new IntersectionObserver(function(entries) {
+      entries.forEach(function(entry) {
+        if (entry.isIntersecting && !animated.has(entry.target)) {
+          animated.add(entry.target);
+          var target = parseInt(entry.target.getAttribute('data-count'), 10);
+          animateValue(entry.target, target);
+        }
+      });
+    }, { threshold: 0.5 });
+    stats.forEach(function(s) { io.observe(s); });
+  })();
+
+  // Subtle parallax on bubbles based on mouse
+  (function() {
+    if (window.matchMedia('(max-width: 768px)').matches) return; // skip on mobile
+    var bubbles = document.querySelectorAll('.bubble');
+    var mx = 0, my = 0, tx = 0, ty = 0;
+    document.addEventListener('mousemove', function(e) {
+      mx = (e.clientX / window.innerWidth - 0.5) * 30;
+      my = (e.clientY / window.innerHeight - 0.5) * 30;
+    });
+    function loop() {
+      tx += (mx - tx) * 0.05;
+      ty += (my - ty) * 0.05;
+      bubbles.forEach(function(b, i) {
+        var depth = (i % 3 + 1) / 3;
+        b.style.translate = (tx * depth) + 'px ' + (ty * depth) + 'px';
+      });
+      requestAnimationFrame(loop);
+    }
+    loop();
   })();
 </script>
 </body>
