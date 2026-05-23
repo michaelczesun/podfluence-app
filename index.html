@@ -22,9 +22,45 @@
     --android: #3DDC84;
   }
   * { box-sizing: border-box; }
-  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
-  body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
-  main { flex: 1; max-width: 480px; margin: 0 auto; padding: 48px 24px 24px; width: 100%; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+  body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; position: relative; }
+  main { flex: 1; max-width: 480px; margin: 0 auto; padding: 48px 24px 24px; width: 100%; position: relative; z-index: 1; }
+
+  /* Floating Bubbles — Hommage an die Schwebebubbles im App-Feed.
+     Reine CSS-Animation, kein JS. fixed/absolute positioniert hinter
+     dem Content (z-index 0), Content liegt drüber (z-index 1). */
+  .bubbles { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+  .bubble {
+    position: absolute;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--primary), #7C3AED);
+    opacity: 0.18;
+    filter: blur(0.5px);
+    animation: float 14s ease-in-out infinite;
+  }
+  .bubble.glow { box-shadow: 0 0 40px rgba(139, 92, 246, 0.5); }
+  .bubble.b1 { width: 120px; height: 120px; top: 10%; left: -40px; animation-delay: 0s; animation-duration: 18s; }
+  .bubble.b2 { width: 200px; height: 200px; top: 40%; right: -80px; animation-delay: -3s; animation-duration: 22s; opacity: 0.12; }
+  .bubble.b3 { width: 80px; height: 80px; top: 65%; left: 20%; animation-delay: -7s; animation-duration: 16s; }
+  .bubble.b4 { width: 60px; height: 60px; top: 85%; right: 15%; animation-delay: -2s; animation-duration: 13s; opacity: 0.25; }
+  .bubble.b5 { width: 160px; height: 160px; top: 20%; right: 10%; animation-delay: -10s; animation-duration: 20s; opacity: 0.1; }
+  .bubble.b6 { width: 40px; height: 40px; top: 50%; left: 8%; animation-delay: -5s; animation-duration: 11s; opacity: 0.3; }
+  .bubble.b7 { width: 100px; height: 100px; bottom: 5%; left: 35%; animation-delay: -8s; animation-duration: 17s; }
+  @keyframes float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    25% { transform: translate(30px, -40px) scale(1.05); }
+    50% { transform: translate(-20px, -60px) scale(0.95); }
+    75% { transform: translate(40px, -20px) scale(1.02); }
+  }
+  /* Mobile: kleinere Bubbles damit's nicht zu busy wird */
+  @media (max-width: 480px) {
+    .bubble.b2 { width: 140px; height: 140px; }
+    .bubble.b5 { width: 110px; height: 110px; }
+  }
+  /* Respekt für reduce-motion */
+  @media (prefers-reduced-motion: reduce) {
+    .bubble { animation: none; }
+  }
 
   .hero { text-align: center; margin-bottom: 32px; }
   .logo {
@@ -113,6 +149,15 @@
 </style>
 </head>
 <body>
+<div class="bubbles" aria-hidden="true">
+  <div class="bubble b1 glow"></div>
+  <div class="bubble b2"></div>
+  <div class="bubble b3"></div>
+  <div class="bubble b4 glow"></div>
+  <div class="bubble b5"></div>
+  <div class="bubble b6 glow"></div>
+  <div class="bubble b7"></div>
+</div>
 <main>
   <div class="hero">
     <div class="logo">🎧</div>
