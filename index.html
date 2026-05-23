@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Podfluence — Beta-Download</title>
+<meta name="description" content="Die soziale Podcast-App. iOS via TestFlight, Android als direkter APK-Download." />
+<meta property="og:title" content="Podfluence" />
+<meta property="og:description" content="Die soziale Podcast-App. Lade die Beta jetzt." />
+<meta property="og:image" content="https://media.giphy.com/media/3o6Zt6ML6BklcajjsA/giphy.gif" />
+<meta property="og:type" content="website" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E🎧%3C/text%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg: #0B0B0F;
+    --surface: #16161D;
+    --border: #2A2A33;
+    --primary: #8B5CF6;
+    --primary-dim: rgba(139, 92, 246, 0.18);
+    --text: #FFFFFF;
+    --text-muted: #9CA3AF;
+    --android: #3DDC84;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  body { min-height: 100vh; min-height: 100dvh; display: flex; flex-direction: column; }
+  main { flex: 1; max-width: 480px; margin: 0 auto; padding: 48px 24px 24px; width: 100%; }
+
+  .hero { text-align: center; margin-bottom: 32px; }
+  .logo {
+    width: 88px; height: 88px; border-radius: 22px;
+    background: linear-gradient(135deg, var(--primary), #7C3AED);
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 44px;
+    box-shadow: 0 16px 48px rgba(139, 92, 246, 0.35);
+    margin-bottom: 20px;
+  }
+  h1 { font-size: 36px; font-weight: 800; margin: 0 0 8px; letter-spacing: -0.02em; }
+  .tagline { color: var(--text-muted); font-size: 16px; margin: 0; line-height: 1.5; }
+  .badge {
+    display: inline-block; padding: 4px 10px; border-radius: 999px;
+    background: var(--primary-dim); color: var(--primary);
+    font-size: 11px; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+    margin-top: 14px;
+  }
+
+  .cards { display: flex; flex-direction: column; gap: 14px; margin-top: 32px; }
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 20px;
+    text-decoration: none;
+    color: var(--text);
+    display: flex; align-items: center; gap: 16px;
+    transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+  }
+  .card:hover, .card:active { transform: translateY(-1px); border-color: var(--primary); background: #1C1C25; }
+  .card-icon {
+    width: 52px; height: 52px; border-radius: 14px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 28px; flex-shrink: 0;
+  }
+  .card-icon.ios { background: rgba(255,255,255,0.08); }
+  .card-icon.android { background: rgba(61, 220, 132, 0.14); color: var(--android); }
+  .card-content { flex: 1; min-width: 0; }
+  .card-title { font-weight: 700; font-size: 17px; margin: 0 0 4px; display: flex; align-items: center; gap: 8px; }
+  .card-sub { font-size: 13px; color: var(--text-muted); margin: 0; line-height: 1.4; }
+  .card-arrow { color: var(--text-muted); font-size: 24px; flex-shrink: 0; }
+
+  .platform-hint {
+    margin-top: 24px; padding: 14px 16px;
+    background: var(--primary-dim);
+    border: 1px solid rgba(139, 92, 246, 0.3);
+    border-radius: 14px;
+    font-size: 13px; line-height: 1.5;
+    color: #D8C7FF;
+  }
+  .platform-hint strong { color: var(--primary); }
+
+  .features { margin-top: 36px; }
+  .features-title {
+    font-size: 13px; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px;
+  }
+  .feature {
+    display: flex; align-items: flex-start; gap: 12px;
+    padding: 10px 0;
+    border-bottom: 1px solid var(--border);
+    font-size: 14px;
+  }
+  .feature:last-child { border: none; }
+  .feature-emoji { font-size: 18px; flex-shrink: 0; }
+
+  footer {
+    text-align: center; padding: 32px 24px; color: var(--text-muted); font-size: 12px;
+  }
+  footer a { color: var(--primary); text-decoration: none; }
+
+  .install-note {
+    margin-top: 12px; padding: 12px 14px;
+    background: rgba(61, 220, 132, 0.08);
+    border: 1px solid rgba(61, 220, 132, 0.2);
+    border-radius: 12px;
+    font-size: 12px; color: var(--text-muted); line-height: 1.5;
+  }
+  .install-note strong { color: var(--android); }
+</style>
+</head>
+<body>
+<main>
+  <div class="hero">
+    <div class="logo">🎧</div>
+    <h1>Podfluence</h1>
+    <p class="tagline">Die soziale Podcast-App.<br/>Hör, kommentier, vernetz dich.</p>
+    <span class="badge">Beta 1.2.0 · 24.05.2026</span>
+  </div>
+
+  <div class="cards">
+    <a id="ios-card" class="card" href="https://testflight.apple.com/join/REPLACE_ME">
+      <div class="card-icon ios">🍎</div>
+      <div class="card-content">
+        <p class="card-title">iPhone &amp; iPad</p>
+        <p class="card-sub">Beta via TestFlight — App Store kommt bald</p>
+      </div>
+      <span class="card-arrow">›</span>
+    </a>
+
+    <a id="android-card" class="card" href="https://expo.dev/artifacts/eas/7a1Hb3fN8WKaNXMVuSpZCx.apk">
+      <div class="card-icon android">🤖</div>
+      <div class="card-content">
+        <p class="card-title">Android</p>
+        <p class="card-sub">Direkter APK-Download · 106 MB</p>
+      </div>
+      <span class="card-arrow">›</span>
+    </a>
+  </div>
+
+  <div id="ios-hint" class="platform-hint" style="display:none">
+    Du bist auf iOS — tap auf <strong>iPhone &amp; iPad</strong>. Wenn TestFlight noch nicht installiert ist, lädt iOS die App automatisch.
+  </div>
+  <div id="android-hint" class="platform-hint" style="display:none">
+    Du bist auf Android — tap auf <strong>Android</strong>. Falls dein Browser warnt: das ist normal beim Sideload, du installierst direkt von uns ohne Play Store.
+  </div>
+
+  <div id="android-install-note" class="install-note" style="display:none">
+    <strong>So installierst du:</strong> APK öffnen → falls "Installation blockiert" kommt, Einstellungen öffnen → "Aus dieser Quelle erlauben" → zurück → installieren. Einmaliger Schritt pro Browser.
+  </div>
+
+  <div class="features">
+    <p class="features-title">Was du bekommst</p>
+    <div class="feature"><span class="feature-emoji">🎧</span><span>Lock-Screen-Player mit Cover, Titel und Skip — wie Spotify, nur sozialer.</span></div>
+    <div class="feature"><span class="feature-emoji">💬</span><span>Kommentier Folgen, markier andere, schick Mini-Podcasts als Antwort.</span></div>
+    <div class="feature"><span class="feature-emoji">🎯</span><span>Most-Wanted: welche Podcasts sich Hörer:innen wünschen.</span></div>
+    <div class="feature"><span class="feature-emoji">📰</span><span>Newsletter im Feed — Longform-Posts, Polls, Episoden-Mentions.</span></div>
+    <div class="feature"><span class="feature-emoji">🔔</span><span>Push-Notifications für Mentions, Likes, neue Folgen.</span></div>
+  </div>
+</main>
+
+<footer>
+  Probleme oder Feedback?<br/>
+  Schreib direkt an <a href="mailto:michael@dasgeht.at">michael@dasgeht.at</a>
+</footer>
+
+<script>
+  // Plattform-Detect: zeig dem User direkt was zu ihm passt, andere Card
+  // wird sanft "dimmed" damit klar ist welche aktiv ist.
+  (function() {
+    var ua = navigator.userAgent || '';
+    var isIOS = /iPad|iPhone|iPod/.test(ua) && !window.MSStream;
+    var isAndroid = /Android/i.test(ua);
+    if (isIOS) {
+      document.getElementById('ios-hint').style.display = 'block';
+      document.getElementById('android-card').style.opacity = '0.45';
+    } else if (isAndroid) {
+      document.getElementById('android-hint').style.display = 'block';
+      document.getElementById('android-install-note').style.display = 'block';
+      document.getElementById('ios-card').style.opacity = '0.45';
+    }
+  })();
+</script>
+</body>
+</html>
