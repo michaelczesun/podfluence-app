@@ -258,6 +258,14 @@
   .mock-actions { display: flex; gap: 12px; margin-top: 8px; font-size: 9px; color: #6B7280; }
   .mock-action { display: flex; align-items: center; gap: 3px; }
 
+  /* ============ Manifesto ============ */
+  .manifesto { margin-top: 56px; text-align: center; }
+  .manifesto-text {
+    font-size: 16px; line-height: 1.6; color: var(--text-muted);
+    margin: 0; max-width: 460px; margin-inline: auto;
+  }
+  .manifesto-text strong { color: var(--text); font-weight: 700; }
+
   /* ============ Features ============ */
   .features { margin-top: 56px; }
   .section-label {
@@ -460,29 +468,68 @@
     </div>
   </section>
 
+  <section class="manifesto">
+    <div class="section-label">Was Podfluence ist</div>
+    <h2 class="section-title">Spotify hört auf wo wir anfangen.</h2>
+    <p class="manifesto-text">
+      Podcasts hören ist passiv. Mit der einen Folge stundenlang reden wollen aber niemand hat sie gehört.
+      Auf Insta posten verpufft. <strong>Podfluence</strong> klebt beide Welten zusammen:
+      <strong>vollwertiger Podcast-Player</strong> + <strong>echte Social-Plattform</strong> drumherum.
+      Hörer:innen und Podcaster:innen im selben Feed, an derselben Folge, im selben Gespräch.
+    </p>
+  </section>
+
   <section class="features">
-    <div class="section-label">Was du bekommst</div>
-    <h2 class="section-title">Funktionen die rocken</h2>
+    <div class="section-label">Das kann sonst keiner</div>
+    <h2 class="section-title">Funktionen die's nur hier gibt</h2>
     <div class="feature-grid">
       <div class="feature-card">
         <div class="feature-emoji">🎧</div>
-        <div class="feature-text"><strong>Lock-Screen-Player</strong><span>Cover, Titel, Skip. AirPods und Bluetooth steuern direkt — wie Spotify, nur sozialer.</span></div>
+        <div class="feature-text"><strong>Vollwertiger Podcast-Player</strong><span>Jeden RSS-Feed der Welt — abonnieren, in der App hören, Lock-Screen mit Cover & Skip, Hintergrund-Wiedergabe, AirPods + Auto-Lenkrad. Kein Wechsel zu Spotify mehr.</span></div>
       </div>
       <div class="feature-card">
         <div class="feature-emoji">💬</div>
-        <div class="feature-text"><strong>Episode-Kommentare</strong><span>Diskutier zu jeder Folge. Mit @Mentions, GIFs und Mini-Podcasts als Antwort.</span></div>
+        <div class="feature-text"><strong>Mit der Folge reden — direkt drin</strong><span>Jede Episode hat eigene Kommentare. Du markierst andere mit @, antwortest mit Sprachnachricht (Mini-Podcast), schickst GIFs. Was Spotify nie hatte: echte Diskussion an der Folge.</span></div>
       </div>
       <div class="feature-card">
-        <div class="feature-emoji">🎯</div>
-        <div class="feature-text"><strong>Most Wanted</strong><span>Welche Podcasts sich Hörer:innen wünschen. Du als Podcaster:in weißt was läuft.</span></div>
+        <div class="feature-emoji">📡</div>
+        <div class="feature-text"><strong>Zwei Feeds, eine App</strong><span>"Für dich" = mixed Beiträge von allen. "Hörer" = nur was Hörer:innen schreiben. Hörer können posten, mitreden, abstimmen — nicht nur konsumieren. Das ist neu.</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-emoji">📊</div>
+        <div class="feature-text"><strong>Polls die Folgen beeinflussen</strong><span>Frag deine Community: "Welches Thema in Folge 47?" — sie stimmen ab, du machst die Folge. Engagement wird Content.</span></div>
       </div>
       <div class="feature-card">
         <div class="feature-emoji">📰</div>
-        <div class="feature-text"><strong>Newsletter im Feed</strong><span>Longform-Posts, Polls, Episoden-Empfehlungen — alles an einem Ort.</span></div>
+        <div class="feature-text"><strong>Newsletter direkt im Feed</strong><span>Schreib Longform-Posts mit Bild, GIF, Polls, Episoden-Embeds — wie ein Substack, aber direkt zu Hörer:innen die dich schon kennen. Mit Text-to-Speech: wer keine Zeit zum Lesen hat, lässt's sich vorlesen.</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-emoji">🎯</div>
+        <div class="feature-text"><strong>Most Wanted Board</strong><span>Hörer:innen sammeln Podcasts die sie sich wünschen. Als Podcaster:in siehst du was die Community gerade braucht — fertige Content-Ideen, validated.</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-emoji">⚡</div>
+        <div class="feature-text"><strong>Live: was deine Leute gerade hören</strong><span>Realtime-Strip: "Anna hört gerade Folge 23 von Mach Mal Richtig." Du tippst → bist drin in der gleichen Folge. Discovery durch Freunde, nicht durch Algo.</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-emoji">🏠</div>
+        <div class="feature-text"><strong>Chat-Räume pro Podcast</strong><span>Jeder Podcast hat seinen eigenen Channel. Plus eine geschützte "Lounge" nur für Podcaster:innen — fürs Networking ohne Hörer:innen-Lärm.</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-emoji">🎙️</div>
+        <div class="feature-text"><strong>Audiogram-Sharing</strong><span>Beste Folgen-Stelle markieren, als Story-Card mit Cover + Caption auf Insta/TikTok teilen. Bringt neue Hörer:innen zu dir — ohne extra Tools wie Headliner.</span></div>
       </div>
       <div class="feature-card">
         <div class="feature-emoji">🔔</div>
-        <div class="feature-text"><strong>Push für alles Wichtige</strong><span>Mentions, Likes, neue Folgen — du verpasst nichts, ohne Spam.</span></div>
+        <div class="feature-text"><strong>Push für jeden wichtigen Moment</strong><span>Neue Folge von wem du folgst. @-Mention in irgendeinem Kommentar. Direktnachricht. Like. Repost. Co-Host-Einladung. Alles. Push-Tap landet direkt da wo's passiert ist.</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-emoji">🌍</div>
+        <div class="feature-text"><strong>RSS-Sync für jeden Podcast</strong><span>Du hast schon eine Show? RSS reingeben, fertig — Cover, Episoden, Host-Name automatisch erkannt. Funktioniert mit Spotify-, Apple-, Anchor-, Podigee-, Buzzsprout-Feeds. Allen.</span></div>
+      </div>
+      <div class="feature-card">
+        <div class="feature-emoji">#️⃣</div>
+        <div class="feature-text"><strong>Hashtags + Trending</strong><span>Themen statt nur Algo. Du folgst #truecrime oder #podcasting — der Feed zeigt alles dazu. Live trending-Liste was die Community gerade bewegt.</span></div>
       </div>
     </div>
   </section>
