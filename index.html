@@ -385,6 +385,80 @@
     h1 { font-size: 38px; }
     .phone { width: 200px; height: 400px; }
   }
+
+  /* ============ Tablet (768px+) ============ */
+  @media (min-width: 768px) {
+    main { max-width: 720px; padding: 72px 32px 48px; }
+    h1 { font-size: 56px; }
+    .tagline { font-size: 19px; max-width: 480px; }
+    .logo { width: 110px; height: 110px; font-size: 56px; border-radius: 30px; }
+    .cards { flex-direction: row; gap: 14px; }
+    .cards .card { flex: 1; }
+    .platform-hint, .install-note { width: 100%; }
+    .feature-grid { grid-template-columns: 1fr 1fr; gap: 12px; }
+    .phone { width: 260px; height: 520px; }
+    .section-title { font-size: 32px; }
+    .manifesto-text { font-size: 18px; max-width: 560px; }
+    .stats { padding: 28px 16px; }
+    .stat-num { font-size: 32px; }
+  }
+
+  /* ============ Desktop (1024px+) — Two-Column Hero ============ */
+  @media (min-width: 1024px) {
+    main { max-width: 1100px; padding: 96px 48px 64px; }
+
+    /* Hero wird zwei-spaltig: Text+Cards links, Phone-Mockup rechts */
+    .hero-layout {
+      display: grid;
+      grid-template-columns: 1.1fr 1fr;
+      gap: 64px;
+      align-items: center;
+    }
+    .hero-text { text-align: left; margin-bottom: 0; }
+    .hero-text .badge { margin-top: 24px; }
+    .hero-text h1 { font-size: 68px; line-height: 1.02; }
+    .hero-text .tagline { margin-left: 0; max-width: 480px; font-size: 21px; }
+    .hero-text .logo-wrap { margin-bottom: 28px; }
+
+    /* Cards in der linken Hero-Spalte, side-by-side */
+    .hero-cards { margin-top: 32px; }
+    .hero-cards .cards { flex-direction: row; gap: 14px; }
+    .hero-cards .card { flex: 1; }
+
+    /* Phone-Mockup rechts, größer, nicht mehr in separater Section */
+    .hero-phone { display: flex; justify-content: center; align-items: center; }
+    .hero-phone .phone { width: 300px; height: 600px; transform: perspective(1200px) rotateY(-8deg) rotateX(3deg); }
+    .hero-phone .phone:hover { transform: perspective(1200px) rotateY(0deg) rotateX(0deg); }
+    .hero-phone .section-label,
+    .hero-phone .section-title { display: none; }
+
+    /* "Preview"-Section verschwindet, weil das Phone schon im Hero ist */
+    .preview-standalone { display: none; }
+
+    /* Features: 3 Spalten */
+    .feature-grid { grid-template-columns: 1fr 1fr 1fr; gap: 14px; }
+    .features, .manifesto, .stats { margin-top: 88px; }
+    .section-title { font-size: 38px; }
+    .manifesto-text { font-size: 20px; max-width: 720px; line-height: 1.55; }
+
+    /* Stats größer */
+    .stats { padding: 36px 24px; }
+    .stat-num { font-size: 42px; }
+    .stat-lbl { font-size: 12px; }
+
+    /* Tab-Switch bekommt mehr Platz */
+    .tab-switch { max-width: 560px; margin-inline: auto; margin-bottom: 32px; }
+    .tab { font-size: 14px; padding: 13px 16px; }
+
+    footer { max-width: 720px; padding-top: 56px; padding-bottom: 80px; }
+  }
+
+  /* ============ Large Desktop (1440px+) ============ */
+  @media (min-width: 1440px) {
+    main { max-width: 1280px; }
+    .hero-phone .phone { width: 340px; height: 680px; }
+    .hero-text h1 { font-size: 76px; }
+  }
 </style>
 </head>
 <body>
@@ -399,6 +473,8 @@
 </div>
 
 <main>
+ <section class="hero-layout">
+  <div class="hero-text">
   <section class="hero">
     <div class="logo-wrap">
       <div class="logo-glow"></div>
@@ -412,7 +488,9 @@
       Beta 1.2.0 · live seit heute
     </div>
   </section>
+  </div>
 
+  <div class="hero-cards">
   <section class="cards">
     <a id="ios-card" class="card" href="https://testflight.apple.com/join/q6TJRyEw">
       <div class="card-icon ios">🍎</div>
@@ -442,8 +520,57 @@
       <strong>So installierst du:</strong> APK öffnen → falls "Installation blockiert" kommt, Einstellungen öffnen → "Aus dieser Quelle erlauben" → zurück → installieren. Einmaliger Schritt pro Browser.
     </div>
   </section>
+  </div>
 
-  <section class="preview">
+  <div class="hero-phone">
+    <div class="phone">
+      <div class="phone-notch"></div>
+      <div class="phone-screen">
+        <div class="mock-card">
+          <div class="mock-row">
+            <div class="mock-avatar"></div>
+            <div>
+              <div class="mock-name">Sebastian</div>
+              <div class="mock-handle">@machmalrichtig · 2h</div>
+            </div>
+          </div>
+          <div class="mock-line med"></div>
+          <div class="mock-line short"></div>
+          <div class="mock-actions">
+            <div class="mock-action">♥ 12</div>
+            <div class="mock-action">💬 3</div>
+            <div class="mock-action">🎙 1</div>
+          </div>
+        </div>
+        <div class="mock-card">
+          <div class="mock-row">
+            <div class="mock-avatar a2"></div>
+            <div>
+              <div class="mock-name">Anna W.</div>
+              <div class="mock-handle">@annawendi · 4h</div>
+            </div>
+          </div>
+          <div class="mock-line med"></div>
+          <div class="mock-line"></div>
+          <div class="mock-line short"></div>
+        </div>
+        <div class="mock-card">
+          <div class="mock-row">
+            <div class="mock-avatar a3"></div>
+            <div>
+              <div class="mock-name">Nele &amp; Jule</div>
+              <div class="mock-handle">@nelejule · 6h</div>
+            </div>
+          </div>
+          <div class="mock-line med"></div>
+          <div class="mock-line short"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+ </section>
+
+  <section class="preview preview-standalone">
     <div class="section-label">Ein Blick rein</div>
     <h2 class="section-title">So fühlt sich's an</h2>
     <div class="phone">
@@ -469,8 +596,8 @@
           <div class="mock-row">
             <div class="mock-avatar a2"></div>
             <div>
-              <div class="mock-name">Anna Wendlinger</div>
-              <div class="mock-handle">@annaw · 4h</div>
+              <div class="mock-name">Anna W.</div>
+              <div class="mock-handle">@annawendi · 4h</div>
             </div>
           </div>
           <div class="mock-line med"></div>
