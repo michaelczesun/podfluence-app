@@ -226,6 +226,12 @@
     font-size: 12px; color: var(--text-muted); line-height: 1.5;
   }
   .install-note strong { color: var(--android); }
+  /* iOS-Note bekommt Purple-Akzent statt Android-Green */
+  .install-note.ios-note {
+    background: rgba(139, 92, 246, 0.08);
+    border-color: rgba(139, 92, 246, 0.25);
+  }
+  .install-note.ios-note strong { color: var(--primary-2); }
 
   /* ============ Preview Phone ============ */
   .preview { margin-top: 64px; text-align: center; position: relative; }
@@ -561,7 +567,7 @@
       <div class="card-icon ios">🍎</div>
       <div class="card-content">
         <p class="card-title">iPhone &amp; iPad</p>
-        <p class="card-sub">Via TestFlight · App Store kommt bald</p>
+        <p class="card-sub">Via TestFlight · App Store kommt bald<br/><span style="color: var(--primary-2); font-weight: 600;">Ohne TestFlight? Nach Install hier nochmal antippen</span></p>
       </div>
       <span class="card-arrow">→</span>
     </a>
@@ -576,7 +582,12 @@
     </a>
 
     <div id="ios-hint" class="platform-hint" style="display:none">
-      Du bist auf iOS — tap auf <strong>iPhone &amp; iPad</strong>. Wenn TestFlight noch nicht installiert ist, lädt iOS die App automatisch.
+      Du bist auf iOS — tap auf <strong>iPhone &amp; iPad</strong>.
+      <br/><br/>
+      <strong>Wichtig wenn TestFlight noch nicht installiert ist:</strong> iOS öffnet zuerst den App Store und lädt TestFlight. <strong>Nach der TestFlight-Installation kommt iOS aber NICHT von alleine zurück</strong> — komm einfach auf diese Seite zurück und tap nochmal auf <em>iPhone &amp; iPad</em>. Dann landet die Einladung in TestFlight und du kannst Podfluence laden.
+    </div>
+    <div id="ios-testflight-note" class="install-note ios-note" style="display:none">
+      💡 <strong>Tipp:</strong> Schon TestFlight installiert? Dann öffnet sich die Einladung direkt. Sonst: <strong>App-Store-Tab schließen nach TestFlight-Install → hier nochmal antippen</strong>.
     </div>
     <div id="android-hint" class="platform-hint" style="display:none">
       Du bist auf Android — tap auf <strong>Android</strong>. Falls dein Browser warnt: das ist normal beim Sideload, du installierst direkt von uns ohne Play Store.
@@ -862,6 +873,8 @@
     var isAndroid = /Android/i.test(ua);
     if (isIOS) {
       document.getElementById('ios-hint').style.display = 'block';
+      var iosNote = document.getElementById('ios-testflight-note');
+      if (iosNote) iosNote.style.display = 'block';
       document.getElementById('android-card').style.opacity = '0.45';
     } else if (isAndroid) {
       document.getElementById('android-hint').style.display = 'block';
