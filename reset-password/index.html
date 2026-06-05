@@ -285,8 +285,10 @@
 <script>
   var SUPABASE_URL = 'https://nlgedaxiailhhcmgtmdp.supabase.co';
   var ANON_KEY = 'sb_publishable_aJrojJ8QFI0uCETwimeRLw_-ymYCVw_';
+  // KEIN flowType: 'pkce' — Supabase Recovery-Mails laufen über Implicit/Token-Hash.
+  // PKCE würde den Hash nicht parsen → Session fehlt → updateUser failt.
   var supa = window.supabase.createClient(SUPABASE_URL, ANON_KEY, {
-    auth: { persistSession: false, detectSessionInUrl: true, flowType: 'pkce' }
+    auth: { persistSession: false, detectSessionInUrl: true, autoRefreshToken: false }
   });
 
   var msgEl = document.getElementById('msg');
@@ -319,16 +321,46 @@
     else strengthEl.classList.add('strong');
   });
 
+  // ============================================================
+  // Recovery-Token aus URL parsen — Supabase v2 kann's auf mehrere Arten:
+  //   1. ?token_hash=...&type=recovery  (neuer PKCE-Style — verifyOtp manuell)
+  //   2. ?code=...                      (PKCE-Code — exchangeCodeForSession)
+  //   3. #access_token=...&refresh_token=...&type=recovery  (Implicit — auto)
+  // detectSessionInUrl handelt #3 automatisch. Für #1 + #2 müssen wir selber ran.
+  // ============================================================
   var hasSession = false;
-  supa.auth.getSession().then(function(res) {
-    if (res.data.session) {
-      hasSession = true;
-    } else {
-      supa.auth.onAuthStateChange(function(evt, session) {
-        if (session) hasSession = true;
-      });
+  var sessionReady = (async function() {
+    // (1) ?token_hash + type=recovery
+    var qs = new URLSearchParams(window.location.search);
+    var tokenHash = qs.get('token_hash');
+    var qsType = qs.get('type');
+    if (tokenHash && qsType) {
+      try {
+        var ot = await supa.auth.verifyOtp({ token_hash: tokenHash, type: qsType });
+        if (!ot.error && ot.data.session) { hasSession = true; return; }
+        if (ot.error) console.warn('verifyOtp:', ot.error.message);
+      } catch (e) { console.warn('verifyOtp threw:', e); }
     }
-  });
+    // (2) ?code= PKCE-Code
+    var code = qs.get('code');
+    if (code) {
+      try {
+        var cs = await supa.auth.exchangeCodeForSession(code);
+        if (!cs.error && cs.data.session) { hasSession = true; return; }
+        if (cs.error) console.warn('exchangeCodeForSession:', cs.error.message);
+      } catch (e) { console.warn('exchangeCodeForSession threw:', e); }
+    }
+    // (3) #access_token Hash — detectSessionInUrl macht es automatisch beim init.
+    // Wir warten kurz und checken getSession().
+    await new Promise(function(r) { setTimeout(r, 600); });
+    var gs = await supa.auth.getSession();
+    if (gs.data.session) { hasSession = true; return; }
+
+    // Fallback: onAuthStateChange in den nächsten 2 Sek triggert evtl.
+    supa.auth.onAuthStateChange(function(evt, session) {
+      if (session) hasSession = true;
+    });
+  })();
 
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
@@ -341,8 +373,14 @@
     msgEl.className = '';
     msgEl.textContent = '';
     try {
+      await sessionReady;
       if (!hasSession) {
-        await new Promise(function(r) { setTimeout(r, 1500); });
+        // Nochmal aktiv checken — vielleicht ist Session nach Timeout-Race da
+        var gs2 = await supa.auth.getSession();
+        if (gs2.data.session) hasSession = true;
+      }
+      if (!hasSession) {
+        throw new Error('Reset-Link ungültig oder abgelaufen. Fordere in der App einen neuen an.');
       }
       var res = await supa.auth.updateUser({ password: pw1 });
       if (res.error) throw res.error;
@@ -350,8 +388,8 @@
       successView.style.display = 'block';
     } catch (err) {
       var m = (err && err.message) || 'Reset fehlgeschlagen.';
-      if (m.indexOf('Auth session missing') >= 0 || m.toLowerCase().indexOf('invalid') >= 0) {
-        m = 'Der Reset-Link ist abgelaufen oder ungültig. Bitte fordere in der App einen neuen an.';
+      if (m.toLowerCase().indexOf('session') >= 0 || m.toLowerCase().indexOf('invalid') >= 0 || m.toLowerCase().indexOf('expired') >= 0) {
+        m = 'Reset-Link abgelaufen oder ungültig. Bitte fordere in der App einen neuen an.';
       }
       showMsg('err', m);
       btn.disabled = false; btn.textContent = 'Speichern';
