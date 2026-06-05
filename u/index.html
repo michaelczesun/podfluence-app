@@ -210,30 +210,29 @@
     return;
   }
 
-  fetch(SB_URL + '/rest/v1/users?username=eq.' + encodeURIComponent(username)
-        + '&select=id,username,full_name,avatar_url,bio,type,country,is_verified,is_app_admin,followers_count,following_count', {
+  // 4.6.j: RLS blockt anon-Reads auf users → eigene public-profile Edge-Function
+  // mit Service-Role intern. Returnt nur whitelisted Public-Felder.
+  fetch(SB_URL + '/functions/v1/public-profile?u=' + encodeURIComponent(username), {
     headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY },
   })
-  .then(function (r) { return r.json(); })
-  .then(function (rows) {
-    if (!Array.isArray(rows) || rows.length === 0) {
+  .then(function (r) {
+    if (r.status === 404) {
+      showError('Profil @' + esc(username) + ' nicht gefunden.');
+      throw new Error('not_found');
+    }
+    return r.json();
+  })
+  .then(function (data) {
+    if (!data || !data.user) {
       showError('Profil @' + esc(username) + ' nicht gefunden.');
       return;
     }
-    var user = rows[0];
-    // Posts holen (RLS lässt nicht-private Posts durch)
-    return fetch(SB_URL + '/rest/v1/updates?user_id=eq.' + user.id
-                 + '&select=id,content,image_url,title,is_longform,likes_count,comments_count,views_count,created_at'
-                 + '&order=created_at.desc&limit=10', {
-      headers: { 'apikey': SB_KEY, 'Authorization': 'Bearer ' + SB_KEY },
-    })
-    .then(function (r) { return r.json(); })
-    .then(function (posts) {
-      renderProfile(user, Array.isArray(posts) ? posts : []);
-    });
+    renderProfile(data.user, Array.isArray(data.posts) ? data.posts : []);
   })
   .catch(function (e) {
-    showError('Konnte Profil nicht laden: ' + e.message);
+    if (String(e.message) !== 'not_found') {
+      showError('Konnte Profil nicht laden: ' + e.message);
+    }
   });
 })();
 </script>
