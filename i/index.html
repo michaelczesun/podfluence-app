@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Einladung zu hozd</title>
+  <meta name="robots" content="noindex" />
+  <style>
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    :root { --bg:#0B0B0F; --surface:#161618; --primary:#8B5CF6; --primaryLight:#A78BFA; --text:#fff; --muted:#A1A1AA; --border:#2A2A30; }
+    html,body { margin:0; padding:0; background:var(--bg); color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; }
+    .wrap { max-width:520px; margin:0 auto; padding:48px 22px 64px; }
+    .badge { display:inline-block; font-size:13px; color:var(--primaryLight); background:rgba(139,92,246,.12); border:1px solid rgba(139,92,246,.3); padding:6px 12px; border-radius:999px; margin-bottom:22px; }
+    h1 { font-size:30px; line-height:1.2; margin:0 0 12px; }
+    p { color:var(--muted); line-height:1.6; font-size:16px; }
+    .codeCard { background:var(--surface); border:1px solid var(--border); border-radius:18px; padding:22px; margin:26px 0; text-align:center; }
+    .codeLabel { font-size:13px; color:var(--muted); margin:0 0 8px; }
+    .code { font-size:34px; font-weight:800; letter-spacing:6px; color:var(--primaryLight); margin:0; }
+    .steps { background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:18px 20px; margin-top:24px; }
+    .steps h3 { margin:0 0 12px; font-size:16px; }
+    .steps ol { margin:0; padding-left:20px; color:var(--muted); line-height:1.9; }
+    .btn { display:block; text-align:center; background:var(--primary); color:#fff; text-decoration:none; font-weight:700; font-size:16px; padding:15px; border-radius:14px; margin-top:14px; }
+    .btn.ghost { background:transparent; border:1px solid var(--border); color:var(--text); }
+    .foot { margin-top:36px; text-align:center; color:var(--muted); font-size:13px; }
+    a { color:var(--primaryLight); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <span class="badge">🎙️ Einladung zu hozd</span>
+    <h1>Du wurdest zu <strong>hozd</strong> eingeladen.</h1>
+    <p>hozd ist die App für Podcast-Hörer:innen und -Macher:innen — Folgen hören, kommentieren, Hörer:innen treffen.</p>
+
+    <div class="codeCard" id="codeCard" style="display:none;">
+      <p class="codeLabel">Dein Einladungscode</p>
+      <p class="code" id="code">—</p>
+      <p class="codeLabel" style="margin-top:10px;">Bei der Anmeldung eintragen, damit deine Einladung zählt.</p>
+    </div>
+
+    <a class="btn" href="https://testflight.apple.com/join/q6TJRyEw">📲 iPhone — via TestFlight installieren</a>
+    <a class="btn ghost" href="https://expo.dev/artifacts/eas/xqU7JTXdah7GYyZuaNtybV.apk">🤖 Android — APK herunterladen</a>
+
+    <div class="steps">
+      <h3>So geht's</h3>
+      <ol>
+        <li>App über den passenden Button oben installieren</li>
+        <li>Konto erstellen</li>
+        <li>Den <strong>Einladungscode oben</strong> ins Feld „Einladungscode" eintragen</li>
+        <li>Fertig — los geht's 🎧</li>
+      </ol>
+    </div>
+
+    <p class="foot">Mehr Infos auf <a href="https://hozd.app">hozd.app</a></p>
+  </div>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      var code = (params.get('c') || params.get('ref') || '').trim().toUpperCase();
+      if (code && /^[A-Z0-9]{4,12}$/.test(code)) {
+        document.getElementById('code').textContent = code;
+        document.getElementById('codeCard').style.display = 'block';
+        // Für App-User die schon installiert haben: Deep-Link-Versuch (still).
+        try {
+          var t = setTimeout(function(){}, 1);
+        } catch (e) {}
+      }
+    })();
+  </script>
+</body>
+</html>
