@@ -5,17 +5,17 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
 <title id="page-title">Michael Czesun (@michaelczesun) · hozd</title>
 <meta name="description" id="page-desc" content="Der Typ, der es endlich umgesetzt hat 😅
-Hi, ich bin Michel. · Podcaster:in · 📍 AT · ✓ verifiziert"/>
+Hi, ich bin Michel. · Podcaster:in · 📍 AT · ✓ verifiziert · 👑 Founder"/>
 <meta property="og:title" content="Michael Czesun (@michaelczesun) · hozd"/>
 <meta property="og:description" content="Der Typ, der es endlich umgesetzt hat 😅
-Hi, ich bin Michel. · Podcaster:in · 📍 AT · ✓ verifiziert"/>
+Hi, ich bin Michel. · Podcaster:in · 📍 AT · ✓ verifiziert · 👑 Founder"/>
 <meta property="og:type" content="profile"/>
 <meta property="og:site_name" content="hozd"/>
 <meta property="og:image" content="https://nlgedaxiailhhcmgtmdp.supabase.co/storage/v1/object/public/updates-images/caa5561d-04da-4f88-bf27-8509fe724115/1778959901543-fqy8t1.jpeg"/>
 <meta name="twitter:card" content="summary"/>
 <meta name="twitter:title" content="Michael Czesun (@michaelczesun) · hozd"/>
 <meta name="twitter:description" content="Der Typ, der es endlich umgesetzt hat 😅
-Hi, ich bin Michel. · Podcaster:in · 📍 AT · ✓ verifiziert"/>
+Hi, ich bin Michel. · Podcaster:in · 📍 AT · ✓ verifiziert · 👑 Founder"/>
 <meta name="twitter:image" content="https://nlgedaxiailhhcmgtmdp.supabase.co/storage/v1/object/public/updates-images/caa5561d-04da-4f88-bf27-8509fe724115/1778959901543-fqy8t1.jpeg"/>
 <link rel="canonical" href="https://hozd.app/u/michaelczesun"/>
 <link rel="icon" href="https://hozd.app/favicon.ico"/>
@@ -155,7 +155,9 @@ Hi, ich bin Michel. · Podcaster:in · 📍 AT · ✓ verifiziert"/>
 
     var badges = '';
     if (user.is_verified) badges += '<span class="badge verified">✓ verifiziert</span> ';
-    if (user.is_app_admin) badges += '<span class="badge founder">👑 Founder</span> ';
+    // Founder-Badge NUR für michaelczesun (echter Gründer). is_app_admin ist
+    // nur Berechtigung, nicht Gründer-Status.
+    if (user.username === 'michaelczesun') badges += '<span class="badge founder">👑 Founder</span> ';
 
     var heroHtml = ''
       + '<div class="hero">'

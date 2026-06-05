@@ -148,7 +148,9 @@
 
     var badges = '';
     if (user.is_verified) badges += '<span class="badge verified">✓ verifiziert</span> ';
-    if (user.is_app_admin) badges += '<span class="badge founder">👑 Founder</span> ';
+    // Founder-Badge NUR für michaelczesun (echter Gründer). is_app_admin ist
+    // nur Berechtigung, nicht Gründer-Status.
+    if (user.username === 'michaelczesun') badges += '<span class="badge founder">👑 Founder</span> ';
 
     var heroHtml = ''
       + '<div class="hero">'
