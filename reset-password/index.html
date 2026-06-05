@@ -297,6 +297,50 @@
 
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.5/dist/umd/supabase.min.js"></script>
 <script>
+  // ============================================================
+  // Mobile-Auto-Forward: wenn auf iOS/Android + Reset-Token vorhanden →
+  // versuche sofort die hozd-App via podc://reset-password zu öffnen.
+  // App handelt den Token nativ. Wenn App nicht installiert ist, bleibt
+  // User auf der Web-Page (Fallback).
+  // ============================================================
+  (function tryAppDeepLink() {
+    var ua = navigator.userAgent || '';
+    var isMobile = /iPhone|iPad|iPod|Android/i.test(ua);
+    if (!isMobile) return;
+    // Skip wenn URL explizit Skip-Param hat (User klickte "Im Browser bleiben")
+    if (window.location.search.indexOf('web=1') >= 0) return;
+
+    var search = window.location.search.replace(/^\?/, '');
+    var hash   = window.location.hash.replace(/^#/, '');
+    var qs     = search + (search && hash ? '&' : '') + hash;
+    if (!qs) return; // kein Token → kein Deep-Link Sinn
+
+    var deepLink = 'podc://reset-password?' + qs;
+    // Zeige kurz Hinweis dann redirect
+    var hint = document.createElement('div');
+    hint.style.cssText = 'position:fixed;top:20px;left:50%;transform:translateX(-50%);' +
+      'background:rgba(139,92,246,0.95);color:#fff;padding:10px 18px;' +
+      'border-radius:12px;font-size:14px;font-weight:600;z-index:9999;' +
+      'box-shadow:0 8px 24px rgba(0,0,0,0.4);max-width:90%;text-align:center;';
+    hint.textContent = '🎧 Öffne hozd-App …';
+    document.body.appendChild(hint);
+
+    // 250ms warten damit User Hinweis sieht, dann redirect.
+    setTimeout(function() {
+      window.location.href = deepLink;
+    }, 250);
+
+    // Wenn App nicht installiert, kommt User nach 2s zurück. Banner zeigen
+    // dass er im Browser fortfahren kann.
+    setTimeout(function() {
+      hint.innerHTML = '<span style="display:block;margin-bottom:6px;">App nicht installiert?</span>' +
+        '<a href="?web=1' + (search ? '&' + search : '') + (hash ? '#' + hash : '') +
+        '" style="color:#fff;text-decoration:underline;font-size:13px;">Hier im Browser fortfahren →</a>';
+      hint.style.background = 'rgba(31,31,42,0.96)';
+      hint.style.borderLeft = '3px solid #8B5CF6';
+    }, 2400);
+  })();
+
   var SUPABASE_URL = 'https://nlgedaxiailhhcmgtmdp.supabase.co';
   var ANON_KEY = 'sb_publishable_aJrojJ8QFI0uCETwimeRLw_-ymYCVw_';
   // KEIN flowType: 'pkce' — Supabase Recovery-Mails laufen über Implicit/Token-Hash.
