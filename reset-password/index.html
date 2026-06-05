@@ -246,15 +246,29 @@
         <h1>Neues Passwort setzen</h1>
         <p class="sub">Wähl ein Passwort das du dir merken kannst. Mindestens 8 Zeichen, gern länger.</p>
 
-        <form id="form">
+        <!-- noValidate + autocomplete=off auf Form-Level — Apple/iCloud-Keychain
+             schlägt sonst aggressiv vor und überlagert den Save-Button. -->
+        <form id="form" autocomplete="off" novalidate>
+          <!-- Honeypot: leerer username, off, hidden — verhindert dass
+               Browser den Login-Kontext erraten + Keychain triggern. -->
+          <input type="text" name="username" autocomplete="off" tabindex="-1"
+                 aria-hidden="true" style="position:absolute;left:-9999px;width:1px;height:1px;opacity:0;" />
           <div class="row">
             <label for="pw1">Neues Passwort</label>
-            <input id="pw1" type="password" minlength="8" autocomplete="new-password" required placeholder="••••••••" />
+            <input id="pw1" type="password" minlength="8"
+                   autocomplete="off"
+                   autocorrect="off" autocapitalize="off" spellcheck="false"
+                   data-1p-ignore="true" data-lpignore="true" data-bwignore="true"
+                   required placeholder="••••••••" />
             <div class="pw-strength" id="pwStrength"><span></span></div>
           </div>
           <div class="row">
             <label for="pw2">Passwort bestätigen</label>
-            <input id="pw2" type="password" minlength="8" autocomplete="new-password" required placeholder="••••••••" />
+            <input id="pw2" type="password" minlength="8"
+                   autocomplete="off"
+                   autocorrect="off" autocapitalize="off" spellcheck="false"
+                   data-1p-ignore="true" data-lpignore="true" data-bwignore="true"
+                   required placeholder="••••••••" />
           </div>
           <button type="submit" id="submitBtn">Speichern</button>
         </form>
