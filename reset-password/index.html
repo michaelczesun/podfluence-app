@@ -1,0 +1,154 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Neues Passwort setzen — hozd</title>
+<meta name="robots" content="noindex"/>
+<style>
+  :root {
+    --bg: #0B0B0F; --text: #FFFFFF; --text-2: #B8B8C5; --text-3: #6B6B7B;
+    --primary: #8B5CF6; --primary-2: #7C3AED;
+    --surface: rgba(255,255,255,0.04); --border: rgba(255,255,255,0.08);
+    --error: #EF4444; --success: #10B981;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; min-height: 100vh; font-family: -apple-system, system-ui, "SF Pro", sans-serif;
+    background: radial-gradient(ellipse at top, rgba(139,92,246,0.15) 0%, var(--bg) 60%);
+    color: var(--text); display: flex; align-items: center; justify-content: center; padding: 20px;
+  }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 22px;
+    padding: 36px 28px; max-width: 420px; width: 100%; backdrop-filter: blur(20px);
+  }
+  .brand {
+    font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px;
+    background: linear-gradient(135deg, #fff, #B8B8C5); -webkit-background-clip: text;
+    background-clip: text; color: transparent;
+  }
+  h1 { font-size: 26px; font-weight: 700; margin: 8px 0 8px; line-height: 1.2; }
+  p.sub { color: var(--text-2); font-size: 14px; line-height: 1.5; margin: 0 0 24px; }
+  label { display: block; font-size: 12px; font-weight: 600; color: var(--text-3);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  input[type="password"] {
+    width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border);
+    background: rgba(0,0,0,0.4); color: var(--text); font-size: 16px;
+    font-family: inherit; transition: border 0.2s;
+  }
+  input[type="password"]:focus { outline: none; border-color: var(--primary); }
+  .row { margin-bottom: 14px; }
+  button {
+    width: 100%; padding: 14px 20px; border-radius: 14px; border: none;
+    background: var(--primary); color: #fff; font-size: 16px; font-weight: 700;
+    font-family: inherit; cursor: pointer; transition: background 0.2s; margin-top: 8px;
+  }
+  button:hover { background: var(--primary-2); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  .msg { margin-top: 14px; padding: 12px 14px; border-radius: 10px; font-size: 13px; line-height: 1.4; }
+  .msg.err { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); color: #FCA5A5; }
+  .msg.ok  { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); color: #6EE7B7; }
+  .deeplink {
+    display: inline-block; margin-top: 18px; color: var(--primary); font-size: 14px;
+    font-weight: 600; text-decoration: none;
+  }
+  .deeplink:hover { text-decoration: underline; }
+  small { color: var(--text-3); font-size: 12px; display: block; margin-top: 16px; line-height: 1.5; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="brand">hozd</div>
+  <h1>Neues Passwort setzen</h1>
+  <p class="sub" id="instructions">Gib dein neues Passwort ein und tippe „Speichern". Danach kannst du dich in der App wieder anmelden.</p>
+
+  <form id="form">
+    <div class="row">
+      <label for="pw1">Neues Passwort</label>
+      <input id="pw1" type="password" minlength="8" autocomplete="new-password" required placeholder="mindestens 8 Zeichen"/>
+    </div>
+    <div class="row">
+      <label for="pw2">Passwort bestätigen</label>
+      <input id="pw2" type="password" minlength="8" autocomplete="new-password" required placeholder="nochmal eintippen"/>
+    </div>
+    <button type="submit" id="submitBtn">Speichern</button>
+  </form>
+  <div id="msg"></div>
+
+  <a href="podc://" class="deeplink" id="appLink" style="display:none">→ Zur hozd-App</a>
+
+  <small>
+    Probleme? Schreib uns an <a style="color:var(--primary)" href="mailto:hello@hozd.app">hello@hozd.app</a>.
+  </small>
+</div>
+
+<script src="https://unpkg.com/@supabase/supabase-js@2.45.5/dist/umd/supabase.min.js"></script>
+<script>
+  // Cloudflare Analytics (auch hier mit-zählen)
+  var cf = document.createElement('script');
+  cf.defer = true; cf.src = 'https://static.cloudflareinsights.com/beacon.min.js';
+  cf.setAttribute('data-cf-beacon', '{"token": "2dfb866f44454ecca8d7deb02bf8de60"}');
+  document.head.appendChild(cf);
+
+  var SUPABASE_URL = 'https://nlgedaxiailhhcmgtmdp.supabase.co';
+  var ANON_KEY = 'sb_publishable_aJrojJ8QFI0uCETwimeRLw_-ymYCVw_';
+  var supa = window.supabase.createClient(SUPABASE_URL, ANON_KEY, {
+    auth: { persistSession: false, detectSessionInUrl: true, flowType: 'pkce' }
+  });
+
+  var msgEl = document.getElementById('msg');
+  var btn = document.getElementById('submitBtn');
+  var form = document.getElementById('form');
+  var appLink = document.getElementById('appLink');
+
+  function showMsg(kind, text) {
+    msgEl.className = 'msg ' + kind;
+    msgEl.textContent = text;
+  }
+
+  // Supabase v2 schickt Recovery-Token im Hash (#access_token=...&type=recovery)
+  // ODER als ?code=... (PKCE-Flow). detectSessionInUrl handelt beides.
+  // Wir warten kurz auf die initial Session bevor wir den Save-Submit zulassen.
+  var hasSession = false;
+  supa.auth.getSession().then(function(res) {
+    if (res.data.session) {
+      hasSession = true;
+    } else {
+      // Hash-Token noch nicht verarbeitet — onAuthStateChange feuert dann
+      supa.auth.onAuthStateChange(function(evt, session) {
+        if (session) hasSession = true;
+      });
+    }
+  });
+
+  form.addEventListener('submit', async function(e) {
+    e.preventDefault();
+    var pw1 = document.getElementById('pw1').value;
+    var pw2 = document.getElementById('pw2').value;
+    if (pw1.length < 8) { showMsg('err', 'Passwort muss mindestens 8 Zeichen lang sein.'); return; }
+    if (pw1 !== pw2) { showMsg('err', 'Die Passwörter stimmen nicht überein.'); return; }
+
+    btn.disabled = true; btn.textContent = 'Speichern …';
+    try {
+      // Wenn Hash-Token vorhanden aber noch keine Session ergriffen → 1.5s Toleranz
+      if (!hasSession) {
+        await new Promise(function(r) { setTimeout(r, 1500); });
+      }
+      var res = await supa.auth.updateUser({ password: pw1 });
+      if (res.error) throw res.error;
+      showMsg('ok', '✅ Passwort gesetzt! Du kannst dich jetzt in der App wieder anmelden.');
+      btn.style.display = 'none';
+      appLink.style.display = 'inline-block';
+      form.style.display = 'none';
+    } catch (err) {
+      var m = (err && err.message) || 'Reset fehlgeschlagen.';
+      if (m.indexOf('Auth session missing') >= 0 || m.indexOf('invalid') >= 0) {
+        m = 'Der Reset-Link ist abgelaufen oder ungültig. Bitte fordere in der App einen neuen an.';
+      }
+      showMsg('err', m);
+      btn.disabled = false; btn.textContent = 'Speichern';
+    }
+  });
+</script>
+</body>
+</html>
