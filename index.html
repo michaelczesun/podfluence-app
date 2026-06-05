@@ -1000,6 +1000,10 @@
           var p = document.getElementById('stat-podcasts-big');
           if (p) { p.setAttribute('data-count', String(d.podcasts)); if (p.textContent === '0') p.textContent = '0'; else p.textContent = String(d.podcasts); }
         }
+        if (d && typeof d.episodes === 'number' && d.episodes > 0) {
+          var e = document.getElementById('stat-episodes-big');
+          if (e) { e.setAttribute('data-count', String(d.episodes)); if (e.textContent === '0') e.textContent = '0'; else e.textContent = String(d.episodes); }
+        }
       })
       .catch(function() { /* silent — Fallback bleiben die statischen data-count Werte */ });
   })();
