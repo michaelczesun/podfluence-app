@@ -1,95 +1,288 @@
 <!doctype html>
 <html lang="de">
 <head>
-<meta charset="utf-8"/>
-<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
 <title>Neues Passwort setzen — hozd</title>
-<meta name="robots" content="noindex"/>
+<meta name="description" content="hozd — setze dein neues Passwort und melde dich wieder in der App an." />
+<meta name="robots" content="noindex" />
+<meta name="theme-color" content="#0B0B0F" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E🎧%3C/text%3E%3C/svg%3E" />
 <style>
   :root {
-    --bg: #0B0B0F; --text: #FFFFFF; --text-2: #B8B8C5; --text-3: #6B6B7B;
-    --primary: #8B5CF6; --primary-2: #7C3AED;
-    --surface: rgba(255,255,255,0.04); --border: rgba(255,255,255,0.08);
-    --error: #EF4444; --success: #10B981;
+    --bg: #0B0B0F;
+    --bg-deep: #07070A;
+    --surface: #16161D;
+    --surface-elev: #1C1C25;
+    --border: #2A2A33;
+    --primary: #8B5CF6;
+    --primary-2: #A78BFA;
+    --primary-dark: #7C3AED;
+    --primary-dim: rgba(139, 92, 246, 0.15);
+    --text: #FFFFFF;
+    --text-muted: #9CA3AF;
+    --text-dim: #6B7280;
+    --success: #10B981;
+    --error: #EF4444;
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-deep);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased; -moz-osx-font-smoothing: grayscale;
+    overflow-x: hidden;
+  }
   body {
-    margin: 0; min-height: 100vh; font-family: -apple-system, system-ui, "SF Pro", sans-serif;
-    background: radial-gradient(ellipse at top, rgba(139,92,246,0.15) 0%, var(--bg) 60%);
-    color: var(--text); display: flex; align-items: center; justify-content: center; padding: 20px;
+    min-height: 100vh; min-height: 100dvh;
+    display: flex; flex-direction: column; position: relative;
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(139, 92, 246, 0.22), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 100% 40%, rgba(124, 58, 237, 0.14), transparent 60%),
+      radial-gradient(ellipse 50% 40% at 0% 80%, rgba(168, 85, 247, 0.08), transparent 60%),
+      var(--bg-deep);
   }
+  ::selection { background: rgba(139, 92, 246, 0.4); color: #fff; }
+
+  /* ============ Floating Bubbles ============ */
+  .bubbles { position: fixed; inset: 0; pointer-events: none; overflow: hidden; z-index: 0; }
+  .bubble {
+    position: absolute; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, var(--primary-2), var(--primary-dark));
+    opacity: 0.15; filter: blur(2px);
+    animation: float 16s ease-in-out infinite;
+    will-change: transform;
+  }
+  .bubble.glow { box-shadow: 0 0 60px rgba(139, 92, 246, 0.4); opacity: 0.22; }
+  .bubble.b1 { width: 140px; height: 140px; top: 8%;  left: -50px;  animation-duration: 22s; }
+  .bubble.b2 { width: 240px; height: 240px; top: 35%; right: -100px;animation-duration: 26s; animation-delay: -4s; opacity: 0.1; }
+  .bubble.b3 { width: 90px;  height: 90px;  top: 60%; left: 20%;    animation-duration: 18s; animation-delay: -8s; }
+  .bubble.b4 { width: 70px;  height: 70px;  top: 80%; right: 12%;   animation-duration: 14s; animation-delay: -2s; opacity: 0.28; }
+  .bubble.b5 { width: 180px; height: 180px; top: 22%; right: 5%;    animation-duration: 24s; animation-delay: -11s; opacity: 0.08; }
+  .bubble.b6 { width: 45px;  height: 45px;  top: 48%; left: 6%;     animation-duration: 12s; animation-delay: -5s; opacity: 0.35; }
+  .bubble.b7 { width: 110px; height: 110px; bottom: 5%;left: 40%;   animation-duration: 19s; animation-delay: -9s; }
+  @keyframes float {
+    0%,100% { transform: translate(0,0) scale(1); }
+    33%     { transform: translate(40px,-50px) scale(1.06); }
+    66%     { transform: translate(-30px,-70px) scale(0.94); }
+  }
+  @media (prefers-reduced-motion: reduce) { .bubble { animation: none; } }
+
+  /* ============ Layout ============ */
+  main {
+    flex: 1; max-width: 480px; margin: 0 auto;
+    padding: 56px 24px 40px; width: 100%;
+    position: relative; z-index: 1;
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; min-height: 100dvh;
+  }
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(20px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ============ Brand ============ */
+  .brand-row {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 14px;
+  }
+  .brand-logo {
+    width: 38px; height: 38px; border-radius: 12px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; box-shadow: 0 4px 16px rgba(139,92,246,0.4);
+  }
+  .brand-name {
+    font-size: 22px; font-weight: 800; letter-spacing: -0.5px;
+    background: linear-gradient(135deg, #fff, #B8B8C5);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+  }
+
+  /* ============ Card ============ */
   .card {
-    background: var(--surface); border: 1px solid var(--border); border-radius: 22px;
-    padding: 36px 28px; max-width: 420px; width: 100%; backdrop-filter: blur(20px);
+    background: rgba(22, 22, 29, 0.7);
+    border: 1px solid var(--border);
+    border-radius: 24px;
+    padding: 32px 26px;
+    width: 100%;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    box-shadow:
+      0 24px 60px rgba(0,0,0,0.5),
+      0 0 0 1px rgba(139,92,246,0.08) inset;
+    animation: fadeUp 0.6s ease-out backwards;
   }
-  .brand {
-    font-size: 22px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 6px;
-    background: linear-gradient(135deg, #fff, #B8B8C5); -webkit-background-clip: text;
-    background-clip: text; color: transparent;
+  h1 {
+    font-size: 28px; font-weight: 800; margin: 0 0 10px;
+    line-height: 1.15; letter-spacing: -0.5px;
   }
-  h1 { font-size: 26px; font-weight: 700; margin: 8px 0 8px; line-height: 1.2; }
-  p.sub { color: var(--text-2); font-size: 14px; line-height: 1.5; margin: 0 0 24px; }
-  label { display: block; font-size: 12px; font-weight: 600; color: var(--text-3);
-    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 8px; }
+  p.sub {
+    color: var(--text-muted); font-size: 14px; line-height: 1.55;
+    margin: 0 0 26px;
+  }
+  label {
+    display: block; font-size: 11px; font-weight: 700;
+    color: var(--text-dim); text-transform: uppercase;
+    letter-spacing: 1.2px; margin-bottom: 8px;
+  }
   input[type="password"] {
-    width: 100%; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border);
-    background: rgba(0,0,0,0.4); color: var(--text); font-size: 16px;
-    font-family: inherit; transition: border 0.2s;
+    width: 100%; padding: 14px 16px; border-radius: 14px;
+    border: 1px solid var(--border);
+    background: rgba(0,0,0,0.35);
+    color: var(--text); font-size: 16px;
+    font-family: inherit;
+    transition: border 0.2s, background 0.2s;
   }
-  input[type="password"]:focus { outline: none; border-color: var(--primary); }
-  .row { margin-bottom: 14px; }
+  input[type="password"]::placeholder { color: var(--text-dim); }
+  input[type="password"]:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: rgba(0,0,0,0.5);
+    box-shadow: 0 0 0 4px rgba(139,92,246,0.12);
+  }
+  .row { margin-bottom: 16px; }
+
   button {
-    width: 100%; padding: 14px 20px; border-radius: 14px; border: none;
-    background: var(--primary); color: #fff; font-size: 16px; font-weight: 700;
-    font-family: inherit; cursor: pointer; transition: background 0.2s; margin-top: 8px;
+    width: 100%; padding: 15px 20px; border-radius: 14px; border: none;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: #fff; font-size: 16px; font-weight: 700;
+    font-family: inherit; cursor: pointer;
+    transition: transform 0.15s, box-shadow 0.2s, opacity 0.2s;
+    margin-top: 8px;
+    box-shadow: 0 6px 20px rgba(139,92,246,0.35);
+    letter-spacing: 0.2px;
   }
-  button:hover { background: var(--primary-2); }
-  button:disabled { opacity: 0.5; cursor: not-allowed; }
-  .msg { margin-top: 14px; padding: 12px 14px; border-radius: 10px; font-size: 13px; line-height: 1.4; }
-  .msg.err { background: rgba(239,68,68,0.12); border: 1px solid rgba(239,68,68,0.3); color: #FCA5A5; }
-  .msg.ok  { background: rgba(16,185,129,0.12); border: 1px solid rgba(16,185,129,0.3); color: #6EE7B7; }
+  button:hover { transform: translateY(-1px); box-shadow: 0 10px 28px rgba(139,92,246,0.5); }
+  button:active { transform: translateY(0); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  .msg {
+    margin-top: 16px; padding: 13px 15px;
+    border-radius: 12px; font-size: 13px; line-height: 1.5;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .msg.err {
+    background: rgba(239,68,68,0.12);
+    border: 1px solid rgba(239,68,68,0.3);
+    color: #FCA5A5;
+  }
+  .msg.ok {
+    background: rgba(16,185,129,0.12);
+    border: 1px solid rgba(16,185,129,0.3);
+    color: #6EE7B7;
+  }
+
+  .success-icon {
+    width: 64px; height: 64px; border-radius: 50%;
+    background: linear-gradient(135deg, rgba(16,185,129,0.25), rgba(16,185,129,0.05));
+    border: 1px solid rgba(16,185,129,0.4);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px; margin: 0 auto 18px;
+    animation: breathe 2.4s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%,100% { transform: scale(1); }
+    50%     { transform: scale(1.06); }
+  }
+
   .deeplink {
-    display: inline-block; margin-top: 18px; color: var(--primary); font-size: 14px;
+    display: inline-flex; align-items: center; gap: 6px;
+    margin-top: 18px; padding: 10px 18px;
+    background: rgba(139,92,246,0.12);
+    border: 1px solid rgba(139,92,246,0.3);
+    border-radius: 10px;
+    color: var(--primary-2); font-size: 14px;
     font-weight: 600; text-decoration: none;
+    transition: background 0.2s;
   }
-  .deeplink:hover { text-decoration: underline; }
-  small { color: var(--text-3); font-size: 12px; display: block; margin-top: 16px; line-height: 1.5; }
+  .deeplink:hover { background: rgba(139,92,246,0.2); }
+
+  small.fineprint {
+    color: var(--text-dim); font-size: 12px;
+    display: block; margin-top: 20px; line-height: 1.5;
+    text-align: center;
+  }
+  small.fineprint a { color: var(--primary-2); text-decoration: none; }
+  small.fineprint a:hover { text-decoration: underline; }
+
+  .pw-strength {
+    height: 4px; border-radius: 2px; background: var(--border);
+    margin-top: 8px; overflow: hidden; transition: opacity 0.2s;
+  }
+  .pw-strength > span {
+    display: block; height: 100%; width: 0%;
+    background: var(--error);
+    transition: width 0.25s, background 0.25s;
+  }
+  .pw-strength.weak > span    { width: 30%; background: var(--error); }
+  .pw-strength.medium > span  { width: 65%; background: #F59E0B; }
+  .pw-strength.strong > span  { width: 100%; background: var(--success); }
 </style>
 </head>
 <body>
-<div class="card">
-  <div class="brand">hozd</div>
-  <h1>Neues Passwort setzen</h1>
-  <p class="sub" id="instructions">Gib dein neues Passwort ein und tippe „Speichern". Danach kannst du dich in der App wieder anmelden.</p>
 
-  <form id="form">
-    <div class="row">
-      <label for="pw1">Neues Passwort</label>
-      <input id="pw1" type="password" minlength="8" autocomplete="new-password" required placeholder="mindestens 8 Zeichen"/>
-    </div>
-    <div class="row">
-      <label for="pw2">Passwort bestätigen</label>
-      <input id="pw2" type="password" minlength="8" autocomplete="new-password" required placeholder="nochmal eintippen"/>
-    </div>
-    <button type="submit" id="submitBtn">Speichern</button>
-  </form>
-  <div id="msg"></div>
-
-  <a href="podc://" class="deeplink" id="appLink" style="display:none">→ Zur hozd-App</a>
-
-  <small>
-    Probleme? Schreib uns an <a style="color:var(--primary)" href="mailto:hello@hozd.app">hello@hozd.app</a>.
-  </small>
+<!-- Floating Bubbles wie auf der Landing -->
+<div class="bubbles" aria-hidden="true">
+  <div class="bubble b1 glow"></div>
+  <div class="bubble b2"></div>
+  <div class="bubble b3"></div>
+  <div class="bubble b4 glow"></div>
+  <div class="bubble b5"></div>
+  <div class="bubble b6"></div>
+  <div class="bubble b7"></div>
 </div>
+
+<main>
+  <div style="width: 100%;">
+
+    <div class="brand-row">
+      <div class="brand-logo">🎧</div>
+      <div class="brand-name">hozd</div>
+    </div>
+
+    <div class="card">
+      <div id="formView">
+        <h1>Neues Passwort setzen</h1>
+        <p class="sub">Wähl ein Passwort das du dir merken kannst. Mindestens 8 Zeichen, gern länger.</p>
+
+        <form id="form">
+          <div class="row">
+            <label for="pw1">Neues Passwort</label>
+            <input id="pw1" type="password" minlength="8" autocomplete="new-password" required placeholder="••••••••" />
+            <div class="pw-strength" id="pwStrength"><span></span></div>
+          </div>
+          <div class="row">
+            <label for="pw2">Passwort bestätigen</label>
+            <input id="pw2" type="password" minlength="8" autocomplete="new-password" required placeholder="••••••••" />
+          </div>
+          <button type="submit" id="submitBtn">Speichern</button>
+        </form>
+        <div id="msg"></div>
+      </div>
+
+      <div id="successView" style="display: none; text-align: center;">
+        <div class="success-icon">✓</div>
+        <h1 style="text-align: center;">Passwort gespeichert!</h1>
+        <p class="sub" style="text-align: center;">
+          Du kannst dich jetzt mit deinem neuen Passwort in der hozd-App wieder anmelden.
+        </p>
+        <a href="podc://" class="deeplink">→ hozd-App öffnen</a>
+      </div>
+
+      <small class="fineprint">
+        Probleme? Schreib uns an <a href="mailto:hello@hozd.app">hello@hozd.app</a>
+      </small>
+    </div>
+
+  </div>
+</main>
+
+<!-- Cloudflare Web Analytics -->
+<script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "2dfb866f44454ecca8d7deb02bf8de60"}'></script>
 
 <script src="https://unpkg.com/@supabase/supabase-js@2.45.5/dist/umd/supabase.min.js"></script>
 <script>
-  // Cloudflare Analytics (auch hier mit-zählen)
-  var cf = document.createElement('script');
-  cf.defer = true; cf.src = 'https://static.cloudflareinsights.com/beacon.min.js';
-  cf.setAttribute('data-cf-beacon', '{"token": "2dfb866f44454ecca8d7deb02bf8de60"}');
-  document.head.appendChild(cf);
-
   var SUPABASE_URL = 'https://nlgedaxiailhhcmgtmdp.supabase.co';
   var ANON_KEY = 'sb_publishable_aJrojJ8QFI0uCETwimeRLw_-ymYCVw_';
   var supa = window.supabase.createClient(SUPABASE_URL, ANON_KEY, {
@@ -99,22 +292,38 @@
   var msgEl = document.getElementById('msg');
   var btn = document.getElementById('submitBtn');
   var form = document.getElementById('form');
-  var appLink = document.getElementById('appLink');
+  var formView = document.getElementById('formView');
+  var successView = document.getElementById('successView');
+  var pw1El = document.getElementById('pw1');
+  var pw2El = document.getElementById('pw2');
+  var strengthEl = document.getElementById('pwStrength');
 
   function showMsg(kind, text) {
     msgEl.className = 'msg ' + kind;
     msgEl.textContent = text;
   }
 
-  // Supabase v2 schickt Recovery-Token im Hash (#access_token=...&type=recovery)
-  // ODER als ?code=... (PKCE-Flow). detectSessionInUrl handelt beides.
-  // Wir warten kurz auf die initial Session bevor wir den Save-Submit zulassen.
+  // Password strength meter
+  pw1El.addEventListener('input', function(e) {
+    var v = e.target.value;
+    strengthEl.className = 'pw-strength';
+    if (v.length === 0) { strengthEl.firstElementChild.style.width = '0'; return; }
+    var score = 0;
+    if (v.length >= 8) score++;
+    if (v.length >= 12) score++;
+    if (/[A-Z]/.test(v) && /[a-z]/.test(v)) score++;
+    if (/\d/.test(v)) score++;
+    if (/[^A-Za-z0-9]/.test(v)) score++;
+    if (score <= 1) strengthEl.classList.add('weak');
+    else if (score <= 3) strengthEl.classList.add('medium');
+    else strengthEl.classList.add('strong');
+  });
+
   var hasSession = false;
   supa.auth.getSession().then(function(res) {
     if (res.data.session) {
       hasSession = true;
     } else {
-      // Hash-Token noch nicht verarbeitet — onAuthStateChange feuert dann
       supa.auth.onAuthStateChange(function(evt, session) {
         if (session) hasSession = true;
       });
@@ -123,26 +332,25 @@
 
   form.addEventListener('submit', async function(e) {
     e.preventDefault();
-    var pw1 = document.getElementById('pw1').value;
-    var pw2 = document.getElementById('pw2').value;
+    var pw1 = pw1El.value;
+    var pw2 = pw2El.value;
     if (pw1.length < 8) { showMsg('err', 'Passwort muss mindestens 8 Zeichen lang sein.'); return; }
     if (pw1 !== pw2) { showMsg('err', 'Die Passwörter stimmen nicht überein.'); return; }
 
     btn.disabled = true; btn.textContent = 'Speichern …';
+    msgEl.className = '';
+    msgEl.textContent = '';
     try {
-      // Wenn Hash-Token vorhanden aber noch keine Session ergriffen → 1.5s Toleranz
       if (!hasSession) {
         await new Promise(function(r) { setTimeout(r, 1500); });
       }
       var res = await supa.auth.updateUser({ password: pw1 });
       if (res.error) throw res.error;
-      showMsg('ok', '✅ Passwort gesetzt! Du kannst dich jetzt in der App wieder anmelden.');
-      btn.style.display = 'none';
-      appLink.style.display = 'inline-block';
-      form.style.display = 'none';
+      formView.style.display = 'none';
+      successView.style.display = 'block';
     } catch (err) {
       var m = (err && err.message) || 'Reset fehlgeschlagen.';
-      if (m.indexOf('Auth session missing') >= 0 || m.indexOf('invalid') >= 0) {
+      if (m.indexOf('Auth session missing') >= 0 || m.toLowerCase().indexOf('invalid') >= 0) {
         m = 'Der Reset-Link ist abgelaufen oder ungültig. Bitte fordere in der App einen neuen an.';
       }
       showMsg('err', m);
