@@ -809,7 +809,7 @@
   <section class="stats-wrap">
     <div class="stats-eyebrow">Live &amp; wächst täglich</div>
     <div class="stats-hero">
-      <div class="stats-hero-num" data-count="4038" id="stat-episodes-big">0</div>
+      <div class="stats-hero-num" data-count="0" id="stat-episodes-big">…</div>
       <div class="stats-hero-lbl">
         <strong>Episoden ready zum Hören</strong>
         plus täglich neue Folgen rein.
@@ -820,14 +820,14 @@
     </p>
     <div class="stats-pillars">
       <div class="pillar">
-        <div class="pillar-num" data-count="35" id="stat-podcasts-big">0</div>
+        <div class="pillar-num" data-count="0" id="stat-podcasts-big">…</div>
         <div class="pillar-lbl">Shows aktiv</div>
         <div class="pillar-sub">alle mit Cover &amp; RSS</div>
       </div>
       <div class="pillar">
-        <div class="pillar-num" data-count="44" id="stat-users-big">0</div>
+        <div class="pillar-num" data-count="0" id="stat-users-big">…</div>
         <div class="pillar-lbl">Menschen drin</div>
-        <div class="pillar-sub">31 Podcaster:innen · 12 Hörer:innen</div>
+        <div class="pillar-sub" id="stat-users-sub">Podcaster:innen · Hörer:innen</div>
       </div>
     </div>
   </section>
@@ -1004,19 +1004,27 @@
       .then(function(r) { return r.json(); })
       .then(function(d) {
         if (!d) return;
-        // Hero-Counter aktualisieren
+        // Hero-Counter aktualisieren. Statische data-count=0 → countUp wartet.
+        // Wir schreiben sofort die echten Werte und setzen data-count damit
+        // die countUp-Animation beim ersten Scroll-In darauf läuft.
         function setCount(id, v) {
           if (typeof v !== 'number') return;
           var el = document.getElementById(id);
           if (!el) return;
           el.setAttribute('data-count', String(v));
-          // Count-Up-Anim arbeitet auf data-count; falls Element schon
-          // animiert ist (textContent !== '0'), Direct-Update.
-          if (el.textContent !== '0') el.textContent = String(v);
+          // Wenn noch nie animiert: textContent direkt setzen damit User
+          // nicht "…" sieht. countUp triggert dann später korrekt auf v.
+          el.textContent = String(v);
         }
         setCount('stat-users-big', d.users);
         setCount('stat-podcasts-big', d.podcasts);
         setCount('stat-episodes-big', d.episodes);
+
+        // Subtitle unter "Menschen drin" mit echten Aufteilung
+        var sub = document.getElementById('stat-users-sub');
+        if (sub && typeof d.podcasters === 'number') {
+          sub.textContent = d.podcasters + ' Podcaster:innen · ' + (d.listeners || 0) + ' Hörer:innen';
+        }
 
         // Footer-Bot mit Live-Zahlen — bevorzugt podcasters/listeners
         // separat, fallback auf users-Summe.
