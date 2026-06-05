@@ -85,7 +85,15 @@
       ? name + ' war bereits bestätigt. Du bist als Owner verifiziert — kein weiterer Schritt nötig.'
       : name + ' ist jetzt offiziell dir zugeordnet. Das blaue Häkchen erscheint in der App in den nächsten Minuten.';
     spinner.style.display = 'none';
-    cta.innerHTML = '<a class="btn" href="https://hozd.app">Zur App</a>';
+    // 4.6.j Michael: "wenn ich nach der verifizierung auf zur app
+    // zurückgehe, dann komme ich nur zur startseite". → Deep-Link via
+    // Custom-Scheme + Universal-Link Fallback. iOS/Android öffnen die
+    // installierte App, sonst Fallback auf Landing.
+    cta.innerHTML = '<a class="btn" href="podc://verify-status">Zurück in die App</a>'
+      + '<p style="margin-top:14px;font-size:13px;opacity:0.6;">Funktioniert nicht? <a style="color:#C4B5FD;" href="https://hozd.app">hozd.app öffnen</a></p>';
+    // Auto-Bounce nach 1.5s — wenn die App installiert ist, übernimmt
+    // sie sofort; sonst bleibt die Seite stehen.
+    setTimeout(function () { try { window.location.href = 'podc://verify-status'; } catch(e){} }, 1500);
   }
 
   function showError(errCode) {
