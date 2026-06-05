@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="robots" content="noindex,nofollow" />
+<title>Podcast verifizieren · hozd</title>
+<link rel="icon" type="image/png" href="/favicon.ico" />
+<style>
+  :root {
+    --bg: #0B0B0F;
+    --surface: #161618;
+    --primary: #8B5CF6;
+    --primary-2: #C4B5FD;
+    --text: #FFFFFF;
+    --text-soft: rgba(255,255,255,0.65);
+    --success: #10B981;
+    --error: #EF4444;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Inter, system-ui, sans-serif; }
+  body { min-height: 100vh; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 24px; }
+  .card {
+    background: var(--surface); border-radius: 24px; padding: 32px 24px;
+    max-width: 480px; width: 100%; text-align: center;
+    box-shadow: 0 24px 60px rgba(0,0,0,0.4);
+  }
+  .icon {
+    width: 72px; height: 72px; border-radius: 18px;
+    background: linear-gradient(135deg, var(--primary), #6D4FE0);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 36px; margin: 0 auto 20px;
+  }
+  .icon.success { background: linear-gradient(135deg, var(--success), #059669); }
+  .icon.error { background: linear-gradient(135deg, var(--error), #B91C1C); }
+  h1 { margin: 0 0 12px; font-size: 22px; font-weight: 700; }
+  p { margin: 8px 0; color: var(--text-soft); line-height: 1.5; font-size: 15px; }
+  .strong { color: var(--text); font-weight: 600; }
+  .btn {
+    display: inline-block; margin-top: 24px;
+    background: var(--primary); color: #fff; text-decoration: none;
+    padding: 14px 28px; border-radius: 14px; font-weight: 600; font-size: 15px;
+  }
+  .btn.secondary {
+    background: transparent; color: var(--primary-2); border: 1px solid rgba(196,181,253,0.3);
+    margin-left: 8px;
+  }
+  .spinner {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 3px solid rgba(139,92,246,0.2); border-top-color: var(--primary);
+    margin: 8px auto; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .footer { margin-top: 32px; font-size: 12px; color: rgba(255,255,255,0.35); }
+  .footer a { color: var(--primary-2); text-decoration: none; }
+</style>
+</head>
+<body>
+  <div class="card" id="card">
+    <div class="icon" id="icon">⏳</div>
+    <h1 id="title">Verifizierung läuft …</h1>
+    <p id="msg">Wir prüfen deinen Bestätigungslink.</p>
+    <div class="spinner" id="spinner"></div>
+    <div id="cta"></div>
+  </div>
+  <p class="footer">
+    <a href="https://hozd.app">hozd.app</a> · die soziale Podcast-App
+  </p>
+<script>
+(function () {
+  var params = new URLSearchParams(window.location.search);
+  var token = params.get('token');
+  var icon = document.getElementById('icon');
+  var title = document.getElementById('title');
+  var msg = document.getElementById('msg');
+  var spinner = document.getElementById('spinner');
+  var cta = document.getElementById('cta');
+
+  function showSuccess(podcastTitle, already) {
+    icon.textContent = '✓';
+    icon.className = 'icon success';
+    title.textContent = already ? 'Schon verifiziert ✓' : 'Verifiziert! 🎉';
+    var name = podcastTitle ? '<span class="strong">' + podcastTitle + '</span>' : 'Dein Podcast';
+    msg.innerHTML = already
+      ? name + ' war bereits bestätigt. Du bist als Owner verifiziert — kein weiterer Schritt nötig.'
+      : name + ' ist jetzt offiziell dir zugeordnet. Das blaue Häkchen erscheint in der App in den nächsten Minuten.';
+    spinner.style.display = 'none';
+    cta.innerHTML = '<a class="btn" href="https://hozd.app">Zur App</a>';
+  }
+
+  function showError(errCode) {
+    icon.textContent = '!';
+    icon.className = 'icon error';
+    title.textContent = 'Verifizierung fehlgeschlagen';
+    var human = {
+      'token_expired': 'Der Link ist abgelaufen (7 Tage). Lass dir in der App eine neue Mail schicken.',
+      'invalid_signature': 'Der Link ist ungültig oder wurde verändert. Lass dir in der App eine neue Mail schicken.',
+      'invalid_token_format': 'Der Link sieht kaputt aus. Lass dir in der App eine neue Mail schicken.',
+      'token_missing': 'Kein Token im Link gefunden. Öffne die Mail nochmal komplett und klick den Button.',
+      'podcast_not_found': 'Der Podcast existiert in unserer Datenbank nicht mehr.',
+      'jwt_secret_not_configured': 'Server-Konfigurationsfehler. Bitte melde dich bei hello@hozd.app.',
+    }[errCode] || 'Etwas ist schiefgegangen: ' + errCode;
+    msg.textContent = human;
+    spinner.style.display = 'none';
+    cta.innerHTML = '<a class="btn" href="https://hozd.app">Zur App</a>';
+  }
+
+  if (!token) { showError('token_missing'); return; }
+
+  fetch('https://nlgedaxiailhhcmgtmdp.supabase.co/functions/v1/verify-podcast-owner?token=' + encodeURIComponent(token), {
+    method: 'GET',
+    headers: { 'apikey': 'sb_publishable_aJrojJ8QFI0uCETwimeRLw_-ymYCVw_' }
+  })
+  .then(function (r) { return r.json().then(function (j) { return { ok: r.ok, body: j }; }); })
+  .then(function (res) {
+    if (res.body && res.body.success) {
+      showSuccess(res.body.podcast_title, res.body.already);
+    } else {
+      showError((res.body && res.body.error) || 'unknown');
+    }
+  })
+  .catch(function () { showError('network'); });
+})();
+</script>
+</body>
+</html>
