@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8"/>
+<title>hozd</title>
+<script>
+// 4.6.j SPA-Fallback für GitHub Pages: /u/<username> ohne Datei-Pfad
+// → redirect zu /u/?u=<username> damit die Single-Page-App rendern kann.
+(function () {
+  var path = window.location.pathname;
+  // /u/<irgendwas>
+  var m = path.match(/^\/u\/([^\/]+)\/?$/);
+  if (m && m[1]) {
+    window.location.replace('/u/?u=' + encodeURIComponent(m[1]) + window.location.hash);
+    return;
+  }
+  // /verify/<token> oder anderes — landet auf Home
+  window.location.replace('/');
+})();
+</script>
+</head>
+<body>
+<noscript><meta http-equiv="refresh" content="0;url=https://hozd.app"/></noscript>
+<p style="font-family:sans-serif;color:#fff;background:#0B0B0F;padding:40px;text-align:center;">
+  Lade … <a href="https://hozd.app" style="color:#C4B5FD;">hozd.app</a>
+</p>
+</body>
+</html>
