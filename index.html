@@ -917,12 +917,20 @@
     }
   })();
 
-  // Animated count-up — Zahlen zählen rauf wenn die Stats in den Viewport scrollen
+  // Animated count-up — Zahlen zählen rauf wenn die Stats in den Viewport scrollen.
+  // Bug 5.6.: data-count="0" beim Pageload + späteres liveStats-Write konnte
+  // gleichzeitig laufen → IntersectionObserver animierte auf 0 + locked, liveStats
+  // schrieb echten Wert, Animation überschrieb wieder mit 0. Fix: animateValue +
+  // animated-WeakSet global expose, setCount kann re-trigger.
   (function() {
-    var stats = document.querySelectorAll('[data-count]');
     var animated = new WeakSet();
     function animateValue(el, target) {
-      var start = 0;
+      if (!Number.isFinite(target)) return;
+      // Aktuellen sichtbaren Wert als Start nehmen damit liveStats-Reanimation
+      // nicht von 0 wieder hochzählt — flüssiges Re-Counting.
+      var rawCurrent = (el.textContent || '').replace(/\D/g, '');
+      var start = parseInt(rawCurrent || '0', 10);
+      if (!Number.isFinite(start)) start = 0;
       var duration = 1400;
       var startTime = performance.now();
       function tick(now) {
@@ -938,14 +946,19 @@
     }
     var io = new IntersectionObserver(function(entries) {
       entries.forEach(function(entry) {
-        if (entry.isIntersecting && !animated.has(entry.target)) {
-          animated.add(entry.target);
-          var target = parseInt(entry.target.getAttribute('data-count'), 10);
-          animateValue(entry.target, target);
-        }
+        if (!entry.isIntersecting) return;
+        if (animated.has(entry.target)) return;
+        var target = parseInt(entry.target.getAttribute('data-count'), 10);
+        // Wenn data-count noch 0 (liveStats noch nicht durch) — NICHT animieren,
+        // nicht als animated markieren. liveStats triggert später selbst.
+        if (!Number.isFinite(target) || target <= 0) return;
+        animated.add(entry.target);
+        animateValue(entry.target, target);
       });
     }, { threshold: 0.5 });
-    stats.forEach(function(s) { io.observe(s); });
+    document.querySelectorAll('[data-count]').forEach(function(s) { io.observe(s); });
+    // Expose damit setCount() in liveStats re-triggern kann
+    window.__statsCountUp = { animated: animated, animateValue: animateValue };
   })();
 
   // Tab-Switch zwischen Podcaster- und Hörer-View
@@ -1011,13 +1024,24 @@
         // Wir schreiben sofort die echten Werte und setzen data-count damit
         // die countUp-Animation beim ersten Scroll-In darauf läuft.
         function setCount(id, v) {
-          if (typeof v !== 'number') return;
+          if (typeof v !== 'number' || !Number.isFinite(v)) return;
           var el = document.getElementById(id);
           if (!el) return;
           el.setAttribute('data-count', String(v));
-          // Wenn noch nie animiert: textContent direkt setzen damit User
-          // nicht "…" sieht. countUp triggert dann später korrekt auf v.
-          el.textContent = String(v);
+          var anim = window.__statsCountUp;
+          if (anim) {
+            // Im Viewport? → sofort animieren. Sonst: warten bis Scroll-In,
+            // IntersectionObserver liest jetzt korrektes data-count und animiert.
+            var rect = el.getBoundingClientRect();
+            var inView = rect.top < window.innerHeight && rect.bottom > 0;
+            if (inView) {
+              anim.animated.add(el);  // sperre IntersectionObserver
+              anim.animateValue(el, v);
+            }
+            // out-of-view: IntersectionObserver springt beim Scroll selbst an
+          } else {
+            el.textContent = v.toLocaleString('de-DE');
+          }
         }
         setCount('stat-users-big', d.users);
         setCount('stat-podcasts-big', d.podcasts);
