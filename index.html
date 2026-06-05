@@ -835,6 +835,18 @@
 
 <footer>
   <div class="footer-divider"></div>
+
+  <!-- 4.6.j Michael: "unten kannst du auch den superbot schreiben, weil du
+       ja aufschreibst wieivele menschen, hörer oder podcaster aktiv sind". -->
+  <div id="footer-bot" style="background: rgba(139,92,246,0.10); border: 1px solid rgba(139,92,246,0.30); border-radius: 14px; padding: 16px 18px; margin: 0 auto 32px; max-width: 520px; text-align: left;">
+    <p style="margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--primary-2); text-transform: uppercase; letter-spacing: 0.6px;">
+      🤖 hozd-Bot · Live
+    </p>
+    <p id="footer-bot-msg" style="margin: 0; font-size: 14px; line-height: 1.5; color: var(--text);">
+      Hozd ist gerade … <em style="opacity: 0.6;">lade Live-Zahlen</em>
+    </p>
+  </div>
+
   <p style="margin: 0 0 24px;">
     Probleme oder Feedback?<br/>
     <a href="mailto:hello@hozd.app">hello@hozd.app</a>
@@ -981,28 +993,46 @@
     loop();
   })();
 
-  // Live-Stats Fetch — Supabase Public Edge-Function liefert aktuelle Zahlen.
-  // Refreshed alle 5 Min serverside cached, also kein API-Quota-Drain.
+  // Live-Stats Fetch — Cache-Bust via ?t= damit User immer aktuell sieht.
+  // (vorher kam 5 Min serverside Cache durch, plus Browser-Cache der Page).
   (function liveStats() {
-    fetch('https://nlgedaxiailhhcmgtmdp.supabase.co/functions/v1/public-stats', {
-      headers: { 'apikey': 'sb_publishable_aJrojJ8QFI0uCETwimeRLw_-ymYCVw_' }
+    var bust = '?t=' + Math.floor(Date.now() / 60000); // refresh-key pro Min
+    fetch('https://nlgedaxiailhhcmgtmdp.supabase.co/functions/v1/public-stats' + bust, {
+      headers: { 'apikey': 'sb_publishable_aJrojJ8QFI0uCETwimeRLw_-ymYCVw_' },
+      cache: 'no-cache',
     })
       .then(function(r) { return r.json(); })
       .then(function(d) {
-        // Update data-count attribut + 0-Startwert. Count-Up-Animation rendert
-        // beim Scroll-in den finalen Wert; wenn das Element schon animiert ist
-        // setzen wir den textContent direkt.
-        if (d && typeof d.users === 'number' && d.users > 0) {
-          var u = document.getElementById('stat-users-big');
-          if (u) { u.setAttribute('data-count', String(d.users)); if (u.textContent === '0') u.textContent = '0'; else u.textContent = String(d.users); }
+        if (!d) return;
+        // Hero-Counter aktualisieren
+        function setCount(id, v) {
+          if (typeof v !== 'number') return;
+          var el = document.getElementById(id);
+          if (!el) return;
+          el.setAttribute('data-count', String(v));
+          // Count-Up-Anim arbeitet auf data-count; falls Element schon
+          // animiert ist (textContent !== '0'), Direct-Update.
+          if (el.textContent !== '0') el.textContent = String(v);
         }
-        if (d && typeof d.podcasts === 'number' && d.podcasts > 0) {
-          var p = document.getElementById('stat-podcasts-big');
-          if (p) { p.setAttribute('data-count', String(d.podcasts)); if (p.textContent === '0') p.textContent = '0'; else p.textContent = String(d.podcasts); }
-        }
-        if (d && typeof d.episodes === 'number' && d.episodes > 0) {
-          var e = document.getElementById('stat-episodes-big');
-          if (e) { e.setAttribute('data-count', String(d.episodes)); if (e.textContent === '0') e.textContent = '0'; else e.textContent = String(d.episodes); }
+        setCount('stat-users-big', d.users);
+        setCount('stat-podcasts-big', d.podcasts);
+        setCount('stat-episodes-big', d.episodes);
+
+        // Footer-Bot mit Live-Zahlen — bevorzugt podcasters/listeners
+        // separat, fallback auf users-Summe.
+        var botMsg = document.getElementById('footer-bot-msg');
+        if (botMsg && (d.users || d.podcasts)) {
+          var pods = typeof d.podcasters === 'number' ? d.podcasters : 0;
+          var lis  = typeof d.listeners === 'number' ? d.listeners
+                   : Math.max(0, (d.users || 0) - pods);
+          var parts = [];
+          if (pods > 0) parts.push('<strong>' + pods + '</strong> Podcaster:innen');
+          if (lis > 0)  parts.push('<strong>' + lis + '</strong> Hörer:innen');
+          if (d.episodes) parts.push('<strong>' + d.episodes + '</strong> Folgen schon vernetzt');
+          var joined = parts.length === 0 ? '' : parts.length === 1 ? parts[0]
+            : parts.length === 2 ? parts.join(' und ')
+            : parts.slice(0, -1).join(', ') + ' und ' + parts[parts.length - 1];
+          botMsg.innerHTML = 'Grad sind <strong>' + (d.users || 0) + '</strong> Menschen mit dabei — ' + joined + '. Frische Zahlen, direkt aus der DB. 🤘';
         }
       })
       .catch(function() { /* silent — Fallback bleiben die statischen data-count Werte */ });
