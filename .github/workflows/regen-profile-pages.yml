@@ -14,25 +14,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Fetch users from Supabase
+      - name: Fetch public users from Supabase Edge
         env:
-          SUPABASE_URL: https://nlgedaxiailhhcmgtmdp.supabase.co
-          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ANON_KEY: sb_publishable_aJrojJ8QFI0uCETwimeRLw_-ymYCVw_
         run: |
-          if [ -z "$SUPABASE_SERVICE_KEY" ]; then
-            echo "⚠️  SUPABASE_SERVICE_KEY secret nicht gesetzt — überspringe Regen."
-            echo "Setup: GitHub Repo → Settings → Secrets → Actions → SUPABASE_SERVICE_KEY"
-            exit 0
-          fi
-          curl -fsSL "$SUPABASE_URL/rest/v1/users?is_hidden=eq.false&select=username,full_name,bio,avatar_url,type,is_verified,country&limit=500" \
-            -H "Authorization: Bearer $SUPABASE_SERVICE_KEY" \
-            -H "apikey: $SUPABASE_SERVICE_KEY" \
+          # public-users-list Edge-Function returnt nur whitelisted Public-Felder
+          # (username, full_name, bio, avatar_url, type, is_verified, country) —
+          # kein email, kein push_token, kein admin_note. Anon-Key reicht.
+          curl -fsSL "https://nlgedaxiailhhcmgtmdp.supabase.co/functions/v1/public-users-list" \
+            -H "Authorization: Bearer $ANON_KEY" \
+            -H "apikey: $ANON_KEY" \
             -H "Accept: application/json" \
             -o /tmp/hozd_users.json
-          echo "Got $(jq length /tmp/hozd_users.json) users"
+          echo "Got $(jq length /tmp/hozd_users.json) public-safe users"
 
       - name: Run generator
-        if: hashFiles('/tmp/hozd_users.json') != ''
         run: |
           # Generator-Script inline damit kein extra File commited werden muss
           python3 <<'PYEOF'
@@ -115,7 +111,6 @@ jobs:
           PYEOF
 
       - name: Commit + push if changed
-        if: hashFiles('/tmp/hozd_users.json') != ''
         run: |
           git config user.name "hozd-bot"
           git config user.email "bot@hozd.app"
