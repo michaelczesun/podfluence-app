@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+Disallow: /verify/
+
+Sitemap: https://hozd.app/sitemap.xml

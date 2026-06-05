@@ -2,27 +2,30 @@
 <html lang="de">
 <head>
 <meta charset="utf-8"/>
-<title>hozd</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>hozd — Profil wird geladen</title>
+<meta name="description" content="hozd — die soziale Podcast-App. Profil wird geladen…"/>
+<meta property="og:title" content="hozd — Profil"/>
+<meta property="og:description" content="hozd — die soziale Podcast-App"/>
+<meta property="og:image" content="https://hozd.app/og-default.png"/>
+<meta name="twitter:card" content="summary"/>
 <script>
-// 4.6.j SPA-Fallback für GitHub Pages: /u/<username> ohne Datei-Pfad
-// → redirect zu /u/?u=<username> damit die Single-Page-App rendern kann.
+// 4.6.j SPA-Fallback für GitHub Pages: /u/<username> ohne static-File
+// → redirect zu /u/?u=<username>. Static-Files (für existing User) werden
+// vorrangig geladen, dieser Fallback greift nur bei neuen Users.
 (function () {
   var path = window.location.pathname;
-  // /u/<irgendwas>
   var m = path.match(/^\/u\/([^\/]+)\/?$/);
   if (m && m[1]) {
     window.location.replace('/u/?u=' + encodeURIComponent(m[1]) + window.location.hash);
     return;
   }
-  // /verify/<token> oder anderes — landet auf Home
   window.location.replace('/');
 })();
 </script>
 </head>
-<body>
+<body style="margin:0;background:#0B0B0F;color:#fff;font-family:sans-serif;padding:60px;text-align:center;">
 <noscript><meta http-equiv="refresh" content="0;url=https://hozd.app"/></noscript>
-<p style="font-family:sans-serif;color:#fff;background:#0B0B0F;padding:40px;text-align:center;">
-  Lade … <a href="https://hozd.app" style="color:#C4B5FD;">hozd.app</a>
-</p>
+<p>Profil wird geladen … <a href="https://hozd.app" style="color:#C4B5FD;">hozd.app</a></p>
 </body>
 </html>
