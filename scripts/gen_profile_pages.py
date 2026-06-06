@@ -76,12 +76,27 @@ for u in users:
         '<meta property="og:image" content="https://hozd.app/og-default.png"/>',
         f'<meta property="og:image" content="{html.escape(og_image)}"/>',
     )
+    # JSON-LD Person Schema
+    person_ld = {
+        '@context': 'https://schema.org',
+        '@type': 'Person',
+        'name': full_name,
+        'alternateName': f'@{username}',
+        'url': f'https://hozd.app/u/{username}',
+        'description': bio or f'{full_name} auf hozd',
+    }
+    if avatar:
+        person_ld['image'] = avatar
+    if country:
+        person_ld['nationality'] = country
+    person_ld_json = json.dumps(person_ld, ensure_ascii=False)
     twitter_inject = (
         f'<meta name="twitter:card" content="summary"/>\n'
         f'<meta name="twitter:title" content="{html.escape(title)}"/>\n'
         f'<meta name="twitter:description" content="{html.escape(desc)}"/>\n'
         f'<meta name="twitter:image" content="{html.escape(og_image)}"/>\n'
-        f'<link rel="canonical" href="https://hozd.app/u/{html.escape(username)}"/>'
+        f'<link rel="canonical" href="https://hozd.app/u/{html.escape(username)}"/>\n'
+        f'<script type="application/ld+json">{person_ld_json}</script>'
     )
     h = h.replace(
         '<meta name="twitter:card" content="summary_large_image"/>',

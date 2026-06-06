@@ -1,5 +1,9 @@
 User-agent: *
 Allow: /
 Disallow: /verify/
+Disallow: /reset-password/
+Disallow: /login/
+Disallow: /crm/
+Disallow: /admin/
 
 Sitemap: https://hozd.app/sitemap.xml

@@ -573,6 +573,45 @@
 <!-- Cloudflare Web Analytics -->
 <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "2dfb866f44454ecca8d7deb02bf8de60"}'></script>
 <!-- End Cloudflare Web Analytics -->
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": "https://hozd.app/#website",
+      "url": "https://hozd.app/",
+      "name": "hozd",
+      "description": "hozd — die soziale Podcast-App. Beta für iOS + Android.",
+      "inLanguage": "de",
+      "publisher": { "@id": "https://hozd.app/#org" }
+    },
+    {
+      "@type": "Organization",
+      "@id": "https://hozd.app/#org",
+      "name": "hozd",
+      "alternateName": "Podfluence",
+      "url": "https://hozd.app/",
+      "logo": "https://hozd.app/og-default.png",
+      "email": "hello@hozd.app",
+      "founder": { "@type": "Person", "name": "Michael Czesun" },
+      "sameAs": [
+        "https://dasgeht.at/",
+        "https://hozd.eu/",
+        "https://hozd.at/"
+      ]
+    },
+    {
+      "@type": "MobileApplication",
+      "name": "hozd",
+      "operatingSystem": "iOS, Android",
+      "applicationCategory": "SocialNetworkingApplication",
+      "offers": { "@type": "Offer", "price": "0", "priceCurrency": "EUR" },
+      "publisher": { "@id": "https://hozd.app/#org" }
+    }
+  ]
+}
+</script>
 </head>
 <body>
 <div class="bubbles" aria-hidden="true">
@@ -942,6 +981,12 @@
   <p style="margin: 0 0 24px;">
     Probleme oder Feedback?<br/>
     <a href="mailto:hello@hozd.app">hello@hozd.app</a>
+  </p>
+
+  <p style="margin: 0 0 24px; font-size: 13px;">
+    <a href="/impressum/">Impressum</a>
+    &nbsp;·&nbsp;
+    <a href="/datenschutz/">Datenschutz</a>
   </p>
 
   <details class="legal">
