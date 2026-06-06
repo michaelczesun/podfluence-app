@@ -973,6 +973,82 @@
 
 <a id="stickyCta" class="sticky-cta" href="#ios-card">↑ Jetzt downloaden</a>
 
+<!-- ========= Cookie-Banner (DSGVO-konform, cookie-less Cloudflare-Analytics) ========= -->
+<div id="cookieBanner" class="cookie-banner" role="dialog" aria-label="Cookie-Hinweis">
+  <div class="cookie-content">
+    <div class="cookie-icon">🍪</div>
+    <div class="cookie-text">
+      <strong>Wir respektieren deine Privatsphäre.</strong>
+      <p>
+        hozd.app nutzt Cloudflare Web Analytics — <strong>komplett ohne Cookies und ohne Tracking</strong>.
+        Wir speichern nichts auf deinem Gerät und teilen keine Daten mit Werbenetzwerken.
+        Mehr dazu in unserer <a href="#privacy" id="privacyLink" style="color:var(--primary-2);text-decoration:underline">Datenschutzerklärung</a>.
+      </p>
+    </div>
+    <button id="cookieAccept" class="cookie-btn cookie-btn-primary">Verstanden</button>
+  </div>
+</div>
+
+<style>
+.cookie-banner {
+  position: fixed;
+  bottom: 16px; left: 50%;
+  transform: translateX(-50%) translateY(120%);
+  width: calc(100% - 32px); max-width: 720px;
+  background: rgba(11, 11, 15, 0.96);
+  backdrop-filter: blur(20px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 16px 18px;
+  z-index: 1000;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.cookie-banner.visible { transform: translateX(-50%) translateY(0); }
+.cookie-content { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.cookie-icon { font-size: 28px; flex-shrink: 0; }
+.cookie-text { flex: 1; min-width: 240px; font-size: 13px; line-height: 1.45; color: var(--text-muted); }
+.cookie-text strong { color: var(--text); display: block; margin-bottom: 4px; font-size: 14px; }
+.cookie-text p { margin: 0; }
+.cookie-btn {
+  padding: 10px 18px; border-radius: 10px; border: none;
+  font-size: 13px; font-weight: 700; cursor: pointer;
+  font-family: inherit; flex-shrink: 0;
+}
+.cookie-btn-primary {
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(139, 92, 246, 0.35);
+}
+.cookie-btn-primary:hover { transform: translateY(-1px); }
+@media (max-width: 480px) {
+  .cookie-content { flex-direction: column; align-items: stretch; text-align: center; }
+  .cookie-icon { align-self: center; }
+  .cookie-btn { width: 100%; }
+}
+</style>
+
+<script>
+(function() {
+  var STORAGE_KEY = 'hozd-cookie-consent-v1';
+  var banner = document.getElementById('cookieBanner');
+  var btn = document.getElementById('cookieAccept');
+  // Schon akzeptiert → garn icht zeigen
+  try {
+    if (localStorage.getItem(STORAGE_KEY) === 'accepted') return;
+  } catch (e) {}
+  // Banner einblenden nach 800ms damit Hero-Animation Vorrang hat
+  setTimeout(function() {
+    banner.classList.add('visible');
+  }, 800);
+  btn.addEventListener('click', function() {
+    try { localStorage.setItem(STORAGE_KEY, 'accepted'); } catch (e) {}
+    banner.classList.remove('visible');
+    setTimeout(function() { banner.remove(); }, 500);
+  });
+})();
+</script>
+
 <script>
   // Plattform-Detect
   (function() {
