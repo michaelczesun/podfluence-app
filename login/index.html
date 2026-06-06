@@ -1,0 +1,220 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>Login · hozd</title>
+<meta name="description" content="Login für hozd.app — internes CRM und Account-Verwaltung." />
+<meta name="robots" content="noindex,nofollow" />
+<meta name="theme-color" content="#0B0B0F" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E🎧%3C/text%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg-deep: #07070A;
+    --surface: #16161D;
+    --surface-elev: #1C1C25;
+    --border: #2A2A33;
+    --primary: #8B5CF6;
+    --primary-2: #A78BFA;
+    --primary-dark: #7C3AED;
+    --text: #FFFFFF;
+    --text-muted: #9CA3AF;
+    --error: #F87171;
+    --success: #34D399;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-deep); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  body {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(139, 92, 246, 0.22), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 100% 60%, rgba(124, 58, 237, 0.14), transparent 60%),
+      var(--bg-deep);
+    display: flex; align-items: center; justify-content: center;
+    padding: 24px;
+  }
+  .card {
+    width: 100%; max-width: 420px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 20px;
+    padding: 36px 28px;
+    box-shadow: 0 24px 80px rgba(0,0,0,0.5);
+  }
+  .logo {
+    width: 64px; height: 64px; border-radius: 18px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 32px; margin: 0 auto 16px;
+    box-shadow: 0 10px 30px rgba(139,92,246,0.45);
+  }
+  h1 { text-align: center; font-size: 22px; margin: 0 0 6px; }
+  .sub { text-align: center; color: var(--text-muted); font-size: 14px; margin: 0 0 24px; }
+  label { display: block; font-size: 13px; color: var(--text-muted); margin: 12px 0 6px; font-weight: 600; }
+  input[type="email"], input[type="password"] {
+    width: 100%; padding: 12px 14px;
+    background: var(--surface-elev);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    color: var(--text); font-size: 15px;
+    font-family: inherit;
+    transition: border-color 0.2s;
+  }
+  input:focus { outline: none; border-color: var(--primary); }
+  button {
+    width: 100%; padding: 13px 16px;
+    border: none; border-radius: 10px;
+    font-size: 15px; font-weight: 700;
+    font-family: inherit; cursor: pointer;
+    margin-top: 16px;
+    transition: transform 0.15s, opacity 0.2s;
+  }
+  button.primary {
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    color: #fff;
+    box-shadow: 0 6px 20px rgba(139,92,246,0.35);
+  }
+  button.primary:hover { transform: translateY(-1px); }
+  button.ghost {
+    background: transparent;
+    border: 1px solid var(--border);
+    color: var(--text);
+  }
+  button.ghost:hover { background: var(--surface-elev); }
+  button:disabled { opacity: 0.55; cursor: wait; transform: none; }
+  .divider {
+    display: flex; align-items: center; gap: 10px;
+    color: var(--text-muted); font-size: 12px;
+    margin: 18px 0 4px;
+  }
+  .divider::before, .divider::after {
+    content: ''; flex: 1; height: 1px; background: var(--border);
+  }
+  .msg {
+    margin-top: 14px; padding: 10px 12px;
+    border-radius: 10px; font-size: 13px;
+    display: none;
+  }
+  .msg.show { display: block; }
+  .msg.error { background: rgba(248,113,113,0.10); border: 1px solid rgba(248,113,113,0.30); color: var(--error); }
+  .msg.success { background: rgba(52,211,153,0.10); border: 1px solid rgba(52,211,153,0.30); color: var(--success); }
+  .footer {
+    text-align: center; margin-top: 22px;
+    font-size: 13px; color: var(--text-muted);
+  }
+  .footer a { color: var(--primary-2); text-decoration: none; }
+  .mobile-warning {
+    display: none;
+    background: rgba(245,158,11,0.10);
+    border: 1px solid rgba(245,158,11,0.30);
+    color: #FCD34D;
+    padding: 10px 12px; border-radius: 10px;
+    font-size: 12px; margin-bottom: 16px;
+  }
+  @media (max-width: 768px) {
+    .mobile-warning { display: block; }
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="logo">🎧</div>
+  <h1>hozd · Login</h1>
+  <p class="sub">Interner Bereich. Admins → CRM, alle anderen → App-Hinweis.</p>
+
+  <div class="mobile-warning">
+    Hinweis: Das CRM ist für Desktop optimiert. Login klappt mobil, sieht aber besser am großen Screen aus.
+  </div>
+
+  <form id="loginForm" autocomplete="on">
+    <label for="email">E-Mail</label>
+    <input id="email" type="email" autocomplete="email" required placeholder="du@beispiel.de" />
+    <label for="password">Passwort</label>
+    <input id="password" type="password" autocomplete="current-password" required placeholder="••••••••" />
+    <button type="submit" class="primary" id="submitBtn">Einloggen</button>
+  </form>
+
+  <div class="divider">oder</div>
+  <button type="button" class="ghost" id="magicBtn">Magic Link an E-Mail senden</button>
+
+  <div class="msg error" id="errMsg"></div>
+  <div class="msg success" id="okMsg"></div>
+
+  <div class="footer">
+    <a href="/">← zurück zu hozd.app</a>
+  </div>
+</div>
+
+<script type="module">
+  import { supabase, currentUserContext } from '/lib/supabase.js';
+
+  const $ = (id) => document.getElementById(id);
+  const errMsg = $('errMsg');
+  const okMsg = $('okMsg');
+  const submitBtn = $('submitBtn');
+  const magicBtn = $('magicBtn');
+
+  function showError(t) { okMsg.classList.remove('show'); errMsg.textContent = t; errMsg.classList.add('show'); }
+  function showOk(t) { errMsg.classList.remove('show'); okMsg.textContent = t; okMsg.classList.add('show'); }
+
+  async function routeAfterLogin() {
+    const ctx = await currentUserContext();
+    if (!ctx) return;
+    window.location.href = ctx.isAdmin ? '/crm/' : '/app/';
+  }
+
+  // Auto-Redirect wenn schon eingeloggt
+  (async () => {
+    const ctx = await currentUserContext();
+    if (ctx) {
+      showOk('Schon eingeloggt — leite weiter …');
+      setTimeout(() => routeAfterLogin(), 400);
+    }
+  })();
+
+  $('loginForm').addEventListener('submit', async (e) => {
+    e.preventDefault();
+    const email = $('email').value.trim();
+    const password = $('password').value;
+    if (!email || !password) return;
+    submitBtn.disabled = true;
+    submitBtn.textContent = 'Einloggen …';
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      showOk('Login erfolgreich — leite weiter …');
+      setTimeout(() => routeAfterLogin(), 400);
+    } catch (err) {
+      showError(err.message || 'Login fehlgeschlagen.');
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Einloggen';
+    }
+  });
+
+  magicBtn.addEventListener('click', async () => {
+    const email = $('email').value.trim();
+    if (!email) { showError('Bitte zuerst E-Mail eintragen.'); return; }
+    magicBtn.disabled = true;
+    magicBtn.textContent = 'Sende …';
+    try {
+      const { error } = await supabase.auth.signInWithOtp({
+        email,
+        options: { emailRedirectTo: window.location.origin + '/login/' },
+      });
+      if (error) throw error;
+      showOk('Magic Link versendet — check deine Mails.');
+    } catch (err) {
+      showError(err.message || 'Magic-Link konnte nicht gesendet werden.');
+    } finally {
+      magicBtn.disabled = false;
+      magicBtn.textContent = 'Magic Link an E-Mail senden';
+    }
+  });
+</script>
+</body>
+</html>

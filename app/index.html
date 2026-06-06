@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+<title>hozd-Desktop kommt bald · hozd.app</title>
+<meta name="description" content="hozd-Desktop ist in Arbeit. Aktuell läuft hozd nur auf iPhone und Android — lade die Beta-App." />
+<meta name="robots" content="index,follow" />
+<meta name="theme-color" content="#0B0B0F" />
+<link rel="canonical" href="https://hozd.app/app/" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E🎧%3C/text%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg-deep: #07070A;
+    --surface: #16161D;
+    --surface-elev: #1C1C25;
+    --border: #2A2A33;
+    --primary: #8B5CF6;
+    --primary-2: #A78BFA;
+    --primary-dark: #7C3AED;
+    --text: #FFFFFF;
+    --text-muted: #9CA3AF;
+    --android: #3DDC84;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-deep); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  body {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(139, 92, 246, 0.22), transparent 60%),
+      radial-gradient(ellipse 60% 50% at 0% 80%, rgba(124, 58, 237, 0.14), transparent 60%),
+      var(--bg-deep);
+    display: flex; align-items: center; justify-content: center;
+    padding: 40px 24px;
+  }
+  main { max-width: 560px; width: 100%; text-align: center; }
+  .logo {
+    width: 84px; height: 84px; border-radius: 22px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    display: inline-flex; align-items: center; justify-content: center;
+    font-size: 42px; margin-bottom: 24px;
+    box-shadow: 0 18px 40px rgba(139,92,246,0.4);
+    animation: breathe 4s ease-in-out infinite;
+  }
+  @keyframes breathe {
+    0%,100% { transform: scale(1); }
+    50%     { transform: scale(1.04); }
+  }
+  h1 { font-size: 32px; line-height: 1.2; margin: 0 0 12px; }
+  .lead { color: var(--text-muted); font-size: 17px; line-height: 1.5; margin: 0 0 32px; }
+  .badge {
+    display: inline-block;
+    background: rgba(139,92,246,0.15);
+    border: 1px solid rgba(139,92,246,0.35);
+    color: var(--primary-2);
+    padding: 6px 14px; border-radius: 999px;
+    font-size: 12px; font-weight: 700;
+    letter-spacing: 0.5px; text-transform: uppercase;
+    margin-bottom: 18px;
+  }
+  .cta-grid {
+    display: grid; grid-template-columns: 1fr; gap: 12px;
+    margin-bottom: 16px;
+  }
+  @media (min-width: 520px) {
+    .cta-grid { grid-template-columns: 1fr 1fr; }
+  }
+  .cta {
+    display: flex; flex-direction: column; align-items: center;
+    gap: 6px;
+    padding: 18px 16px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    color: var(--text); text-decoration: none;
+    font-weight: 600;
+    transition: transform 0.15s, border-color 0.2s;
+  }
+  .cta:hover { transform: translateY(-2px); border-color: var(--primary); }
+  .cta .ico { font-size: 28px; }
+  .cta small { color: var(--text-muted); font-size: 12px; font-weight: 400; }
+  .cta.android { border-color: rgba(61,220,132,0.25); }
+  .cta.android .ico { color: var(--android); }
+  .back {
+    margin-top: 20px; display: inline-block;
+    color: var(--text-muted); text-decoration: none; font-size: 14px;
+  }
+  .back:hover { color: var(--primary-2); }
+  .info {
+    margin-top: 32px; padding: 16px 18px;
+    background: rgba(139,92,246,0.08);
+    border: 1px solid rgba(139,92,246,0.25);
+    border-radius: 12px;
+    text-align: left; font-size: 13px; line-height: 1.5;
+    color: var(--text-muted);
+  }
+  .info strong { color: var(--text); }
+</style>
+</head>
+<body>
+<main>
+  <div class="logo">🎧</div>
+  <span class="badge">Desktop in Arbeit</span>
+  <h1>Die hozd-Desktop-Version kommt bald.</h1>
+  <p class="lead">
+    Aktuell läuft hozd nur auf <strong>iPhone</strong> und <strong>Android</strong>.
+    Lade die Beta-App und sei einer der ersten Hozdler.
+  </p>
+
+  <div class="cta-grid">
+    <a class="cta" href="https://testflight.apple.com/join/q6TJRyEw">
+      <span class="ico">🍎</span>
+      <span>iOS (TestFlight)</span>
+      <small>v1.4.0 · in Review</small>
+    </a>
+    <a class="cta android" href="https://expo.dev/artifacts/eas/ufS81nZHT3w41VTdJ2K6QV.apk">
+      <span class="ico">🤖</span>
+      <span>Android (APK)</span>
+      <small>v1.4.0 · direkter Download</small>
+    </a>
+  </div>
+
+  <a class="back" href="/">← zurück zur Landing</a>
+
+  <div class="info">
+    <strong>Du bist eingeloggt aber kein Admin?</strong><br/>
+    Kein Stress — das CRM ist nur fürs interne Team. Deine eigentliche hozd-Welt steckt in der App.
+  </div>
+</main>
+<script>
+  // Mobile-User: direkt auf Landing zurück (dort sind die Download-Buttons prominenter)
+  (function() {
+    var isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    var alreadyRedirected = sessionStorage.getItem('hozd-app-noredirect');
+    if (isMobile && !alreadyRedirected) {
+      sessionStorage.setItem('hozd-app-noredirect', '1');
+      window.location.replace('/');
+    }
+  })();
+</script>
+</body>
+</html>

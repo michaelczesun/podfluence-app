@@ -1,0 +1,801 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>CRM · hozd</title>
+<meta name="description" content="Internes hozd-CRM" />
+<meta name="robots" content="noindex,nofollow" />
+<meta name="theme-color" content="#0B0B0F" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E🎧%3C/text%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg-deep: #07070A;
+    --bg: #0B0B0F;
+    --surface: #16161D;
+    --surface-elev: #1C1C25;
+    --border: #2A2A33;
+    --primary: #8B5CF6;
+    --primary-2: #A78BFA;
+    --primary-dark: #7C3AED;
+    --text: #FFFFFF;
+    --text-muted: #9CA3AF;
+    --text-dim: #6B7280;
+    --success: #34D399;
+    --warn: #FCD34D;
+    --error: #F87171;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-deep); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  a { color: var(--primary-2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  /* Layout */
+  .shell { display: flex; min-height: 100vh; }
+  aside {
+    width: 220px; flex-shrink: 0;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 24px 16px;
+    display: flex; flex-direction: column; gap: 4px;
+    position: sticky; top: 0; height: 100vh;
+    overflow-y: auto;
+  }
+  .brand {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 24px; padding: 0 8px;
+  }
+  .brand .dot {
+    width: 36px; height: 36px; border-radius: 10px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 18px;
+  }
+  .brand .name { font-weight: 800; font-size: 16px; }
+  .brand small { color: var(--text-muted); font-size: 11px; display: block; }
+  nav button {
+    text-align: left;
+    background: transparent; border: none;
+    color: var(--text-muted);
+    padding: 10px 12px;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: inherit; font-size: 14px; font-weight: 600;
+    display: flex; align-items: center; gap: 10px;
+    transition: background 0.15s, color 0.15s;
+  }
+  nav button:hover { background: var(--surface-elev); color: var(--text); }
+  nav button.active {
+    background: rgba(139,92,246,0.18);
+    color: var(--text);
+  }
+  nav button .ico { font-size: 16px; width: 20px; text-align: center; }
+  .logout {
+    margin-top: auto;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-muted);
+    padding: 10px; border-radius: 8px;
+    cursor: pointer; font-family: inherit; font-size: 13px;
+  }
+  .logout:hover { color: var(--error); border-color: var(--error); }
+  .me {
+    padding: 12px; border-radius: 10px;
+    background: var(--surface-elev);
+    margin-bottom: 12px;
+    font-size: 12px;
+  }
+  .me strong { color: var(--primary-2); display: block; font-size: 13px; }
+
+  main {
+    flex: 1; padding: 32px 36px 56px;
+    min-width: 0;
+  }
+  .topbar {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 24px;
+  }
+  h1 { font-size: 24px; margin: 0; }
+  .refresh {
+    background: var(--surface); border: 1px solid var(--border);
+    color: var(--text-muted); padding: 8px 14px;
+    border-radius: 8px; font-family: inherit; font-size: 13px;
+    cursor: pointer;
+  }
+  .refresh:hover { color: var(--primary-2); border-color: var(--primary); }
+
+  .panel { display: none; }
+  .panel.active { display: block; animation: fadeIn 0.25s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+
+  .kpis {
+    display: grid; gap: 14px;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    margin-bottom: 28px;
+  }
+  .kpi {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 18px 20px;
+  }
+  .kpi .label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 700; }
+  .kpi .value { font-size: 28px; font-weight: 800; margin-top: 6px; }
+  .kpi .sub { font-size: 12px; color: var(--text-dim); margin-top: 4px; }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 20px 22px;
+    margin-bottom: 20px;
+  }
+  .card h2 { font-size: 16px; margin: 0 0 14px; color: var(--primary-2); }
+  .empty { color: var(--text-dim); font-size: 13px; padding: 16px 0; text-align: center; font-style: italic; }
+  .placeholder {
+    background: rgba(245,158,11,0.10);
+    border: 1px solid rgba(245,158,11,0.30);
+    color: var(--warn);
+    padding: 10px 12px; border-radius: 8px;
+    font-size: 12px;
+  }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th { text-align: left; padding: 8px 10px; color: var(--text-muted); font-weight: 600; font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid var(--border); }
+  td { padding: 10px; border-bottom: 1px solid rgba(42,42,51,0.5); }
+  tr:hover td { background: rgba(139,92,246,0.04); }
+  .pill { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px; font-weight: 600; }
+  .pill.ok { background: rgba(52,211,153,0.15); color: var(--success); }
+  .pill.muted { background: rgba(156,163,175,0.12); color: var(--text-muted); }
+  .pill.admin { background: rgba(139,92,246,0.18); color: var(--primary-2); }
+
+  .bars { display: flex; align-items: flex-end; gap: 4px; height: 140px; padding: 8px 0; }
+  .bar {
+    flex: 1; background: linear-gradient(180deg, var(--primary-2), var(--primary-dark));
+    border-radius: 4px 4px 0 0;
+    min-height: 2px;
+    position: relative;
+    transition: opacity 0.2s;
+  }
+  .bar:hover { opacity: 0.7; }
+  .bar-labels { display: flex; gap: 4px; font-size: 10px; color: var(--text-dim); margin-top: 4px; }
+  .bar-labels span { flex: 1; text-align: center; }
+
+  .pie { display: flex; gap: 6px; flex-wrap: wrap; }
+  .pie-slice {
+    padding: 6px 12px;
+    background: var(--surface-elev);
+    border-radius: 999px;
+    font-size: 12px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .pie-dot { width: 10px; height: 10px; border-radius: 50%; }
+
+  /* Modal */
+  .modal-bg {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.6);
+    display: none; align-items: center; justify-content: center;
+    z-index: 100; padding: 24px;
+  }
+  .modal-bg.show { display: flex; }
+  .modal {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px;
+    max-width: 480px; width: 100%;
+  }
+  .modal h3 { margin: 0 0 12px; }
+  .modal .close {
+    float: right; background: transparent; border: none;
+    color: var(--text-muted); font-size: 20px; cursor: pointer;
+  }
+
+  .auth-loading {
+    position: fixed; inset: 0;
+    background: var(--bg-deep);
+    display: flex; align-items: center; justify-content: center;
+    z-index: 999;
+    color: var(--text-muted); font-size: 14px;
+  }
+
+  .mobile-warn {
+    display: none;
+    position: fixed; bottom: 16px; left: 16px; right: 16px;
+    background: rgba(245,158,11,0.15);
+    border: 1px solid rgba(245,158,11,0.40);
+    color: var(--warn);
+    padding: 14px 16px; border-radius: 12px;
+    font-size: 13px; z-index: 50;
+    box-shadow: 0 12px 36px rgba(0,0,0,0.4);
+  }
+  .mobile-warn a { color: var(--warn); font-weight: 700; }
+
+  @media (max-width: 768px) {
+    .shell { flex-direction: column; }
+    aside { width: 100%; height: auto; position: relative; flex-direction: row; flex-wrap: wrap; padding: 12px; }
+    nav { display: flex; gap: 4px; flex-wrap: wrap; flex: 1; }
+    nav button { padding: 6px 10px; font-size: 12px; }
+    .logout { margin: 0; }
+    main { padding: 20px 18px 80px; }
+    .mobile-warn { display: block; }
+  }
+
+  pre.roadmap-md {
+    white-space: pre-wrap; word-wrap: break-word;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 13px; line-height: 1.6;
+    color: var(--text-muted);
+    background: var(--surface-elev);
+    padding: 16px 18px;
+    border-radius: 10px;
+    border: 1px solid var(--border);
+  }
+</style>
+</head>
+<body>
+
+<div class="auth-loading" id="authLoading">Lade Session …</div>
+
+<div class="shell" id="shell" style="display: none;">
+  <aside>
+    <div class="brand">
+      <div class="dot">🎧</div>
+      <div>
+        <div class="name">hozd CRM</div>
+        <small>internal v0.1</small>
+      </div>
+    </div>
+    <div class="me" id="me">…</div>
+    <nav id="nav">
+      <button data-panel="overview" class="active"><span class="ico">📊</span> Übersicht</button>
+      <button data-panel="growth"><span class="ico">📈</span> Wachstum</button>
+      <button data-panel="users"><span class="ico">👥</span> User</button>
+      <button data-panel="listening"><span class="ico">🎧</span> Hörer</button>
+      <button data-panel="vibes"><span class="ico">💜</span> Vibes</button>
+      <button data-panel="referrals"><span class="ico">🔗</span> Referrals</button>
+      <button data-panel="bot"><span class="ico">🤖</span> Bot</button>
+      <button data-panel="roadmap"><span class="ico">🗺️</span> Roadmap</button>
+    </nav>
+    <button class="logout" id="logoutBtn">Logout</button>
+  </aside>
+
+  <main>
+    <div class="topbar">
+      <h1 id="panelTitle">Übersicht</h1>
+      <button class="refresh" id="refreshBtn">↻ Daten neu laden</button>
+    </div>
+
+    <!-- Overview -->
+    <section class="panel active" data-panel="overview">
+      <div class="kpis" id="kpis">
+        <div class="kpi"><div class="label">Total User</div><div class="value" id="kpi-users">–</div><div class="sub">in users-Tabelle</div></div>
+        <div class="kpi"><div class="label">Aktiv (24h)</div><div class="value" id="kpi-active">–</div><div class="sub">distinct user_id, listening_activity</div></div>
+        <div class="kpi"><div class="label">Neue heute</div><div class="value" id="kpi-new">–</div><div class="sub">created_at &gt; 00:00</div></div>
+        <div class="kpi"><div class="label">Posts gesamt</div><div class="value" id="kpi-posts">–</div><div class="sub">updates-Tabelle</div></div>
+        <div class="kpi"><div class="label">Hör-Stunden</div><div class="value" id="kpi-hours">–</div><div class="sub">sum(sec_played) / 3600</div></div>
+      </div>
+      <div class="card">
+        <h2>Schnell-Übersicht</h2>
+        <p style="color: var(--text-muted); font-size: 13px; margin: 0;">
+          Sidebar links wählen für detaillierte Panels. „↻ Daten neu laden" oben rechts forciert Refresh.
+        </p>
+      </div>
+    </section>
+
+    <!-- Growth -->
+    <section class="panel" data-panel="growth">
+      <div class="card">
+        <h2>Daily Signups · letzten 30 Tage</h2>
+        <div class="bars" id="growthBars"><div class="empty">Lade …</div></div>
+        <div class="bar-labels" id="growthLabels"></div>
+      </div>
+    </section>
+
+    <!-- Users -->
+    <section class="panel" data-panel="users">
+      <div class="card">
+        <h2>Letzte 50 User</h2>
+        <div id="usersTable"><div class="empty">Lade …</div></div>
+      </div>
+    </section>
+
+    <!-- Listening -->
+    <section class="panel" data-panel="listening">
+      <div class="card">
+        <h2>Top 20 Podcasts · Hörminuten (7d)</h2>
+        <div id="listeningTable"><div class="empty">Lade …</div></div>
+      </div>
+    </section>
+
+    <!-- Vibes -->
+    <section class="panel" data-panel="vibes">
+      <div class="card">
+        <h2>Vibe-Verteilung · letzten 30 Tage</h2>
+        <div id="vibesPie"><div class="empty">Lade …</div></div>
+      </div>
+    </section>
+
+    <!-- Referrals -->
+    <section class="panel" data-panel="referrals">
+      <div class="card">
+        <h2>Top 20 Referrers</h2>
+        <div id="referralsTable"><div class="empty">Lade …</div></div>
+      </div>
+    </section>
+
+    <!-- Bot -->
+    <section class="panel" data-panel="bot">
+      <div class="card">
+        <h2>Letzte 20 Bot-Newsletter</h2>
+        <div id="botTable"><div class="empty">Lade …</div></div>
+      </div>
+    </section>
+
+    <!-- Roadmap -->
+    <section class="panel" data-panel="roadmap">
+      <div class="card">
+        <h2>Roadmap / Notizen</h2>
+        <pre class="roadmap-md" id="roadmapText">
+Phase 2 · Q3 2026
+─────────────────────────────
+• Rechnungen extern via SAP (NICHT in CRM bauen — Schnittstelle nur lesend)
+• Stats-Drilldown: Click auf KPI → Sub-Panel mit Zeitreihe
+• Mass-Mail: Resend-Template + Segmente (verified / podcasters / inaktiv 14d)
+• User-Detail-Modal: alle Aktivität chronologisch + Re-engage-Mail-Button
+• Push-Notification-Composer (Manual-Send an Segment)
+
+Phase 3 · Q4 2026
+─────────────────────────────
+• Revenue-Dashboard (sobald SAP-Sync läuft)
+• Cohort-Retention (Woche-für-Woche, klassisches Heatmap-Grid)
+• Bot-KPI: Welche Newsletter haben Re-engagement getriggert?
+• Public-Stats-Page: subset der KPIs öffentlich (Marketing)
+
+Tech-Schulden
+─────────────────────────────
+• admin_users_list direkt nutzen statt client-side filter
+• Materialized-Views für Hörminuten/Vibes → schnellere Loads
+• Charts: aktuell pure CSS; bei mehr Daten Chart-Library (uPlot)
+
+Editiere diesen Text direkt in /tmp/podfluence-app/crm/index.html
+(Suche nach „roadmapText" — pre-Block).
+        </pre>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- User Detail Modal -->
+<div class="modal-bg" id="userModal">
+  <div class="modal">
+    <button class="close" onclick="document.getElementById('userModal').classList.remove('show')">×</button>
+    <h3 id="modalTitle">User-Details</h3>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<div class="mobile-warn">
+  CRM ist für Desktop optimiert. <a href="/app/">Zur App</a>
+</div>
+
+<script type="module">
+  import { supabase, guard, signOut } from '/lib/supabase.js';
+
+  // --- Auth-Guard ---
+  const ctx = await guard({ requireAdmin: true });
+  if (!ctx) { /* redirect happened */ } else {
+    document.getElementById('authLoading').style.display = 'none';
+    document.getElementById('shell').style.display = 'flex';
+    const meBox = document.getElementById('me');
+    meBox.innerHTML = `
+      <strong>${ctx.profile?.username || 'admin'}</strong>
+      <span class="pill admin">app_admin</span>
+    `;
+  }
+
+  document.getElementById('logoutBtn').addEventListener('click', async () => {
+    await signOut();
+    window.location.href = '/login/';
+  });
+
+  // --- Navigation ---
+  const navBtns = document.querySelectorAll('nav button');
+  const panels = document.querySelectorAll('.panel');
+  const titles = {
+    overview: 'Übersicht', growth: 'Wachstum', users: 'User',
+    listening: 'Hörer', vibes: 'Vibes', referrals: 'Referrals',
+    bot: 'Bot-Aktivität', roadmap: 'Roadmap',
+  };
+  navBtns.forEach(btn => btn.addEventListener('click', () => {
+    const p = btn.dataset.panel;
+    navBtns.forEach(b => b.classList.toggle('active', b === btn));
+    panels.forEach(s => s.classList.toggle('active', s.dataset.panel === p));
+    document.getElementById('panelTitle').textContent = titles[p] || p;
+    loadPanel(p);
+  }));
+
+  // --- Helpers ---
+  const fmt = (n) => (n ?? 0).toLocaleString('de-DE');
+  function placeholder(id, msg) {
+    document.getElementById(id).innerHTML = `<div class="placeholder">${msg}</div>`;
+  }
+  function empty(id, msg = 'Keine Daten') {
+    document.getElementById(id).innerHTML = `<div class="empty">${msg}</div>`;
+  }
+
+  // --- Cached loaded flags ---
+  const loaded = new Set();
+
+  async function loadPanel(name, force = false) {
+    if (!force && loaded.has(name)) return;
+    loaded.add(name);
+    try {
+      switch (name) {
+        case 'overview': await loadOverview(); break;
+        case 'growth': await loadGrowth(); break;
+        case 'users': await loadUsers(); break;
+        case 'listening': await loadListening(); break;
+        case 'vibes': await loadVibes(); break;
+        case 'referrals': await loadReferrals(); break;
+        case 'bot': await loadBot(); break;
+      }
+    } catch (e) {
+      console.error('panel error:', name, e);
+    }
+  }
+
+  // 1. Overview
+  async function loadOverview() {
+    const setKpi = (id, v) => { document.getElementById(id).textContent = v; };
+    // Total users
+    try {
+      const { count } = await supabase.from('users').select('id', { count: 'exact', head: true });
+      setKpi('kpi-users', fmt(count));
+    } catch { setKpi('kpi-users', '—'); }
+
+    // Aktiv 24h
+    try {
+      const since = new Date(Date.now() - 24*3600*1000).toISOString();
+      const { data, error } = await supabase
+        .from('listening_activity')
+        .select('user_id')
+        .gte('created_at', since)
+        .limit(5000);
+      if (error) throw error;
+      const uniq = new Set((data || []).map(r => r.user_id));
+      setKpi('kpi-active', fmt(uniq.size));
+    } catch { setKpi('kpi-active', '—'); }
+
+    // Neue heute
+    try {
+      const today = new Date(); today.setHours(0,0,0,0);
+      const { count } = await supabase
+        .from('users')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', today.toISOString());
+      setKpi('kpi-new', fmt(count));
+    } catch { setKpi('kpi-new', '—'); }
+
+    // Posts gesamt
+    try {
+      const { count } = await supabase.from('updates').select('id', { count: 'exact', head: true });
+      setKpi('kpi-posts', fmt(count));
+    } catch { setKpi('kpi-posts', '—'); }
+
+    // Hör-Stunden (Sample-basiert — full-table-sum kann teuer sein)
+    try {
+      const { data, error } = await supabase
+        .from('listening_activity')
+        .select('sec_played')
+        .limit(10000);
+      if (error) throw error;
+      const sumSec = (data || []).reduce((a, r) => a + (r.sec_played || 0), 0);
+      const hours = Math.round(sumSec / 3600);
+      setKpi('kpi-hours', fmt(hours) + (data && data.length === 10000 ? '+' : ''));
+    } catch { setKpi('kpi-hours', '—'); }
+  }
+
+  // 2. Growth
+  async function loadGrowth() {
+    const barsEl = document.getElementById('growthBars');
+    const labelsEl = document.getElementById('growthLabels');
+    try {
+      const since = new Date(Date.now() - 30*24*3600*1000);
+      since.setHours(0,0,0,0);
+      const { data, error } = await supabase
+        .from('users')
+        .select('created_at')
+        .gte('created_at', since.toISOString())
+        .order('created_at', { ascending: true });
+      if (error) throw error;
+      const buckets = {};
+      for (let i = 0; i < 30; i++) {
+        const d = new Date(since); d.setDate(d.getDate() + i);
+        buckets[d.toISOString().slice(0,10)] = 0;
+      }
+      (data || []).forEach(r => {
+        const k = (r.created_at || '').slice(0,10);
+        if (k in buckets) buckets[k]++;
+      });
+      const max = Math.max(1, ...Object.values(buckets));
+      barsEl.innerHTML = '';
+      labelsEl.innerHTML = '';
+      Object.entries(buckets).forEach(([day, n], idx) => {
+        const bar = document.createElement('div');
+        bar.className = 'bar';
+        bar.style.height = `${(n / max) * 100}%`;
+        bar.title = `${day}: ${n} Signups`;
+        barsEl.appendChild(bar);
+        const lbl = document.createElement('span');
+        lbl.textContent = (idx % 5 === 0) ? day.slice(5) : '';
+        labelsEl.appendChild(lbl);
+      });
+    } catch (e) {
+      barsEl.innerHTML = `<div class="placeholder">Daten kommen bald — ${e.message}</div>`;
+    }
+  }
+
+  // 3. Users
+  async function loadUsers() {
+    const el = document.getElementById('usersTable');
+    try {
+      const { data, error } = await supabase
+        .from('users')
+        .select('id, username, full_name, created_at, is_verified, is_app_admin, client_build_version, last_seen_at, type')
+        .order('last_seen_at', { ascending: false, nullsFirst: false })
+        .limit(50);
+      if (error) throw error;
+      if (!data || data.length === 0) { empty('usersTable'); return; }
+      const rows = data.map(u => `
+        <tr data-id="${u.id}">
+          <td><strong>${(u.username || '–').replace(/</g,'&lt;')}</strong>
+              ${u.is_verified ? '<span class="pill ok">✓</span>' : ''}
+              ${u.is_app_admin ? '<span class="pill admin">admin</span>' : ''}
+          </td>
+          <td>${(u.full_name || '').replace(/</g,'&lt;')}</td>
+          <td>${(u.type || '–')}</td>
+          <td>${u.client_build_version || '–'}</td>
+          <td>${u.last_seen_at ? new Date(u.last_seen_at).toLocaleString('de-DE') : '–'}</td>
+          <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('de-DE') : '–'}</td>
+        </tr>
+      `).join('');
+      el.innerHTML = `<table>
+        <thead><tr>
+          <th>Username</th><th>Name</th><th>Typ</th><th>Build</th><th>Last seen</th><th>Created</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+      el.querySelectorAll('tr[data-id]').forEach(tr => {
+        tr.style.cursor = 'pointer';
+        tr.addEventListener('click', () => showUserModal(data.find(x => x.id === tr.dataset.id)));
+      });
+    } catch (e) {
+      // Fallback: last_seen_at fehlt evtl → ohne sortieren
+      try {
+        const { data, error } = await supabase
+          .from('users')
+          .select('id, username, full_name, created_at, is_verified, is_app_admin, client_build_version, type')
+          .order('created_at', { ascending: false })
+          .limit(50);
+        if (error) throw error;
+        const rows = (data || []).map(u => `
+          <tr data-id="${u.id}">
+            <td><strong>${(u.username || '–').replace(/</g,'&lt;')}</strong>
+                ${u.is_verified ? '<span class="pill ok">✓</span>' : ''}
+                ${u.is_app_admin ? '<span class="pill admin">admin</span>' : ''}
+            </td>
+            <td>${(u.full_name || '').replace(/</g,'&lt;')}</td>
+            <td>${u.type || '–'}</td>
+            <td>${u.client_build_version || '–'}</td>
+            <td>${u.created_at ? new Date(u.created_at).toLocaleDateString('de-DE') : '–'}</td>
+          </tr>
+        `).join('');
+        el.innerHTML = `<div class="placeholder">last_seen_at nicht verfügbar — sortiert nach created_at</div>
+          <table style="margin-top: 12px;">
+            <thead><tr><th>Username</th><th>Name</th><th>Typ</th><th>Build</th><th>Created</th></tr></thead>
+            <tbody>${rows}</tbody>
+          </table>`;
+      } catch (e2) {
+        el.innerHTML = `<div class="placeholder">Daten kommen bald — ${e2.message}</div>`;
+      }
+    }
+  }
+
+  function showUserModal(u) {
+    if (!u) return;
+    document.getElementById('modalTitle').textContent = `@${u.username || '–'}`;
+    document.getElementById('modalBody').innerHTML = `
+      <table style="margin: 0;">
+        <tr><td><strong>ID</strong></td><td style="font-family: monospace; font-size: 11px;">${u.id}</td></tr>
+        <tr><td><strong>Name</strong></td><td>${u.full_name || '–'}</td></tr>
+        <tr><td><strong>Typ</strong></td><td>${u.type || '–'}</td></tr>
+        <tr><td><strong>Verified</strong></td><td>${u.is_verified ? '✓ ja' : '–'}</td></tr>
+        <tr><td><strong>Admin</strong></td><td>${u.is_app_admin ? 'ja' : '–'}</td></tr>
+        <tr><td><strong>Build</strong></td><td>${u.client_build_version || '–'}</td></tr>
+        <tr><td><strong>Created</strong></td><td>${u.created_at ? new Date(u.created_at).toLocaleString('de-DE') : '–'}</td></tr>
+        ${u.last_seen_at ? `<tr><td><strong>Last seen</strong></td><td>${new Date(u.last_seen_at).toLocaleString('de-DE')}</td></tr>` : ''}
+      </table>
+      <p style="margin: 14px 0 0;">
+        <a href="https://hozd.app/u/${u.username}" target="_blank" rel="noopener">Profilseite öffnen →</a>
+      </p>
+    `;
+    document.getElementById('userModal').classList.add('show');
+  }
+
+  // 4. Listening
+  async function loadListening() {
+    const el = document.getElementById('listeningTable');
+    try {
+      const since = new Date(Date.now() - 7*24*3600*1000).toISOString();
+      const { data, error } = await supabase
+        .from('listening_activity')
+        .select('podcast_id, sec_played')
+        .gte('created_at', since)
+        .limit(20000);
+      if (error) throw error;
+      const agg = {};
+      (data || []).forEach(r => {
+        if (!r.podcast_id) return;
+        agg[r.podcast_id] = (agg[r.podcast_id] || 0) + (r.sec_played || 0);
+      });
+      const top = Object.entries(agg)
+        .map(([id, sec]) => ({ id, sec }))
+        .sort((a, b) => b.sec - a.sec)
+        .slice(0, 20);
+      if (top.length === 0) { empty('listeningTable', 'Keine Hörer-Aktivität in den letzten 7 Tagen.'); return; }
+      // Podcast-Titel nachladen
+      const ids = top.map(t => t.id);
+      let podMap = {};
+      try {
+        const { data: pods } = await supabase
+          .from('podcasts')
+          .select('id, title')
+          .in('id', ids);
+        (pods || []).forEach(p => { podMap[p.id] = p.title; });
+      } catch {}
+      const rows = top.map((t, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td>${(podMap[t.id] || '<em style="color:var(--text-dim)">' + t.id.slice(0,8) + '…</em>')}</td>
+          <td style="text-align: right;"><strong>${fmt(Math.round(t.sec / 60))}</strong> min</td>
+          <td style="text-align: right; color: var(--text-muted);">${fmt(Math.round(t.sec / 3600))} h</td>
+        </tr>
+      `).join('');
+      el.innerHTML = `<table>
+        <thead><tr><th>#</th><th>Podcast</th><th style="text-align:right;">Minuten</th><th style="text-align:right;">Stunden</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    } catch (e) {
+      el.innerHTML = `<div class="placeholder">Daten kommen bald — ${e.message}</div>`;
+    }
+  }
+
+  // 5. Vibes
+  async function loadVibes() {
+    const el = document.getElementById('vibesPie');
+    try {
+      const since = new Date(Date.now() - 30*24*3600*1000).toISOString();
+      const { data, error } = await supabase
+        .from('episode_vibes')
+        .select('vibe')
+        .gte('created_at', since)
+        .limit(10000);
+      if (error) throw error;
+      const counts = {};
+      (data || []).forEach(r => {
+        const k = r.vibe || 'unbekannt';
+        counts[k] = (counts[k] || 0) + 1;
+      });
+      const total = Object.values(counts).reduce((a, b) => a + b, 0);
+      if (total === 0) { empty('vibesPie', 'Keine Vibes in den letzten 30 Tagen.'); return; }
+      const colors = ['#8B5CF6', '#A78BFA', '#34D399', '#FCD34D', '#F87171', '#60A5FA', '#F472B6', '#A3E635'];
+      const slices = Object.entries(counts)
+        .sort((a, b) => b[1] - a[1])
+        .map(([vibe, n], i) => {
+          const pct = ((n / total) * 100).toFixed(1);
+          return `<div class="pie-slice">
+            <span class="pie-dot" style="background:${colors[i % colors.length]}"></span>
+            <strong>${vibe}</strong> · ${fmt(n)} <span style="color:var(--text-dim)">(${pct}%)</span>
+          </div>`;
+        }).join('');
+      el.innerHTML = `<div class="pie">${slices}</div>
+        <p style="margin-top: 14px; font-size: 12px; color: var(--text-dim);">Gesamt: ${fmt(total)} Vibes in 30 Tagen.</p>`;
+    } catch (e) {
+      el.innerHTML = `<div class="placeholder">Daten kommen bald — ${e.message}</div>`;
+    }
+  }
+
+  // 6. Referrals
+  async function loadReferrals() {
+    const el = document.getElementById('referralsTable');
+    try {
+      const { data, error } = await supabase
+        .from('referrals')
+        .select('referrer_id')
+        .limit(10000);
+      if (error) throw error;
+      const counts = {};
+      (data || []).forEach(r => {
+        if (!r.referrer_id) return;
+        counts[r.referrer_id] = (counts[r.referrer_id] || 0) + 1;
+      });
+      const top = Object.entries(counts)
+        .map(([id, n]) => ({ id, n }))
+        .sort((a, b) => b.n - a.n)
+        .slice(0, 20);
+      if (top.length === 0) { empty('referralsTable', 'Noch keine Referrals.'); return; }
+      let nameMap = {};
+      try {
+        const { data: us } = await supabase
+          .from('users').select('id, username').in('id', top.map(t => t.id));
+        (us || []).forEach(u => { nameMap[u.id] = u.username; });
+      } catch {}
+      const rows = top.map((t, i) => `
+        <tr>
+          <td>${i + 1}</td>
+          <td><strong>@${nameMap[t.id] || t.id.slice(0,8)}</strong></td>
+          <td style="text-align:right;"><strong>${fmt(t.n)}</strong></td>
+        </tr>
+      `).join('');
+      el.innerHTML = `<table>
+        <thead><tr><th>#</th><th>User</th><th style="text-align:right;">Referrals</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    } catch (e) {
+      el.innerHTML = `<div class="placeholder">Daten kommen bald — ${e.message}</div>`;
+    }
+  }
+
+  // 7. Bot
+  async function loadBot() {
+    const el = document.getElementById('botTable');
+    try {
+      // Bot-User ID via username „podfluence" suchen
+      const { data: botUser } = await supabase
+        .from('users').select('id').eq('username', 'podfluence').maybeSingle();
+      if (!botUser) {
+        el.innerHTML = `<div class="placeholder">Bot-User „podfluence" nicht gefunden. Username ggf. anders.</div>`;
+        return;
+      }
+      const { data, error } = await supabase
+        .from('updates')
+        .select('id, text, created_at')
+        .eq('user_id', botUser.id)
+        .order('created_at', { ascending: false })
+        .limit(20);
+      if (error) throw error;
+      if (!data || data.length === 0) { empty('botTable', 'Bot hat noch nichts gepostet.'); return; }
+      const rows = data.map(p => `
+        <tr>
+          <td style="white-space:nowrap;">${new Date(p.created_at).toLocaleString('de-DE')}</td>
+          <td>${((p.text || '').replace(/</g,'&lt;')).slice(0, 200)}${(p.text || '').length > 200 ? '…' : ''}</td>
+        </tr>
+      `).join('');
+      el.innerHTML = `<table>
+        <thead><tr><th>Wann</th><th>Text</th></tr></thead>
+        <tbody>${rows}</tbody>
+      </table>`;
+    } catch (e) {
+      el.innerHTML = `<div class="placeholder">Daten kommen bald — ${e.message}</div>`;
+    }
+  }
+
+  // Refresh
+  document.getElementById('refreshBtn').addEventListener('click', () => {
+    const active = document.querySelector('.panel.active')?.dataset.panel;
+    if (active) loadPanel(active, true);
+  });
+
+  // Initial load
+  loadPanel('overview');
+</script>
+</body>
+</html>
