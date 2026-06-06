@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <meta name="robots" content="noindex,nofollow"/>
+  <title>Abmelden — hozd</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    html, body { margin: 0; padding: 0; background: #0B0B0F; color: #E5E5EB; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    .wrap { max-width: 480px; margin: 0 auto; padding: 64px 20px 32px; }
+    .brand { display: inline-block; background: #8B5CF6; color: #fff; border-radius: 10px; padding: 8px 12px; font-weight: 800; letter-spacing: -0.4px; }
+    h1 { font-size: 28px; line-height: 1.2; margin: 24px 0 8px; }
+    p { color: #B8B8C5; line-height: 1.55; font-size: 15px; }
+    .card { background: #15151B; border-radius: 20px; padding: 28px; margin-top: 24px; }
+    button {
+      width: 100%; padding: 14px 20px; border-radius: 14px; border: 0; cursor: pointer;
+      font-size: 15px; font-weight: 700; margin-top: 12px;
+    }
+    .primary { background: #8B5CF6; color: #fff; }
+    .ghost { background: transparent; color: #C4B5FD; border: 1px solid #2A2A36; }
+    .ok { color: #4ADE80; font-weight: 700; }
+    .err { color: #F87171; font-weight: 700; }
+    .muted { color: #6B7280; font-size: 12px; margin-top: 24px; text-align: center; }
+    a { color: #C4B5FD; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <span class="brand">hozd</span>
+    <h1 id="title">Vom Newsletter abmelden</h1>
+    <p id="lead">Einen Moment — wir tragen dich aus der Liste aus.</p>
+    <div class="card" id="card">
+      <div id="status">Wird verarbeitet…</div>
+      <button id="resub" class="ghost" style="display:none;">Doch wieder anmelden</button>
+    </div>
+    <p class="muted">hozd · <a href="https://hozd.app">hozd.app</a> · <a href="mailto:hello@hozd.app">hello@hozd.app</a></p>
+  </div>
+
+  <script>
+    (function () {
+      var params = new URLSearchParams(location.search);
+      var token = params.get('token') || '';
+      var statusEl = document.getElementById('status');
+      var resubBtn = document.getElementById('resub');
+      var titleEl = document.getElementById('title');
+      var leadEl = document.getElementById('lead');
+
+      // hardcoded Supabase URL — wenn anders, hier ändern
+      var FN_URL = 'https://msvxnknzssdjvauocaqo.supabase.co/functions/v1/unsubscribe';
+
+      function call(resubscribe) {
+        statusEl.textContent = 'Wird verarbeitet…';
+        resubBtn.style.display = 'none';
+        fetch(FN_URL + '?token=' + encodeURIComponent(token) + (resubscribe ? '&resubscribe=1' : ''), {
+          method: 'POST',
+        })
+          .then(function (r) { return r.json(); })
+          .then(function (j) {
+            if (j && j.ok) {
+              if (j.state === 'unsubscribed') {
+                titleEl.textContent = 'Du bist abgemeldet';
+                leadEl.textContent = 'Wir schicken dir keinen Newsletter mehr. Transaktional-Mails (z.B. Passwort-Reset) bekommst du weiter.';
+                statusEl.innerHTML = '<span class="ok">Erfolgreich abgemeldet.</span>';
+                resubBtn.style.display = 'block';
+                resubBtn.textContent = 'Doch wieder anmelden';
+                resubBtn.onclick = function () { call(true); };
+              } else {
+                titleEl.textContent = 'Wieder angemeldet';
+                leadEl.textContent = 'Du bekommst den hozd-Newsletter wieder.';
+                statusEl.innerHTML = '<span class="ok">Wieder angemeldet.</span>';
+                resubBtn.style.display = 'block';
+                resubBtn.textContent = 'Doch abmelden';
+                resubBtn.onclick = function () { call(false); };
+              }
+            } else {
+              statusEl.innerHTML = '<span class="err">Fehler: ' + (j && j.error ? j.error : 'unbekannt') + '</span>';
+            }
+          })
+          .catch(function (e) {
+            statusEl.innerHTML = '<span class="err">Netzwerkfehler. Probier es nochmal.</span>';
+          });
+      }
+
+      if (!token) {
+        statusEl.innerHTML = '<span class="err">Kein Token in der URL. Bitte nutze den Link aus deiner E-Mail.</span>';
+      } else {
+        call(false);
+      }
+    })();
+  </script>
+</body>
+</html>
