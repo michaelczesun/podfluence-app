@@ -191,16 +191,37 @@
 <script type="module">
 import { sb } from '/lib/supabase.js'
 
-// ---- Auth-Guard ----
-const { data: { session } } = await sb.auth.getSession()
-if (!session) {
-  location.href = '/login.html?next=/crm/'
-  throw new Error('no session')
+// ---- Auth-Guard (Admin-Only) ----
+// Vorher: hardcoded /login.html (existiert nicht — Pfad ist /login/),
+// und kein Admin-Check → jeder eingeloggte User sah das CRM.
+// Jetzt: korrekte Pfade + is_app_admin-Check, sonst Redirect /app/.
+const mountEl = document.getElementById('panel-mount')
+try {
+  const { data: { session }, error: sessionError } = await sb.auth.getSession()
+  if (sessionError) throw sessionError
+  if (!session) {
+    location.replace('/login/?next=/crm/')
+    throw new Error('no session — redirecting')
+  }
+  // Admin-Check
+  const { data: profile, error: profileError } = await sb
+    .from('users')
+    .select('is_app_admin')
+    .eq('id', session.user.id)
+    .maybeSingle()
+  if (profileError) throw profileError
+  if (!profile?.is_app_admin) {
+    location.replace('/app/')
+    throw new Error('not admin — redirecting')
+  }
+} catch (authErr) {
+  mountEl.innerHTML = `<div class="panel-shell"><div class="empty" style="color:#F87171">Auth-Fehler: ${authErr?.message || authErr}<br><br><a href="/login/" style="color:#A78BFA">Erneut anmelden</a></div></div>`
+  throw authErr
 }
 
 document.getElementById('logout').addEventListener('click', async () => {
   await sb.auth.signOut()
-  location.href = '/login.html'
+  location.href = '/login/'
 })
 
 // ---- Panel-Registry ----
