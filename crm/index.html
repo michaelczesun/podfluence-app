@@ -811,7 +811,9 @@ async function loadPanel() {
     if (cache.has(id)) {
       mod = cache.get(id)
     } else {
-      mod = await import(`./panels/${id}.js`)
+      // Cache-Bust pro Tag — sonst hängen User in alter JS-Version fest nach Push.
+      const v = new Date().toISOString().slice(0, 13)  // YYYY-MM-DDTHH
+      mod = await import(`./panels/${id}.js?v=${v}`)
       cache.set(id, mod)
     }
     const panel = mod.default || mod
