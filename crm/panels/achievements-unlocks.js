@@ -60,7 +60,7 @@ function aggregateByType(rows) {
 async function fetchUsersForType(type) {
   const { data, error } = await sb
     .from('user_achievements')
-    .select('user_id, unlocked_at, users(username, full_name, avatar_url)')
+    .select('user_id, unlocked_at, users(username, full_name, avatar_url, is_verified, is_premium)')
     .eq('achievement_key', type)
     .order('unlocked_at', { ascending: false })
     .limit(500)
@@ -176,7 +176,7 @@ function openTypeDrawer(type, refreshAll) {
         <div class="user-list" style="display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow-y:auto">
           ${rows.map(r => {
             const u = r.users || {}
-            const displayName = u.display_name || u.username || ''
+            const displayName = u.full_name || u.username || ''
             const username = u.username || ''
             const avatarUrl = u.avatar_url || ''
             const avatarHtml = avatarUrl

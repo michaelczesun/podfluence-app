@@ -132,11 +132,7 @@ function renderBars(el, poll) {
       categories: poll.options.map(o => o.label.length > 18 ? o.label.slice(0, 16) + '…' : o.label),
       series: [{ name: 'Stimmen', data: poll.options.map(o => o.votes) }],
       colors: PALETTE,
-      height: 140,
-      horizontal: true,
-      compact: true,
-      distributed: true,
-      showLegend: false
+      height: 140
     })
   } catch (e) {
     const max = Math.max(1, ...poll.options.map(o => o.votes))
@@ -218,7 +214,7 @@ function openVoterDrawer(poll) {
   const d = drawer({
     title: 'Umfrage-Details',
     width: 560,
-    html: `
+    contentHtml: `
       <div class="drawer-body poll-drawer">
         <div class="drawer-question">${htmlEscape(poll.question)}</div>
         <div class="drawer-meta-line">
@@ -400,10 +396,7 @@ export default {
                 categories: top.map(p => (p.question.length > 24 ? p.question.slice(0, 22) + '…' : p.question)),
                 series: [{ name: 'Stimmen', data: top.map(p => p.totalVotes || 0) }],
                 colors: PALETTE,
-                height: 260,
-                horizontal: true,
-                distributed: true,
-                showLegend: false
+                height: 260
               })
             } catch (_) {}
           }

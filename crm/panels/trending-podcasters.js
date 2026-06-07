@@ -291,7 +291,8 @@ function renderVelocityChart(el, rows) {
       labels: Object.keys(buckets),
       values: Object.values(buckets),
       colors: ['#ff8a55', '#4ad08a', '#a8a8b2', '#ff7a85'],
-      title: 'Velocity-Verteilung',
+      height: 220,
+      centerLabel: 'Podcaster',
     })
   } catch {
     el.innerHTML = '<div style="opacity:.5;padding:12px">Chart nicht verfügbar</div>'
@@ -416,10 +417,10 @@ function openProfileDrawer(row, onChange) {
   if (chartEl && (row.spark || []).length) {
     try {
       makeAreaChart(chartEl, {
-        labels: row.spark.map((_, i) => `T-${row.spark.length - i}`),
-        values: row.spark,
-        color: '#7aa7ff',
-        title: '',
+        categories: row.spark.map((_, i) => `T-${row.spark.length - i}`),
+        series: [{ name: 'Follower', data: row.spark }],
+        colors: ['#7aa7ff'],
+        height: 200,
       })
     } catch {}
   } else if (chartEl) {
@@ -509,12 +510,15 @@ export default {
       veloChartEl.innerHTML = '<div style="opacity:.4;font-size:12px;padding:12px">Lade…</div>'
       topChartEl.innerHTML = '<div style="opacity:.4;font-size:12px;padding:12px">Lade…</div>'
 
+      // FIX: segmentedControl ist positional: (container, options, activeKey, onChange)
+      // und options nutzt {key, label} — vorher: Options-Object → "Range-Picker fehlgeschlagen"
       try {
-        segmentedControl(rangeMount, {
-          options: RANGES.map(r => ({ id: r.id, label: r.label })),
-          value: state.range,
-          onChange: v => { state.range = v; load() },
-        })
+        segmentedControl(
+          rangeMount,
+          RANGES.map(r => ({ key: r.id, label: r.label })),
+          state.range,
+          v => { state.range = v; load() },
+        )
       } catch {
         rangeMount.innerHTML = RANGES.map(r => `<button class="btn btn-ghost btn-sm" data-range="${r.id}">${r.label}</button>`).join('')
         rangeMount.addEventListener('click', e => {
@@ -523,11 +527,12 @@ export default {
         })
       }
       try {
-        segmentedControl(sortMount, {
-          options: SORTS.map(s => ({ id: s.id, label: s.label })),
-          value: state.sort,
-          onChange: v => { state.sort = v; renderGrid() },
-        })
+        segmentedControl(
+          sortMount,
+          SORTS.map(s => ({ key: s.id, label: s.label })),
+          state.sort,
+          v => { state.sort = v; renderGrid() },
+        )
       } catch {
         sortMount.innerHTML = SORTS.map(s => `<button class="btn btn-ghost btn-sm" data-sort="${s.id}">${s.label}</button>`).join('')
         sortMount.addEventListener('click', e => {

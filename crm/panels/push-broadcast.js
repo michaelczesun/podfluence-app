@@ -106,10 +106,10 @@ function renderHero(history, totalUsers) {
   const openRate = totalDelivered ? (totalOpened / totalDelivered * 100) : 0
 
   return `<div class="hero-row">
-    ${statHero({ label: 'Erreichbare User',   value: fmtNumber(totalUsers),              icon: 'users',    accent: 'blue',   raw: true })}
-    ${statHero({ label: 'Broadcasts (7T)',     value: fmtNumber(last7.length),            icon: 'send',     accent: 'violet', raw: true })}
-    ${statHero({ label: 'Zugestellt gesamt',  value: fmtNumber(totalDelivered),          icon: 'check',    accent: 'green',  raw: true })}
-    ${statHero({ label: 'Open-Rate',          value: openRate.toFixed(1) + '%',          icon: 'eye',      accent: 'amber',  raw: true })}
+    ${statHero({ label: 'Erreichbare User',   value: fmtNumber(totalUsers),              icon: iconHtml('users') })}
+    ${statHero({ label: 'Broadcasts (7T)',     value: fmtNumber(last7.length),            icon: iconHtml('send') })}
+    ${statHero({ label: 'Zugestellt gesamt',  value: fmtNumber(totalDelivered),          icon: iconHtml('check') })}
+    ${statHero({ label: 'Open-Rate',          value: openRate.toFixed(1) + '%',          icon: iconHtml('eye') })}
   </div>`
 }
 
@@ -212,13 +212,14 @@ function renderHistory(history) {
     return `<div class="glass-card">
       <h3 class="card-head-h3">${iconHtml('clock')} Verlauf</h3>
       <div class="history-empty">
-        Noch keine Broadcasts gesendet — der Verlauf erscheint hier nach dem ersten Push.
+        ${iconHtml('info')} Push-Verlauf nicht verfügbar — es existiert noch kein dediziertes <code>broadcast_push_log</code>.
+        Versendete Pushes erscheinen erst, sobald ein RPC dafür angelegt wurde.
       </div>
     </div>`
   }
   return `<div class="glass-card">
     <div class="card-head">
-      <h3>${iconHtml('clock')} Verlauf — letzte 10 Broadcasts</h3>
+      <h3>${iconHtml('clock')} Verlauf — letzte 10 Broadcasts <span class="muted" style="font-size:11px;font-weight:400;">(Quelle: email_broadcasts — Fallback bis push_log existiert)</span></h3>
     </div>
     <div class="table-wrap">
       <table class="data-table data-table-hover">
@@ -419,11 +420,13 @@ export default {
         if (chartDataEl) {
           const cd = JSON.parse(chartDataEl.textContent)
           makeAreaChart(bodyEl.querySelector('#chart-deliver'), {
-            labels: cd.labels,
+            categories: cd.labels,
             series: [
-              { name: 'Zugestellt', data: cd.delivered, color: '#34d399' },
-              { name: 'Geöffnet',   data: cd.opened,    color: '#fbbf24' }
-            ]
+              { name: 'Zugestellt', data: cd.delivered },
+              { name: 'Geöffnet',   data: cd.opened }
+            ],
+            colors: ['#34d399', '#fbbf24'],
+            height: 220
           })
           if (cd.audValues.length) {
             makeDonutChart(bodyEl.querySelector('#chart-audience'), {
