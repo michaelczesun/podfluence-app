@@ -214,13 +214,14 @@ function missingDataBanner(missingProxies) {
 
 function renderHero(root, totals) {
   root.innerHTML = `
-    ${statHero({ label: 'Posts',    value: fmtNumber(totals.posts),    icon: 'edit' })}
-    ${statHero({ label: 'Episodes', value: fmtNumber(totals.episodes), icon: 'mic' })}
-    ${statHero({ label: 'Listens',  value: fmtNumber(totals.listens),  icon: 'play' })}
-    ${statHero({ label: 'Likes',    value: fmtNumber(totals.likes),    icon: 'heart' })}
+    ${statHero({ label: 'Posts',    value: fmtNumber(totals.posts),    icon: iconHtml('edit') })}
+    ${statHero({ label: 'Episodes', value: fmtNumber(totals.episodes), icon: iconHtml('mic') })}
+    ${statHero({ label: 'Listens',  value: fmtNumber(totals.listens),  icon: iconHtml('play') })}
+    ${statHero({ label: 'Likes',    value: fmtNumber(totals.likes),    icon: iconHtml('heart') })}
   `
-  root.querySelectorAll('[data-stat-value]').forEach(el => {
-    const v = Number(el.dataset.statValue || el.textContent.replace(/\D/g, '')) || 0
+  const valuesByMetric = [totals.posts, totals.episodes, totals.listens, totals.likes]
+  root.querySelectorAll('[data-stat-value]').forEach((el, idx) => {
+    const v = Number(valuesByMetric[idx] ?? 0)
     countUp(el, v)
   })
 }

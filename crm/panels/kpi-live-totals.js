@@ -235,7 +235,7 @@ async function renderSparklines(container) {
       const vals = await fetchSparkData(def)
       if (!vals || vals.length === 0) { el.innerHTML = ''; return }
       el.innerHTML = ''
-      try { makeSparkline(el, vals, { color: def.color, height: 28 }) }
+      try { makeSparkline(el, { values: vals, color: def.color, height: 28 }) }
       catch (_) { el.innerHTML = '' }
     } catch (_) {}
   }))
@@ -368,16 +368,17 @@ async function renderDrilldown(def, totals, onClose) {
   } else {
     try {
       makeLineChart(el, {
-        labels: series.map(s => s.date.slice(5)),
-        series: [{ name: def.label, data: series.map(s => s.value), color: def.color }],
+        categories: series.map(s => s.date.slice(5)),
+        series: [{ name: def.label, data: series.map(s => s.value) }],
+        colors: [def.color],
         height: 320, smooth: true, area: true
       })
     } catch (_) {
       try {
         makeAreaChart(el, {
-          labels: series.map(s => s.date.slice(5)),
-          values: series.map(s => s.value),
-          color: def.color, height: 320
+          categories: series.map(s => s.date.slice(5)),
+          series: [{ name: def.label, data: series.map(s => s.value) }],
+          colors: [def.color], height: 320
         })
       } catch (e) {
         el.innerHTML = `<div class="empty-state"><div class="icon">${iconHtml('alert-triangle')}</div><h3>Chart nicht verfügbar</h3><p>${htmlEscape(e?.message||'')}</p></div>`
