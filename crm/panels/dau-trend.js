@@ -39,62 +39,26 @@ async function fetchDau(days) {
   since.setDate(since.getDate() - (Number(days) - 1))
   since.setHours(0, 0, 0, 0)
 
-  try {
-    const { data, error } = await sb.rpc('get_daily_active_users', {
-      p_since: since.toISOString(),
-      p_days: Number(days)
-    })
-    if (!error && Array.isArray(data) && data.length) {
-      return data.map(r => ({
-        date: formatDateKey(r.day || r.date),
-        users: Number(r.users || r.dau || r.count || 0)
-      }))
-    }
-  } catch (_) { /* fallthrough */ }
-
-  // Fallback: aggregate from sessions
-  try {
-    const { data, error } = await sb
-      .from('user_sessions')
-      .select('user_id, created_at')
-      .gte('created_at', since.toISOString())
-    if (error) throw error
-    const buckets = new Map()
-    for (let i = 0; i < Number(days); i++) {
-      const d = new Date(since)
-      d.setDate(d.getDate() + i)
-      buckets.set(formatDateKey(d), new Set())
-    }
-    ;(data || []).forEach(row => {
-      const key = formatDateKey(row.created_at)
-      if (buckets.has(key)) buckets.get(key).add(row.user_id)
-    })
-    return Array.from(buckets.entries()).map(([date, set]) => ({
-      date,
-      users: set.size
-    }))
-  } catch (_) {
-    // Last-resort fallback: posts table
-    const { data, error } = await sb
-      .from('posts')
-      .select('user_id, created_at')
-      .gte('created_at', since.toISOString())
-    if (error) throw error
-    const buckets = new Map()
-    for (let i = 0; i < Number(days); i++) {
-      const d = new Date(since)
-      d.setDate(d.getDate() + i)
-      buckets.set(formatDateKey(d), new Set())
-    }
-    ;(data || []).forEach(row => {
-      const key = formatDateKey(row.created_at)
-      if (buckets.has(key)) buckets.get(key).add(row.user_id)
-    })
-    return Array.from(buckets.entries()).map(([date, set]) => ({
-      date,
-      users: set.size
-    }))
+  // Aggregate from app_opens (user_id + created_at)
+  const { data, error } = await sb
+    .from('app_opens')
+    .select('user_id, created_at')
+    .gte('created_at', since.toISOString())
+  if (error) throw error
+  const buckets = new Map()
+  for (let i = 0; i < Number(days); i++) {
+    const d = new Date(since)
+    d.setDate(d.getDate() + i)
+    buckets.set(formatDateKey(d), new Set())
   }
+  ;(data || []).forEach(row => {
+    const key = formatDateKey(row.created_at)
+    if (buckets.has(key)) buckets.get(key).add(row.user_id)
+  })
+  return Array.from(buckets.entries()).map(([date, set]) => ({
+    date,
+    users: set.size
+  }))
 }
 
 async function fetchUsersForDay(dateKey) {
@@ -103,20 +67,13 @@ async function fetchUsersForDay(dateKey) {
   const end = new Date(start)
   end.setDate(end.getDate() + 1)
 
-  try {
-    const { data, error } = await sb.rpc('get_active_users_for_day', {
-      p_day: start.toISOString()
-    })
-    if (!error && Array.isArray(data)) return data
-  } catch (_) { /* fall through */ }
-
-  const { data: posts } = await sb
-    .from('posts')
+  const { data: opens } = await sb
+    .from('app_opens')
     .select('user_id, created_at')
     .gte('created_at', start.toISOString())
     .lt('created_at', end.toISOString())
 
-  const ids = Array.from(new Set((posts || []).map(p => p.user_id))).filter(Boolean)
+  const ids = Array.from(new Set((opens || []).map(p => p.user_id))).filter(Boolean)
   if (!ids.length) return []
   const { data: users } = await sb
     .from('users')
@@ -404,7 +361,6 @@ export default {
       const body = container.querySelector('#dau-body')
       const rangeHost = container.querySelector('#dau-range')
 
-      // Skeleton sofort zeigen, bevor irgendwas async passiert
       if (body) renderSkeleton(body)
 
       if (rangeHost) {
@@ -459,7 +415,6 @@ export default {
       const shell = container.querySelector('.panel-shell')
       if (shell) fadeIn(shell)
 
-      // Background fetch — Skeleton ist schon sichtbar
       if (body) {
         loadAndRender(body, openDayDrawer).catch(e => {
           renderError(body, e.message || 'Initialer Ladefehler', () => loadAndRender(body, openDayDrawer))

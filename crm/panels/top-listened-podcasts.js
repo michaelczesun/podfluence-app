@@ -22,15 +22,9 @@ function last7Days() {
   return out
 }
 
+// listening_sessions does not exist — replaced with empty-state stub
 async function fetchSessions(days = 7) {
-  const since = new Date(Date.now() - days * DAY_MS).toISOString()
-  const { data, error } = await sb
-    .from('listening_sessions')
-    .select('started_at, duration_seconds, episode_id, episodes(id, title, podcast_id, podcasts(id, title, cover_url, host_user_id))')
-    .gte('started_at', since)
-    .order('started_at', { ascending: true })
-  if (error) throw error
-  return data || []
+  return []
 }
 
 function aggregatePodcasts(rows) {
@@ -70,52 +64,9 @@ function aggregatePodcasts(rows) {
     .sort((a, b) => b.totalMinutes - a.totalMinutes)
 }
 
+// podcasts, podcast_hosts, users tables do not exist — replaced with empty-state stub
 async function fetchPodcastDetail(podcastId) {
-  const since = new Date(Date.now() - 30 * DAY_MS).toISOString()
-
-  const [{ data: podcast, error: pErr }, hostsRes, { data: sessions, error: sErr }] = await Promise.all([
-    sb.from('podcasts').select('id, title, cover_url, description, host_user_id, created_at').eq('id', podcastId).maybeSingle(),
-    sb.from('podcast_hosts').select('user_id, role, users(id, display_name, username, avatar_url)').eq('podcast_id', podcastId),
-    sb.from('listening_sessions')
-      .select('started_at, duration_seconds, episode_id, episodes!inner(id, title, published_at, podcast_id)')
-      .gte('started_at', since)
-      .eq('episodes.podcast_id', podcastId)
-  ])
-  if (pErr) throw pErr
-  if (sErr) throw sErr
-  // hosts: tolerate missing-table / RLS errors silently
-  const hosts = (hostsRes && !hostsRes.error) ? (hostsRes.data || []) : []
-
-  const validSessions = (sessions || []).filter(s => s.episodes)
-  const byEpisode = new Map()
-  for (const s of validSessions) {
-    const ep = s.episodes
-    if (!ep?.id) continue
-    if (!byEpisode.has(ep.id)) {
-      byEpisode.set(ep.id, {
-        id: ep.id,
-        title: ep.title || 'Unbekannte Episode',
-        published_at: ep.published_at,
-        plays: 0,
-        minutes: 0
-      })
-    }
-    const o = byEpisode.get(ep.id)
-    o.plays += 1
-    o.minutes += (s.duration_seconds || 0) / 60
-  }
-  const episodes = Array.from(byEpisode.values())
-    .map(e => ({ ...e, minutes: Math.round(e.minutes) }))
-    .sort((a, b) => b.minutes - a.minutes)
-
-  // primary host fallback
-  let hostList = hosts
-  if (hostList.length === 0 && podcast?.host_user_id) {
-    const { data: hostUser } = await sb.from('users').select('id, display_name, username, avatar_url').eq('id', podcast.host_user_id).maybeSingle()
-    if (hostUser) hostList = [{ user_id: hostUser.id, role: 'Host', users: hostUser }]
-  }
-
-  return { podcast, hosts: hostList, episodes, sessions: validSessions }
+  return { podcast: null, hosts: [], episodes: [], sessions: [] }
 }
 
 export default {
@@ -157,7 +108,6 @@ export default {
       `
 
       const body = container.querySelector('#body')
-      // Initial skeleton sofort sichtbar
       body.innerHTML = skeletonLoader({ rows: 8, height: 64 })
 
       async function load() {
@@ -182,9 +132,9 @@ export default {
         if (aggregated.length === 0) {
           body.innerHTML = `
             <div class="empty-state glass-card">
-              <div class="empty-icon">${iconHtml('headphones')}</div>
-              <h3>Noch keine Hörsessions</h3>
-              <p>Sobald Nutzer Episoden anhören, erscheint das Leaderboard hier.</p>
+              <div class="empty-icon">${iconHtml('alert')}</div>
+              <h3>Daten kommen sobald die Tabelle listening_sessions angelegt ist</h3>
+              <p>Sobald Nutzer Episoden anhören und die Tabelle verfügbar ist, erscheint das Leaderboard hier.</p>
               <button class="btn btn-primary" data-act="reload">Erneut laden</button>
             </div>`
           body.querySelector('[data-act="reload"]')?.addEventListener('click', load)
@@ -248,7 +198,6 @@ export default {
           </section>
         `
 
-        // Hero stats
         const heroRow = body.querySelector('#heroRow')
         heroRow.appendChild(statHero({ label: 'Hörminuten gesamt', value: '0', accent: 'violet', icon: 'clock' }))
         heroRow.appendChild(statHero({ label: 'Plays gesamt', value: '0', accent: 'cyan', icon: 'play' }))
@@ -265,7 +214,6 @@ export default {
         if (heroValues[1]) countUp(heroValues[1], totalPlays, { duration: 900 })
         if (heroValues[2]) countUp(heroValues[2], totalPodcasts, { duration: 900 })
 
-        // Bar chart (top 10)
         const barHost = body.querySelector('#barChart')
         const barTop = top.slice(0, 10)
         try {
@@ -280,7 +228,6 @@ export default {
           barHost.innerHTML = `<div class="muted" style="padding:24px">Chart konnte nicht gerendert werden: ${htmlEscape(e.message || String(e))}</div>`
         }
 
-        // Donut: top 5 vs rest
         const donutHost = body.querySelector('#donutChart')
         const top5 = aggregated.slice(0, 5)
         const restSum = aggregated.slice(5).reduce((s, p) => s + p.totalMinutes, 0)
@@ -298,7 +245,6 @@ export default {
 
         renderLeaderboardRows()
 
-        // Sort headers
         body.querySelectorAll('th.sortable').forEach(th => {
           th.addEventListener('click', () => {
             sortKey = th.dataset.sort
@@ -343,7 +289,6 @@ export default {
             </tr>`
         }).join('')
 
-        // Mount sparklines
         rows.forEach(p => {
           const host = tbody.querySelector(`[data-spark="${CSS.escape(p.id)}"]`)
           if (host) {
@@ -353,14 +298,12 @@ export default {
           }
         })
 
-        // Row click → drawer
         tbody.querySelectorAll('.leaderboard-row').forEach(row => {
           row.addEventListener('click', e => {
             if (e.target.closest('.host-link')) return
             openPodcastDrawer(row.dataset.podcast)
           })
         })
-        // Host click
         tbody.querySelectorAll('.host-link').forEach(btn => {
           btn.addEventListener('click', e => {
             e.stopPropagation()
@@ -381,91 +324,21 @@ export default {
 
         try {
           const detail = await fetchPodcastDetail(podcastId)
-          const totalEpisodeMin = detail.episodes.reduce((s, e) => s + e.minutes, 0)
-          const totalEpisodePlays = detail.episodes.reduce((s, e) => s + e.plays, 0)
 
-          const coverHtml = detail.podcast?.cover_url
-            ? `<img src="${htmlEscape(detail.podcast.cover_url)}" style="width:88px;height:88px;border-radius:12px;object-fit:cover" onerror="this.style.display='none'">`
-            : `<div style="width:88px;height:88px;border-radius:12px;background:linear-gradient(135deg,#8b5cf6,#06b6d4);display:flex;align-items:center;justify-content:center;color:#fff;font-size:32px;font-weight:700">${htmlEscape((detail.podcast?.title || '?').charAt(0).toUpperCase())}</div>`
-
-          const hostsHtml = detail.hosts.length === 0
-            ? `<p class="muted">Keine Hosts hinterlegt.</p>`
-            : `<div class="host-grid" style="display:flex;flex-wrap:wrap;gap:8px">
-                ${detail.hosts.map(h => {
-                  const u = h.users || {}
-                  const name = u.display_name || u.username || 'Unbekannt'
-                  const avatar = u.avatar_url
-                    ? `<img src="${htmlEscape(u.avatar_url)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover" onerror="this.style.display='none'">`
-                    : `<div style="width:28px;height:28px;border-radius:50%;background:#374151;display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600">${htmlEscape(name.charAt(0).toUpperCase())}</div>`
-                  return `<button class="btn btn-ghost host-chip" data-user="${htmlEscape(h.user_id)}" style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px">
-                    ${avatar}
-                    <span>${htmlEscape(name)}</span>
-                    <span class="muted" style="font-size:11px">${htmlEscape(h.role || 'Host')}</span>
-                  </button>`
-                }).join('')}
-              </div>`
-
-          const epRows = detail.episodes.slice(0, 50).map((e, i) => `
-            <tr>
-              <td class="muted">${i + 1}</td>
-              <td>${htmlEscape(e.title)}</td>
-              <td class="muted" style="font-size:12px">${e.published_at ? fmtDateTime(e.published_at).split(',')[0] : '—'}</td>
-              <td style="text-align:right;font-variant-numeric:tabular-nums">${fmtNumber(e.plays)}</td>
-              <td style="text-align:right;font-variant-numeric:tabular-nums"><strong>${fmtNumber(e.minutes)}</strong></td>
-            </tr>`).join('')
-
+          // podcasts table not yet in DB — show empty-state in drawer
           const html = `
-            <div class="drawer-content-inner" style="padding:20px;display:flex;flex-direction:column;gap:20px">
-              <div style="display:flex;gap:16px;align-items:center">
-                ${coverHtml}
-                <div style="flex:1;min-width:0">
-                  <h3 style="margin:0 0 6px">${htmlEscape(detail.podcast?.title || 'Unbekannter Podcast')}</h3>
-                  <p class="muted" style="margin:0;font-size:13px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical">${htmlEscape(detail.podcast?.description || 'Keine Beschreibung')}</p>
-                </div>
-              </div>
-
-              <div class="hero-row" id="drawerHero" style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px"></div>
-
-              <div class="glass-card" style="padding:16px">
-                <h4 style="margin:0 0 12px">Hosts</h4>
-                ${hostsHtml}
-              </div>
-
-              <div class="glass-card" style="padding:16px">
-                <h4 style="margin:0 0 12px">Top Episoden (30 Tage)</h4>
-                ${detail.episodes.length === 0
-                  ? `<div class="empty-state" style="padding:24px"><div class="empty-icon">${iconHtml('headphones')}</div><h4>Keine Plays im Zeitraum</h4><p class="muted">In den letzten 30 Tagen wurden keine Episoden dieses Podcasts gehört.</p></div>`
-                  : `<table class="data-table data-table-hover">
-                      <thead><tr><th>#</th><th>Episode</th><th>Veröffentlicht</th><th style="text-align:right">Plays</th><th style="text-align:right">Minuten</th></tr></thead>
-                      <tbody>${epRows}</tbody>
-                    </table>`}
+            <div class="drawer-content-inner" style="padding:20px">
+              <div class="empty-state glass-card">
+                <div class="empty-icon">${iconHtml('alert')}</div>
+                <h3>Daten kommen sobald die Tabelle podcasts oder das RPC fetchPodcastDetail angelegt ist</h3>
               </div>
             </div>
           `
-
           const loadingEl = root.querySelector ? root.querySelector('#drawerLoading') : null
           if (loadingEl) loadingEl.outerHTML = html
           else if (root.querySelector) {
             const target = root.querySelector('.drawer-content') || root
             target.innerHTML = html
-          }
-
-          // Hero stats inside drawer
-          const drawerHero = (root.querySelector ? root.querySelector('#drawerHero') : null)
-          if (drawerHero) {
-            drawerHero.appendChild(statHero({ label: 'Episoden gehört', value: String(detail.episodes.length), accent: 'violet', icon: 'list' }))
-            drawerHero.appendChild(statHero({ label: 'Plays (30T)', value: String(totalEpisodePlays), accent: 'cyan', icon: 'play' }))
-            drawerHero.appendChild(statHero({ label: 'Minuten (30T)', value: String(totalEpisodeMin), accent: 'amber', icon: 'clock' }))
-          }
-
-          // Host chip clicks → user modal
-          if (root.querySelectorAll) {
-            root.querySelectorAll('.host-chip').forEach(chip => {
-              chip.addEventListener('click', () => {
-                const uid = chip.dataset.user
-                if (uid) showUserDetailModal(uid)
-              })
-            })
           }
         } catch (err) {
           const loadingEl = root.querySelector ? root.querySelector('#drawerLoading') : null
@@ -508,7 +381,6 @@ export default {
         render()
       })
 
-      // Background load: skeleton ist bereits sichtbar, kein await im kritischen Pfad
       load()
     } catch (mountErr) {
       container.innerHTML = `

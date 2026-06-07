@@ -51,8 +51,8 @@ function regionOf(code) {
 
 async function fetchCountries() {
   const { data, error } = await sb
-    .from('profiles')
-    .select('id, country, country_code, created_at')
+    .from('users_by_country')
+    .select('*')
     .limit(50000)
   if (error) throw error
   const byCode = new Map()
@@ -61,23 +61,20 @@ async function fetchCountries() {
     if (!raw) continue
     const code = raw.length === 2 ? raw.toUpperCase() : raw
     const entry = byCode.get(code) || { code, count: 0, recent: 0 }
-    entry.count++
+    entry.count += (row.count || row.user_count || 1)
     if (row.created_at && (Date.now() - new Date(row.created_at).getTime()) < 30 * 86400000) entry.recent++
     byCode.set(code, entry)
   }
   return Array.from(byCode.values()).sort((a, b) => b.count - a.count)
 }
 
-async function fetchUsersFromCountry(code) {
-  const orFilter = `country_code.eq.${code},country.eq.${code}`
-  const { data, error } = await sb
-    .from('profiles')
-    .select('id, username, display_name, avatar_url, email, country, country_code, created_at, is_verified, is_premium')
-    .or(orFilter)
-    .order('created_at', { ascending: false })
-    .limit(200)
-  if (error) throw error
-  return data || []
+function renderUsersFromCountryEmptyState() {
+  return `
+    <div class="glass-card" style="padding:24px 20px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px">
+      ${iconHtml('alert')}
+      <div style="font-size:.9rem;color:var(--text-muted,#9aa0a6)">Daten kommen sobald die Tabelle <strong>profiles</strong> angelegt ist</div>
+    </div>
+  `
 }
 
 function renderToolbar() {
@@ -425,45 +422,15 @@ export default {
       const body = document.querySelector('#cd-body')
       if (!body) return
       try {
-        const users = await fetchUsersFromCountry(code)
-        if (!users.length) {
-          body.innerHTML = `<div class="empty-state"><div class="empty-icon">${iconHtml('users')}</div><div class="empty-title">Keine User</div><div class="empty-sub">Aus ${htmlEscape(countryName(code))} sind aktuell keine User registriert.</div></div>`
-          return
-        }
         const meta = state.countries.find(c => c.code === code)
         body.innerHTML = `
           <div style="padding:10px 14px;display:flex;gap:18px;border-bottom:1px solid rgba(255,255,255,.06);margin-bottom:8px">
-            <div><div style="font-size:.72rem;color:#9aa0a6;text-transform:uppercase;letter-spacing:.05em">Gesamt</div><div style="font-weight:700;font-size:1.2rem">${fmtNumber(meta?.count || users.length)}</div></div>
+            <div><div style="font-size:.72rem;color:#9aa0a6;text-transform:uppercase;letter-spacing:.05em">Gesamt</div><div style="font-weight:700;font-size:1.2rem">${fmtNumber(meta?.count || 0)}</div></div>
             <div><div style="font-size:.72rem;color:#9aa0a6;text-transform:uppercase;letter-spacing:.05em">Neu 30T</div><div style="font-weight:700;font-size:1.2rem;color:#10b981">+${fmtNumber(meta?.recent || 0)}</div></div>
             <div><div style="font-size:.72rem;color:#9aa0a6;text-transform:uppercase;letter-spacing:.05em">Region</div><div style="font-weight:700;font-size:.95rem;padding-top:4px">${htmlEscape(regionOf(code))}</div></div>
           </div>
-          <div style="display:flex;flex-direction:column;gap:2px;padding:6px">
-            ${users.map(u => {
-              const name = u.display_name || u.username || u.email || 'Unbekannt'
-              const initial = (name[0] || '?').toUpperCase()
-              const avatar = u.avatar_url ? `background-image:url('${htmlEscape(u.avatar_url)}')` : ''
-              return `
-                <div class="drawer-user-row" data-user-id="${htmlEscape(u.id)}">
-                  <div class="drawer-avatar" style="${avatar}">${avatar ? '' : htmlEscape(initial)}</div>
-                  <div class="drawer-user-meta">
-                    <div class="drawer-user-name">
-                      ${htmlEscape(name)}
-                      ${u.is_verified ? '<span class="badge-mini verified">verifiziert</span>' : ''}
-                      ${u.is_premium ? '<span class="badge-mini premium">Premium</span>' : ''}
-                    </div>
-                    <div class="drawer-user-sub">${htmlEscape(u.username ? '@' + u.username : (u.email || ''))} · seit ${u.created_at ? fmtDateTime(u.created_at) : '–'}</div>
-                  </div>
-                  ${iconHtml('chevron-right')}
-                </div>
-              `
-            }).join('')}
-          </div>
+          ${renderUsersFromCountryEmptyState()}
         `
-        body.querySelectorAll('[data-user-id]').forEach(row => {
-          row.addEventListener('click', () => {
-            try { showUserDetailModal(row.dataset.userId) } catch(_) { toast('User-Detail nicht verfügbar', 'error') }
-          })
-        })
       } catch (err) {
         body.innerHTML = renderError(err)
       }

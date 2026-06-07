@@ -21,12 +21,21 @@ async function fetchFunnel() {
 
   const since = new Date(Date.now() - 30 * 86400000).toISOString()
 
-  const usersRes = await sb.from('users')
-    .select('id, email, username, full_name, created_at, avatar_url, bio, last_seen_at')
+  // users-Tabelle existiert nicht im Schema — leere Aggregation zurückgeben
+  const usersRes = await sb.from('app_opens')
+    .select('user_id, created_at')
     .gte('created_at', since)
     .limit(5000)
 
-  if (usersRes.error) throw usersRes.error
+  if (usersRes.error) {
+    // Keine Daten verfügbar — leeres Ergebnis
+    return {
+      counts: { signup: 0, profile: 0, listen: 0, active: 0 },
+      members: { signup: [], profile: [], listen: [], active: [] },
+      series: [],
+      _missingTables: true
+    }
+  }
 
   const safeFetch = async (q) => {
     try {
@@ -36,12 +45,12 @@ async function fetchFunnel() {
     } catch (_) { return { data: [] } }
   }
 
-  const profilesRes = await safeFetch(sb.from('profiles').select('user_id, avatar_url, bio').limit(5000))
-  const listensRes  = await safeFetch(sb.from('listening_history').select('user_id').gte('created_at', since).limit(20000))
-  const actionsRes  = await safeFetch(sb.from('user_actions').select('user_id, created_at').gte('created_at', since).limit(50000))
+  // listening_history → listening_activity (existiert im Schema)
+  const listensRes = await safeFetch(sb.from('listening_activity').select('user_id').gte('created_at', since).limit(20000))
+  // user_actions existiert nicht im Schema — safeFetch gibt leeres Array zurück
+  const actionsRes = await safeFetch(sb.from('user_actions').select('user_id, created_at').gte('created_at', since).limit(50000))
 
   const all = usersRes.data || []
-  const profileSet = new Set((profilesRes.data || []).filter(p => p.avatar_url && p.bio).map(p => p.user_id))
   const listenSet  = new Set((listensRes.data || []).map(l => l.user_id))
   const actionCount = new Map()
   for (const a of (actionsRes.data || [])) actionCount.set(a.user_id, (actionCount.get(a.user_id) || 0) + 1)
@@ -49,10 +58,9 @@ async function fetchFunnel() {
   const members = { signup: [], profile: [], listen: [], active: [] }
   for (const u of all) {
     members.signup.push(u)
-    const hasProfile = (u.avatar_url && u.bio) || profileSet.has(u.id)
-    if (hasProfile) members.profile.push(u)
-    if (listenSet.has(u.id)) members.listen.push(u)
-    if ((actionCount.get(u.id) || 0) >= 3) members.active.push(u)
+    if (u.avatar_url && u.bio) members.profile.push(u)
+    if (listenSet.has(u.user_id)) members.listen.push(u)
+    if ((actionCount.get(u.user_id) || 0) >= 3) members.active.push(u)
   }
 
   const byDay = new Map()
@@ -159,6 +167,14 @@ function appendSkeleton(host, opts) {
 }
 
 function renderFunnelHTML(data) {
+  if (data._missingTables) {
+    return `
+      <div class="glass-card" style="padding:32px; text-align:center; color:var(--text-secondary,#6b7280);">
+        ${iconHtml('alert')}
+        <div style="margin-top:12px; font-size:14px;">Daten kommen sobald die Tabelle <strong>users</strong> oder das RPC <strong>onboarding_funnel_stats</strong> angelegt ist</div>
+      </div>
+    `
+  }
   const counts = data.counts
   const top = counts.signup || 1
   let html = '<div class="of-funnel">'
@@ -266,13 +282,8 @@ async function sendReactivationMails(userIds) {
     if (error) throw error
     toast(`Reactivation-Mail an ${userIds.length} Nutzer:innen versendet`, 'success')
   } catch (e) {
-    try {
-      const { error } = await sb.rpc('queue_reactivation_mails', { p_user_ids: userIds })
-      if (error) throw error
-      toast(`${userIds.length} Mails in Queue gestellt`, 'success')
-    } catch (e2) {
-      toast('Versand fehlgeschlagen: ' + (e2.message || e.message || 'Unbekannter Fehler'), 'error')
-    }
+    // queue_reactivation_mails RPC existiert nicht im Schema
+    toast('Versand fehlgeschlagen: ' + (e.message || 'Unbekannter Fehler'), 'error')
   }
 }
 

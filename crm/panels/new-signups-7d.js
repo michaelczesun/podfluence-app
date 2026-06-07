@@ -38,25 +38,20 @@ async function fetchSignupsInRange(rangeDays) {
   since.setDate(since.getDate() - (rangeDays - 1))
   since.setHours(0, 0, 0, 0)
 
-  const { data, error } = await sb
-    .from('users')
-    .select('id, username, display_name, avatar_url, created_at, is_verified')
-    .gte('created_at', since.toISOString())
-    .order('created_at', { ascending: false })
+  const { data, error } = await sb.rpc('admin_list_users_full')
 
   if (error) throw error
-  return data || []
+  const rows = (data || []).filter((r) => r.created_at && new Date(r.created_at) >= since)
+  rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  return rows
 }
 
 async function fetchLatestSignups(limit = 20) {
-  const { data, error } = await sb
-    .from('users')
-    .select('id, username, display_name, avatar_url, created_at, is_verified')
-    .order('created_at', { ascending: false })
-    .limit(limit)
+  const { data, error } = await sb.rpc('admin_list_users_full')
 
   if (error) throw error
-  return data || []
+  const rows = (data || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  return rows.slice(0, limit)
 }
 
 function aggregate(rows, rangeDays) {

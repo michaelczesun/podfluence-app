@@ -69,10 +69,7 @@ export default {
     body.innerHTML = skeletonLoader({ rows: 4, height: 140 })
 
     try {
-      const { data: users, error } = await sb
-        .from('users')
-        .select('id, full_name, username, avatar_url, is_podcaster, is_verified, created_at, converted_at')
-        .limit(20000)
+      const { data: users, error } = await sb.rpc('admin_list_users_full')
 
       if (error) throw error
 

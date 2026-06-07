@@ -23,25 +23,23 @@ function fmtRelative(iso) {
 
 async function fetchData() {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+
+  // crash_events → crash_logs (renamed table)
   const { data: crashes, error: crashErr } = await sb
-    .from('crash_events')
-    .select('id, component, created_at, session_id')
+    .from('crash_logs')
+    .select('*')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
 
   if (crashErr) throw crashErr
 
-  const { count: sessionsTotal, error: sessErr } = await sb
-    .from('app_sessions')
-    .select('id', { count: 'exact', head: true })
-    .gte('started_at', since)
-
-  if (sessErr) throw sessErr
+  // app_sessions does not exist in DB — sessions count unavailable
+  let sessions = 0
+  let sessionsUnavailable = true
 
   const list = crashes || []
   const totalCrashes = list.length
   const crashSessions = new Set(list.map(c => c.session_id).filter(Boolean)).size
-  const sessions = sessionsTotal || 0
   const crashFreeRate = sessions > 0
     ? Math.max(0, Math.min(100, ((sessions - crashSessions) / sessions) * 100))
     : 100
@@ -76,6 +74,7 @@ async function fetchData() {
     totalCrashes,
     crashSessions,
     sessions,
+    sessionsUnavailable,
     series: buckets,
     topLocations,
     raw: list,
@@ -135,9 +134,13 @@ function renderContent(body, data) {
             </div>
             <div class="mini-stat" style="padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04)">
               <div class="mini-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Sessions ges.</div>
-              <div class="mini-value" id="stat-total-sessions" style="font-size:20px;font-weight:600;margin-top:2px">0</div>
+              <div class="mini-value" id="stat-total-sessions" style="font-size:20px;font-weight:600;margin-top:2px">${data.sessionsUnavailable ? '—' : '0'}</div>
             </div>
           </div>
+          ${data.sessionsUnavailable ? `
+          <div class="glass-card" style="padding:10px 14px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)">
+            ${iconHtml('alert')} Daten kommen sobald die Tabelle <code>app_sessions</code> angelegt ist
+          </div>` : ''}
           <a href="${SENTRY_URL}" target="_blank" rel="noopener" class="btn btn-primary" style="justify-self:start">
             ${iconHtml('external-link')} Volle Details in Sentry
           </a>
@@ -214,7 +217,9 @@ function renderContent(body, data) {
     countUp(body.querySelector('#hero-rate'), data.crashFreeRate, { suffix: '%', decimals: 2, duration: 900 })
     countUp(body.querySelector('#stat-total'), data.totalCrashes, { duration: 700 })
     countUp(body.querySelector('#stat-sessions'), data.crashSessions, { duration: 700 })
-    countUp(body.querySelector('#stat-total-sessions'), data.sessions, { duration: 700 })
+    if (!data.sessionsUnavailable) {
+      countUp(body.querySelector('#stat-total-sessions'), data.sessions, { duration: 700 })
+    }
   } catch (e) { console.warn('[crash-rate] countUp failed', e) }
 
   body.querySelector('#csv-locations-btn')?.addEventListener('click', () => {
@@ -316,7 +321,6 @@ const exported = {
 
       const body = container.querySelector('#body')
 
-      // Sofort Skeleton zeigen, damit kein weißer Screen während fetch
       try { skeletonLoader(body, { rows: 4, layout: 'mixed' }) } catch (e) {
         body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted)">Lade…</div>'
       }
@@ -366,7 +370,6 @@ const exported = {
         }
       })
 
-      // Data-Fetch im Hintergrund — nicht awaiten, damit Skeleton sichtbar bleibt
       load()
     } catch (err) {
       console.error('[crash-rate] mount failed', err)

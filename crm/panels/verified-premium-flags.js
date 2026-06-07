@@ -16,23 +16,23 @@ const DURATIONS = [
 ]
 
 async function fetchUsers() {
-  const [verifiedRes, premiumRes] = await Promise.all([
-    sb.from('users')
-      .select('id, username, display_name, avatar_url, is_verified, is_premium, premium_until, created_at, verified_at')
-      .eq('is_verified', true)
-      .order('verified_at', { ascending: false, nullsFirst: false })
-      .limit(500),
-    sb.from('users')
-      .select('id, username, display_name, avatar_url, is_verified, is_premium, premium_until, created_at, premium_granted_at')
-      .eq('is_premium', true)
-      .order('premium_granted_at', { ascending: false, nullsFirst: false })
-      .limit(500),
-  ])
-  if (verifiedRes.error) throw verifiedRes.error
-  if (premiumRes.error) throw premiumRes.error
+  // admin_list_users_full returns all users with full profile data
+  const { data, error } = await sb.rpc('admin_list_users_full')
+  if (error) throw error
+  const all = data || []
   return {
-    verified: verifiedRes.data || [],
-    premium:  premiumRes.data  || [],
+    verified: all.filter(u => u.is_verified).sort((a, b) => {
+      if (!a.verified_at && !b.verified_at) return 0
+      if (!a.verified_at) return 1
+      if (!b.verified_at) return -1
+      return new Date(b.verified_at) - new Date(a.verified_at)
+    }).slice(0, 500),
+    premium: all.filter(u => u.is_premium).sort((a, b) => {
+      if (!a.premium_granted_at && !b.premium_granted_at) return 0
+      if (!a.premium_granted_at) return 1
+      if (!b.premium_granted_at) return -1
+      return new Date(b.premium_granted_at) - new Date(a.premium_granted_at)
+    }).slice(0, 500),
   }
 }
 
@@ -99,10 +99,7 @@ async function revokeVerified(userId) {
     danger: true,
   })
   if (!ok) return false
-  const { error } = await sb
-    .from('users')
-    .update({ is_verified: false, verified_at: null })
-    .eq('id', userId)
+  const { error } = await sb.rpc('admin_unverify_user', { target_user_id: userId })
   if (error) { toast(`Fehler: ${error.message}`, 'error'); return false }
   toast('Verifizierung entzogen', 'success')
   return true
@@ -116,27 +113,16 @@ async function revokePremium(userId) {
     danger: true,
   })
   if (!ok) return false
-  const { error } = await sb
-    .from('users')
-    .update({ is_premium: false, premium_until: null, premium_granted_at: null })
-    .eq('id', userId)
+  const { error } = await sb.rpc('admin_revoke_premium', { target_user_id: userId })
   if (error) { toast(`Fehler: ${error.message}`, 'error'); return false }
   toast('Premium entzogen', 'success')
   return true
 }
 
 async function searchUsersForPicker(q) {
-  let query = sb.from('users')
-    .select('id, username, display_name, avatar_url, is_premium')
-    .order('username', { ascending: true })
-    .limit(20)
-  if (q && q.trim()) {
-    const term = `%${q.trim()}%`
-    query = query.or(`username.ilike.${term},display_name.ilike.${term}`)
-  }
-  const { data, error } = await query
+  const { data, error } = await sb.rpc('search_users_with_covers', { search_term: q && q.trim() ? q.trim() : '' })
   if (error) return []
-  return data || []
+  return (data || []).slice(0, 20)
 }
 
 function openBulkGrantModal(onDone) {
@@ -211,12 +197,12 @@ function openBulkGrantModal(onDone) {
       const until = durationDays === null
         ? null
         : new Date(Date.now() + durationDays * 86400_000).toISOString()
-      const { error } = await sb.from('users').update({
-        is_premium: true,
-        premium_until: until,
-        premium_granted_at: new Date().toISOString(),
-      }).in('id', userIds)
-      if (error) { toast(`Fehler: ${error.message}`, 'error'); return false }
+      // grant premium per user via RPC
+      const results = await Promise.all(
+        userIds.map(uid => sb.rpc('admin_grant_premium', { target_user_id: uid, premium_until: until }))
+      )
+      const failed = results.filter(r => r.error)
+      if (failed.length > 0) { toast(`Fehler bei ${failed.length} Nutzer(n)`, 'error'); return false }
       toast(`${userIds.length} Nutzer erhielten Premium`, 'success')
       onDone?.()
       return true

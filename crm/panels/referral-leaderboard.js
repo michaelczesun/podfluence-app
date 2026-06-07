@@ -35,19 +35,29 @@ async function fetchLeaderboard() {
 
   const ids = list.map(l => l.inviter_id)
   if (ids.length) {
-    const { data: users } = await sb
-      .from('users')
-      .select('id, display_name, username, avatar_url, is_verified')
-      .in('id', ids)
-    const um = new Map((users || []).map(u => [u.id, u]))
-    list.forEach(l => {
-      const u = um.get(l.inviter_id) || {}
-      l.display_name = u.display_name || u.username || 'Unbekannt'
-      l.username = u.username || ''
-      l.avatar_url = u.avatar_url || null
-      l.is_verified = !!u.is_verified
-      l.last_referral_at = l.last_at ? new Date(l.last_at).toISOString() : null
-    })
+    try {
+      const { data: users } = await sb
+        .from('profiles')
+        .select('id, display_name, username, avatar_url, is_verified')
+        .in('id', ids)
+      const um = new Map((users || []).map(u => [u.id, u]))
+      list.forEach(l => {
+        const u = um.get(l.inviter_id) || {}
+        l.display_name = u.display_name || u.username || 'Unbekannt'
+        l.username = u.username || ''
+        l.avatar_url = u.avatar_url || null
+        l.is_verified = !!u.is_verified
+        l.last_referral_at = l.last_at ? new Date(l.last_at).toISOString() : null
+      })
+    } catch (_) {
+      list.forEach(l => {
+        l.display_name = 'Unbekannt'
+        l.username = ''
+        l.avatar_url = null
+        l.is_verified = false
+        l.last_referral_at = l.last_at ? new Date(l.last_at).toISOString() : null
+      })
+    }
   }
   return list
 }
@@ -76,7 +86,7 @@ async function fetchReferralTimeseries() {
 async function fetchReferredUsers(inviterId) {
   const { data, error } = await sb
     .from('referrals')
-    .select('invited_user_id, created_at, status, bonus_granted')
+    .select('*')
     .eq('inviter_id', inviterId)
     .order('created_at', { ascending: false })
     .limit(100)
@@ -84,11 +94,13 @@ async function fetchReferredUsers(inviterId) {
   const ids = (data || []).map(r => r.invited_user_id).filter(Boolean)
   let users = []
   if (ids.length) {
-    const { data: u } = await sb
-      .from('users')
-      .select('id, display_name, username, avatar_url, is_verified, created_at')
-      .in('id', ids)
-    users = u || []
+    try {
+      const { data: u } = await sb
+        .from('profiles')
+        .select('id, display_name, username, avatar_url, is_verified, created_at')
+        .in('id', ids)
+      users = u || []
+    } catch (_) {}
   }
   const um = new Map(users.map(u => [u.id, u]))
   return (data || []).map(r => ({

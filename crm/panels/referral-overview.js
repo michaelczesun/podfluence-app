@@ -21,95 +21,16 @@ let state = {
   recentSignups: []
 }
 
+// referral_codes und referral_signups existieren nicht im Schema.
+// referrals-Tabelle existiert, aber ohne code/signup-Struktur.
+// Daher: Empty-State zurückgeben bis Tabellen angelegt sind.
 async function loadData(range) {
-  const days = RANGES[range].days
-  const sinceIso = new Date(Date.now() - days * 86400000).toISOString()
-
-  const { data: codes, error: codesErr } = await sb
-    .from('referral_codes')
-    .select('id, code, owner_id, created_at, shared_at, times_used')
-    .gte('created_at', sinceIso)
-    .limit(5000)
-
-  if (codesErr) throw codesErr
-
-  const generated = codes?.length || 0
-  const shared = codes?.filter(c => c.shared_at).length || 0
-  const used = codes?.filter(c => (c.times_used || 0) > 0).length || 0
-
-  const { data: signups, error: signupsErr } = await sb
-    .from('referral_signups')
-    .select('id, referral_code_id, new_user_id, referrer_id, created_at')
-    .gte('created_at', sinceIso)
-    .order('created_at', { ascending: false })
-    .limit(2000)
-
-  if (signupsErr) throw signupsErr
-
-  const signedUp = signups?.length || 0
-
-  const trendMap = new Map()
-  for (let i = days - 1; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 86400000)
-    const key = d.toISOString().slice(0, 10)
-    trendMap.set(key, { date: key, generated: 0, signups: 0 })
-  }
-  codes?.forEach(c => {
-    const key = (c.created_at || '').slice(0, 10)
-    if (trendMap.has(key)) trendMap.get(key).generated++
-  })
-  signups?.forEach(s => {
-    const key = (s.created_at || '').slice(0, 10)
-    if (trendMap.has(key)) trendMap.get(key).signups++
-  })
-  const trend = Array.from(trendMap.values()).map(d => ({
-    date: d.date,
-    rate: d.generated > 0 ? (d.signups / d.generated) * 100 : 0,
-    generated: d.generated,
-    signups: d.signups
-  }))
-
-  const referrerCounts = new Map()
-  signups?.forEach(s => {
-    if (!s.referrer_id) return
-    referrerCounts.set(s.referrer_id, (referrerCounts.get(s.referrer_id) || 0) + 1)
-  })
-  const topIds = [...referrerCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
-  let topReferrers = []
-  if (topIds.length) {
-    const { data: profs } = await sb
-      .from('profiles')
-      .select('id, username, display_name, avatar_url')
-      .in('id', topIds.map(([id]) => id))
-    const profMap = new Map((profs || []).map(p => [p.id, p]))
-    topReferrers = topIds.map(([id, count]) => ({
-      id, count,
-      profile: profMap.get(id) || { id, username: 'unbekannt' }
-    }))
-  }
-
-  const recentSlice = (signups || []).slice(0, 25)
-  const allIds = new Set()
-  recentSlice.forEach(s => { if (s.new_user_id) allIds.add(s.new_user_id); if (s.referrer_id) allIds.add(s.referrer_id) })
-  let nameMap = new Map()
-  if (allIds.size) {
-    const { data: profs2 } = await sb
-      .from('profiles')
-      .select('id, username, display_name, avatar_url')
-      .in('id', [...allIds])
-    nameMap = new Map((profs2 || []).map(p => [p.id, p]))
-  }
-  const recentSignups = recentSlice.map(s => ({
-    ...s,
-    newUser: nameMap.get(s.new_user_id),
-    referrer: nameMap.get(s.referrer_id)
-  }))
-
   return {
-    funnel: { generated, shared, used, signedUp },
-    trend,
-    topReferrers,
-    recentSignups
+    _missingTables: ['referral_codes', 'referral_signups'],
+    funnel: { generated: 0, shared: 0, used: 0, signedUp: 0 },
+    trend: [],
+    topReferrers: [],
+    recentSignups: []
   }
 }
 
@@ -282,6 +203,17 @@ function buildToolbar() {
       <button class="tb-btn" data-tb="refresh">${iconHtml('refresh-cw')} Aktualisieren</button>
       <button class="tb-btn" data-tb="pdf">${iconHtml('file-text')} PDF</button>
       <button class="tb-btn" data-tb="csv">${iconHtml('download')} CSV</button>
+    </div>
+  `
+}
+
+function renderMissingTablesState(body, tables) {
+  body.innerHTML = `
+    ${panelStyles()}
+    <div class="glass-card" style="padding:40px 24px;text-align:center">
+      <div style="width:56px;height:56px;margin:0 auto 16px;border-radius:14px;background:rgba(245,158,11,0.12);display:flex;align-items:center;justify-content:center;color:#f59e0b">${iconHtml('alert')}</div>
+      <h3 style="margin:0 0 8px;font-size:16px">Daten kommen sobald die Tabellen angelegt sind</h3>
+      <p style="color:var(--text-muted,#94a3b8);font-size:13px;margin:0">${tables.map(t => `<code>${t}</code>`).join(', ')}</p>
     </div>
   `
 }
@@ -465,6 +397,11 @@ export default {
           state.trend = data.trend
           state.topReferrers = data.topReferrers
           state.recentSignups = data.recentSignups
+
+          if (data._missingTables) {
+            renderMissingTablesState(body, data._missingTables)
+            return
+          }
 
           if (data.funnel.generated === 0 && data.funnel.signedUp === 0) {
             renderEmpty(body)

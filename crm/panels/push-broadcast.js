@@ -17,25 +17,17 @@ const AUDIENCES = [
 
 async function fetchAudienceCounts() {
   const counts = {}
-  try {
-    const { data, error } = await sb.rpc('crm_push_audience_counts')
-    if (!error && data) {
-      for (const row of data) counts[row.segment] = row.user_count
-    }
-  } catch (_) {}
   for (const a of AUDIENCES) {
-    if (counts[a.value] == null) {
-      try {
-        let q = sb.from('users').select('id', { count: 'exact', head: true })
-        if (a.value === 'podcasters') q = q.eq('is_podcaster', true)
-        else if (a.value === 'premium') q = q.eq('is_premium', true)
-        else if (a.value === 'new_7d') q = q.gte('created_at', new Date(Date.now()-7*864e5).toISOString())
-        else if (a.value === 'inactive_7d') q = q.lt('last_seen_at', new Date(Date.now()-7*864e5).toISOString())
-        else if (a.value === 'listeners') q = q.eq('is_podcaster', false)
-        const { count } = await q
-        counts[a.value] = count || 0
-      } catch (_) { counts[a.value] = 0 }
-    }
+    try {
+      let q = sb.from('users').select('id', { count: 'exact', head: true })
+      if (a.value === 'podcasters') q = q.eq('is_podcaster', true)
+      else if (a.value === 'premium') q = q.eq('is_premium', true)
+      else if (a.value === 'new_7d') q = q.gte('created_at', new Date(Date.now()-7*864e5).toISOString())
+      else if (a.value === 'inactive_7d') q = q.lt('last_seen_at', new Date(Date.now()-7*864e5).toISOString())
+      else if (a.value === 'listeners') q = q.eq('is_podcaster', false)
+      const { count } = await q
+      counts[a.value] = count || 0
+    } catch (_) { counts[a.value] = 0 }
   }
   return counts
 }
@@ -43,8 +35,8 @@ async function fetchAudienceCounts() {
 async function fetchHistory() {
   try {
     const { data, error } = await sb
-      .from('push_broadcasts')
-      .select('id, sent_at, sent_by, audience, title, body, deep_link, recipients, delivered, opened, status')
+      .from('broadcast_push_log')
+      .select('*')
       .order('sent_at', { ascending: false })
       .limit(10)
     if (error) throw error

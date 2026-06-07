@@ -31,7 +31,11 @@ function classifyPost(p) {
   return 'standard'
 }
 
+// Tabelle 'posts' existiert nicht im Schema — leerer Datensatz mit Empty-State-Flag
+const POSTS_TABLE_MISSING = true
+
 async function fetchData() {
+  if (POSTS_TABLE_MISSING) return []
   const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
   const { data: posts, error } = await sb
     .from('posts')
@@ -160,6 +164,19 @@ function renderFeed(root) {
   const grid = root.querySelector('#feed-grid')
   const empty = root.querySelector('#feed-empty')
   if (!grid || !empty) return
+
+  if (POSTS_TABLE_MISSING) {
+    grid.innerHTML = ''
+    empty.style.display = ''
+    empty.innerHTML = `
+      <div class="empty-state glass-card">
+        <div class="empty-state__icon">${iconHtml('alert')}</div>
+        <div class="empty-state__title">Tabelle nicht verfügbar</div>
+        <div class="empty-state__text">Daten kommen sobald die Tabelle <code>posts</code> angelegt ist.</div>
+      </div>`
+    return
+  }
+
   if (!state.filtered.length) {
     grid.innerHTML = ''
     empty.style.display = ''
@@ -189,27 +206,14 @@ function openUserDrawer(userId) {
   if (typeof showUserDetailModal === 'function') {
     try { showUserDetailModal(userId); return } catch (_) {}
   }
+  // Tabelle 'profiles' existiert nicht im Schema — Empty-State anzeigen
   const d = drawer({ title: 'Benutzer-Details', width: 480 })
-  d.body.innerHTML = `<div class="p-4">${spinnerHtml()}</div>`
-  sb.from('profiles').select('*').eq('id', userId).maybeSingle().then(({ data: u, error }) => {
-    if (error || !u) { d.body.innerHTML = `<div class="p-4 text-muted">Benutzer nicht gefunden.</div>`; return }
-    d.body.innerHTML = `
-      <div class="user-drawer">
-        <div class="user-drawer__head">
-          ${u.avatar_url ? `<img src="${htmlEscape(u.avatar_url)}" class="user-drawer__avatar" />` : `<div class="user-drawer__avatar user-drawer__avatar--ph">${htmlEscape((u.display_name||u.username||'?').slice(0,1).toUpperCase())}</div>`}
-          <div>
-            <div class="user-drawer__name">${htmlEscape(u.display_name || u.username || '—')} ${u.is_verified ? '<span class="badge badge--verified">✓</span>' : ''}</div>
-            <div class="user-drawer__handle">@${htmlEscape(u.username || '—')}</div>
-          </div>
-        </div>
-        <div class="user-drawer__bio">${htmlEscape(u.bio || '')}</div>
-        <dl class="user-drawer__meta">
-          <div><dt>Beigetreten</dt><dd>${fmtDateTime(u.created_at)}</dd></div>
-          <div><dt>Follower</dt><dd>${fmtNumber(u.followers_count || 0)}</dd></div>
-          <div><dt>Posts</dt><dd>${fmtNumber(u.posts_count || 0)}</dd></div>
-        </dl>
-      </div>`
-  })
+  d.body.innerHTML = `
+    <div class="empty-state glass-card" style="padding:24px;">
+      <div class="empty-state__icon">${iconHtml('alert')}</div>
+      <div class="empty-state__title">Tabelle nicht verfügbar</div>
+      <div class="empty-state__text">Daten kommen sobald die Tabelle <code>profiles</code> angelegt ist.</div>
+    </div>`
 }
 
 function viewPost(post) {
@@ -228,6 +232,10 @@ function viewPost(post) {
 }
 
 function editPost(post) {
+  if (POSTS_TABLE_MISSING) {
+    toast({ kind: 'error', text: 'Tabelle posts ist noch nicht angelegt.' })
+    return
+  }
   const m = modal({ title: 'Post bearbeiten', width: 560 })
   m.body.innerHTML = `
     <div class="form">
@@ -254,6 +262,10 @@ function editPost(post) {
 }
 
 async function deletePostFlow(post) {
+  if (POSTS_TABLE_MISSING) {
+    toast({ kind: 'error', text: 'Tabelle posts ist noch nicht angelegt.' })
+    return
+  }
   const ok = await confirmDialog({
     title: 'Post löschen?',
     text: 'Diese Aktion kann nicht rückgängig gemacht werden.',
@@ -442,7 +454,6 @@ export default {
 
       wireToolbar(container)
       try { fadeIn(container, { duration: 280 }) } catch (_) {}
-      // Fire fetch in background so initial skeleton stays visible immediately
       reload().catch(e => {
         const body = container.querySelector('#body')
         if (body) {

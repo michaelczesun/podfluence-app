@@ -36,8 +36,8 @@ function computeScore(p) {
 async function fetchPosts(range) {
   const since = new Date(Date.now() - range * 24 * 3600 * 1000).toISOString()
   const { data, error } = await sb
-    .from('instagram_posts')
-    .select('id, post_type, media_type, caption, permalink, thumbnail_url, like_count, comments_count, view_count, save_count, share_count, reach, impressions, user_id, username, posted_at, created_at')
+    .from('insta_post_performance')
+    .select('*')
     .gte('posted_at', since)
     .order('posted_at', { ascending: false })
     .limit(2000)

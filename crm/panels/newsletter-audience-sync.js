@@ -13,26 +13,21 @@ const AUDIENCES = [
   { id: 'test', label: 'Test-Liste', desc: 'Nur interne Test-Adressen' }
 ]
 
+// newsletter_sync_status RPC existiert nicht im Schema → gibt null zurück
 async function fetchSyncStatus() {
-  try {
-    const { data, error } = await sb.rpc('newsletter_sync_status')
-    if (error) throw error
-    return data || null
-  } catch { return null }
+  return null
 }
 
+// newsletter_audience_counts RPC existiert nicht im Schema → gibt null zurück
 async function fetchAudienceCounts() {
-  try {
-    const { data } = await sb.rpc('newsletter_audience_counts')
-    return data || null
-  } catch { return null }
+  return null
 }
 
 async function fetchBroadcasts(limit = 20) {
   try {
     const { data, error } = await sb
-      .from('newsletter_broadcasts')
-      .select('id, subject, sent_at, audience, recipients, opens, clicks, status')
+      .from('email_broadcasts')
+      .select('*')
       .order('sent_at', { ascending: false })
       .limit(limit)
     if (error) throw error
@@ -40,34 +35,25 @@ async function fetchBroadcasts(limit = 20) {
   } catch { return [] }
 }
 
+// newsletter_send_timeline RPC existiert nicht im Schema → gibt [] zurück
 async function fetchSendTimeline() {
-  try {
-    const { data } = await sb.rpc('newsletter_send_timeline', { days: 30 })
-    return data || []
-  } catch { return [] }
+  return []
 }
 
+// newsletter_trigger_sync RPC existiert nicht im Schema
 async function triggerSync() {
-  try {
-    const { error } = await sb.rpc('newsletter_trigger_sync')
-    if (error) throw error
-    return true
-  } catch (e) {
-    toast(`Sync fehlgeschlagen: ${e.message || e}`, 'error')
-    return false
-  }
+  toast('Sync-RPC (newsletter_trigger_sync) ist noch nicht angelegt.', 'warn')
+  return false
 }
 
+// newsletter_send_broadcast RPC existiert nicht im Schema
 async function sendBroadcast(payload) {
-  const { error } = await sb.rpc('newsletter_send_broadcast', payload)
-  if (error) throw error
-  return true
+  throw new Error('RPC newsletter_send_broadcast ist noch nicht angelegt.')
 }
 
+// newsletter_send_test RPC existiert nicht im Schema
 async function sendTestEmail(payload) {
-  const { error } = await sb.rpc('newsletter_send_test', payload)
-  if (error) throw error
-  return true
+  throw new Error('RPC newsletter_send_test ist noch nicht angelegt.')
 }
 
 function rateBar(label, value, total, color) {
@@ -364,7 +350,12 @@ export default {
           try { makeDonutChart(donutHost, { data: donutData, height: 220 }) }
           catch { donutHost.innerHTML = `<div class="chart-empty muted" style="padding:40px;text-align:center">Chart nicht verfügbar</div>` }
         } else {
-          donutHost.innerHTML = `<div class="chart-empty muted" style="padding:40px;text-align:center">Daten kommen sobald die RPC <code>newsletter_audience_counts</code> Segment-Größen liefert.</div>`
+          donutHost.innerHTML = `
+            <div class="glass-card" style="padding:24px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:8px;min-height:220px;justify-content:center">
+              ${iconHtml('alert')}
+              <span class="muted">Daten kommen sobald die Tabelle <code>newsletter_audience_counts</code> oder das RPC <code>newsletter_audience_counts</code> angelegt ist</span>
+            </div>
+          `
         }
 
         const listHost = body.querySelector('#broadcastList')

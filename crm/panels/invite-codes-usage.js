@@ -18,25 +18,13 @@ const state = {
 }
 
 async function fetchCodes() {
+  // Table: invites (codes table does not exist; invites is the correct table)
   let { data, error } = await sb
-    .from('codes')
-    .select('id, code, owner_id, used_by, created_at, used_at, revoked_at, owner:profiles!codes_owner_id_fkey(id,username,avatar_url), used:profiles!codes_used_by_fkey(id,username,avatar_url)')
+    .from('invites')
+    .select('*')
     .order('created_at', { ascending: false })
     .limit(2000)
-  if (error) {
-    const r2 = await sb.from('codes').select('*').order('created_at', { ascending: false }).limit(2000)
-    if (r2.error) throw r2.error
-    data = r2.data
-  }
-  return data || []
-}
-
-async function fetchUsers(query) {
-  const q = (query || '').trim()
-  let req = sb.from('profiles').select('id, username, avatar_url').limit(20)
-  if (q) req = req.ilike('username', `%${q}%`)
-  const { data, error } = await req
-  if (error) return []
+  if (error) throw error
   return data || []
 }
 
@@ -546,11 +534,9 @@ async function doRevoke(container, code, body, after) {
   })
   if (!ok) return
   try {
-    let { error } = await sb.rpc('revoke_invite_code', { code_id: code.id })
-    if (error) {
-      const r2 = await sb.from('codes').update({ revoked_at: new Date().toISOString() }).eq('id', code.id)
-      if (r2.error) throw r2.error
-    }
+    // revoke_invite_code RPC does not exist; update invites table directly
+    const { error } = await sb.from('invites').update({ revoked_at: new Date().toISOString() }).eq('id', code.id)
+    if (error) throw error
     toast('Code widerrufen', 'success')
     state.codes = await fetchCodes()
     render(body, container)
@@ -565,9 +551,9 @@ function openBulkGenerate(container, onDone) {
   const html = `
     <div style="display:grid;gap:16px;padding:6px 2px">
       <div>
-        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">Owner (User-Picker)</label>
-        <input id="user-search" placeholder="Username suchen…" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;outline:none">
-        <div id="user-results" style="margin-top:8px;max-height:180px;overflow-y:auto;border-radius:8px"></div>
+        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">Owner (User-ID)</label>
+        <input id="user-id-input" placeholder="User-UUID eingeben…" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;outline:none">
+        <div style="font-size:11px;opacity:.5;margin-top:6px">User-Picker nicht verfügbar (Tabelle profiles fehlt im Schema). UUID direkt eingeben.</div>
         <div id="user-picked" style="margin-top:8px"></div>
       </div>
       <div>
@@ -591,19 +577,15 @@ function openBulkGenerate(container, onDone) {
       if (val !== 'go') return true
       const count = Math.min(500, Math.max(1, parseInt(document.querySelector('#count').value, 10) || 0))
       const autoshare = document.querySelector('#autoshare').checked
-      if (!picked) { toast('Bitte Owner auswählen', 'error'); return false }
+      const ownerId = (document.querySelector('#user-id-input')?.value || '').trim()
+      if (!ownerId) { toast('Bitte Owner-UUID eingeben', 'error'); return false }
       if (!count) { toast('Anzahl ungültig', 'error'); return false }
       try {
-        let rpc = await sb.rpc('bulk_generate_invite_codes', { owner: picked.id, count })
-        let inserted
-        if (rpc.error) {
-          const rows = Array.from({length:count}).map(() => ({ code: genCodeString(), owner_id: picked.id }))
-          const ins = await sb.from('codes').insert(rows).select('id, code')
-          if (ins.error) throw ins.error
-          inserted = ins.data
-        } else {
-          inserted = rpc.data || []
-        }
+        // bulk_generate_invite_codes RPC does not exist; insert directly into invites
+        const rows = Array.from({length:count}).map(() => ({ code: genCodeString(), owner_id: ownerId }))
+        const ins = await sb.from('invites').insert(rows).select('id, code')
+        if (ins.error) throw ins.error
+        const inserted = ins.data || []
         toast(`${inserted.length} Codes erstellt`, 'success')
         if (autoshare) showShareLinks(inserted)
         onDone?.()
@@ -614,32 +596,6 @@ function openBulkGenerate(container, onDone) {
       }
     }
   })
-
-  const search = document.querySelector('#user-search')
-  const results = document.querySelector('#user-results')
-  const pickedBox = document.querySelector('#user-picked')
-  if (!search || !results || !pickedBox) return
-
-  const runSearch = debounce(async () => {
-    const users = await fetchUsers(search.value)
-    results.innerHTML = users.map(u => `
-      <div class="u-row" data-id="${htmlEscape(u.id)}" data-name="${htmlEscape(u.username||'')}" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background .12s">
-        ${u.avatar_url?`<img src="${htmlEscape(u.avatar_url)}" style="width:28px;height:28px;border-radius:50%;object-fit:cover">`:`<div style="width:28px;height:28px;border-radius:50%;background:linear-gradient(135deg,#0a84ff,#5e5ce6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:12px;font-weight:600">${htmlEscape((u.username||'?')[0].toUpperCase())}</div>`}
-        <span>${htmlEscape(u.username||'unbekannt')}</span>
-      </div>
-    `).join('') || `<div style="padding:10px;opacity:.5;font-size:12px">Keine Treffer</div>`
-    results.querySelectorAll('.u-row').forEach(r => {
-      r.addEventListener('mouseenter', () => r.style.background = 'rgba(255,255,255,.06)')
-      r.addEventListener('mouseleave', () => r.style.background = '')
-      r.addEventListener('click', () => {
-        picked = { id: r.dataset.id, username: r.dataset.name }
-        pickedBox.innerHTML = `<div style="display:inline-flex;align-items:center;gap:8px;padding:6px 12px;border-radius:999px;background:rgba(10,132,255,.15);color:#0a84ff;font-size:12px;font-weight:600">${htmlEscape(picked.username||picked.id)} <button id="clear-pick" style="background:none;border:none;color:inherit;cursor:pointer;font-size:14px;padding:0;line-height:1">×</button></div>`
-        document.querySelector('#clear-pick')?.addEventListener('click', () => { picked = null; pickedBox.innerHTML = '' })
-      })
-    })
-  }, 200)
-  search.addEventListener('input', runSearch)
-  runSearch()
 }
 
 function showShareLinks(codes) {

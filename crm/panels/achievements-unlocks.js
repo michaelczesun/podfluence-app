@@ -53,7 +53,7 @@ function aggregateByType(rows) {
 async function fetchUsersForType(type) {
   const { data, error } = await sb
     .from('user_achievements')
-    .select('user_id, unlocked_at, users:users(id, display_name, username, avatar_url, is_verified)')
+    .select('user_id, unlocked_at')
     .eq('achievement_type', type)
     .order('unlocked_at', { ascending: false })
     .limit(500)
@@ -67,13 +67,9 @@ async function manualGrant(type, userIdentifier) {
   let userId = identifier
   if (!/^[0-9a-f-]{36}$/i.test(identifier)) {
     const { data, error } = await sb
-      .from('users')
-      .select('id')
-      .or(`username.eq.${identifier},display_name.eq.${identifier}`)
-      .limit(1)
-      .maybeSingle()
+      .rpc('admin_get_user', { p_query: identifier })
     if (error) throw error
-    if (!data) throw new Error('User nicht gefunden')
+    if (!data || !data.id) throw new Error('User nicht gefunden')
     userId = data.id
   }
   const { error: insErr } = await sb
@@ -154,12 +150,11 @@ function openTypeDrawer(type, refreshAll) {
         </div>
         <div class="user-list" style="display:flex;flex-direction:column;gap:6px;max-height:60vh;overflow-y:auto">
           ${rows.map(r => {
-            const u = r.users || {}
             return `<div class="user-row" data-uid="${htmlEscape(r.user_id)}" style="display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;cursor:pointer;transition:background .15s" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background='transparent'">
-              <img src="${htmlEscape(u.avatar_url || '/img/default-avatar.png')}" style="width:36px;height:36px;border-radius:50%;object-fit:cover" onerror="this.src='/img/default-avatar.png'"/>
+              <div style="width:36px;height:36px;border-radius:50%;background:var(--border);display:flex;align-items:center;justify-content:center;font-size:16px">👤</div>
               <div style="flex:1;min-width:0">
-                <div style="font-weight:500;display:flex;align-items:center;gap:4px">${htmlEscape(u.display_name || 'Unbekannt')} ${u.is_verified ? '<span style="color:#1d9bf0">✓</span>' : ''}</div>
-                <div style="font-size:12px;color:var(--muted)">@${htmlEscape(u.username || '—')} · ${fmtRelativeTime(r.unlocked_at)}</div>
+                <div style="font-weight:500;font-family:monospace;font-size:12px;color:var(--muted)">${htmlEscape(r.user_id)}</div>
+                <div style="font-size:12px;color:var(--muted)">${fmtRelativeTime(r.unlocked_at)}</div>
               </div>
               <div style="font-size:11px;color:var(--muted)">${fmtDateTime(r.unlocked_at)}</div>
             </div>`
@@ -179,8 +174,6 @@ function openTypeDrawer(type, refreshAll) {
       listEl.querySelector('#exp-users').addEventListener('click', () => {
         exportCsv(rows.map(r => ({
           user_id: r.user_id,
-          username: r.users?.username || '',
-          display_name: r.users?.display_name || '',
           unlocked_at: r.unlocked_at
         })), `achievement_${type}_users.csv`)
       })
@@ -392,7 +385,6 @@ export default {
         })), 'achievement-unlocks.csv')
       })
 
-      // Fire & forget — Skeletons sind schon sichtbar
       render()
     } catch (mountErr) {
       container.innerHTML = `<div class="error-state" style="padding:32px;text-align:center;border-radius:14px;border:1px solid var(--danger,#e33);margin:16px">

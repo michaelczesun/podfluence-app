@@ -58,17 +58,8 @@ async function fetchBucketContents(bucketName, prefix = '', acc = [], depth = 0)
 }
 
 async function fetchJobStatus() {
-  try {
-    const { data, error } = await sb
-      .from('storage_recompress_jobs')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(5)
-    if (error) return []
-    return data || []
-  } catch {
-    return []
-  }
+  // Tabelle storage_recompress_jobs existiert noch nicht im Schema
+  return null
 }
 
 async function triggerRecompress(bucketName) {
@@ -177,6 +168,18 @@ function renderTotalHero(body, totalUsed) {
 function renderJobStatus(body, jobs) {
   const wrap = document.createElement('div')
   wrap.className = 'glass-card job-status-card'
+  if (jobs === null) {
+    wrap.innerHTML = `
+      <div class="card-head">
+        <h3>${iconHtml('activity')} Recompress-Jobs</h3>
+      </div>
+      <div class="empty-state" style="padding:20px;text-align:center">
+        ${iconHtml('alert')}
+        <p class="muted small">Daten kommen sobald die Tabelle <strong>storage_recompress_jobs</strong> angelegt ist.</p>
+      </div>`
+    body.appendChild(wrap)
+    return
+  }
   wrap.innerHTML = `
     <div class="card-head">
       <h3>${iconHtml('activity')} Recompress-Jobs</h3>

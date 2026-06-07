@@ -20,12 +20,7 @@ async function fetchSeries() {
   since.setDate(since.getDate() - (DAYS - 1))
   since.setHours(0, 0, 0, 0)
 
-  const { data, error } = await sb
-    .from('podcast_episodes')
-    .select('id, title, published_at, audio_url, podcast_id, podcasts(title, cover_url)')
-    .gte('published_at', since.toISOString())
-    .order('published_at', { ascending: false })
-    .limit(2000)
+  const { data, error } = await sb.rpc('admin_episodes_per_day', { days: DAYS })
 
   if (error) throw error
 
@@ -35,12 +30,11 @@ async function fetchSeries() {
     d.setDate(d.getDate() + i)
     buckets.set(isoDay(d), { day: isoDay(d), count: 0, episodes: [] })
   }
-  for (const ep of (data || [])) {
-    if (!ep.published_at) continue
-    const k = isoDay(ep.published_at)
-    if (buckets.has(k)) {
-      buckets.get(k).count++
-      buckets.get(k).episodes.push(ep)
+  for (const row of (data || [])) {
+    const k = row.day ? isoDay(row.day) : null
+    if (k && buckets.has(k)) {
+      buckets.get(k).count = row.count ?? 0
+      buckets.get(k).episodes = row.episodes ?? []
     }
   }
   return Array.from(buckets.values())

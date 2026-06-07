@@ -11,8 +11,8 @@ const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 }
 async function fetchListeners(days) {
   const since = new Date(Date.now() - days * 86400000).toISOString()
   const { data: events, error } = await sb
-    .from('listen_events')
-    .select('user_id, minutes, created_at')
+    .from('episode_listening_pulses')
+    .select('*')
     .gte('created_at', since)
     .limit(50000)
   if (error) throw error
@@ -32,17 +32,6 @@ async function fetchListeners(days) {
   }
 
   const sorted = [...perUser.values()].sort((a, b) => b.total - a.total).slice(0, 100)
-  const userIds = sorted.map((u) => u.user_id)
-
-  let profiles = []
-  if (userIds.length) {
-    const { data } = await sb
-      .from('profiles')
-      .select('id, display_name, username, avatar_url, is_premium, is_verified')
-      .in('id', userIds)
-    profiles = data || []
-  }
-  const pmap = new Map(profiles.map((p) => [p.id, p]))
 
   const buckets = []
   for (let i = days - 1; i >= 0; i--) {
@@ -51,16 +40,15 @@ async function fetchListeners(days) {
   }
 
   const rows = sorted.map((u, i) => {
-    const p = pmap.get(u.user_id) || {}
     const series = buckets.map((b) => Math.round(u.byDay[b] || 0))
     return {
       rank: i + 1,
       user_id: u.user_id,
-      name: p.display_name || p.username || 'Unbekannt',
-      username: p.username || '',
-      avatar: p.avatar_url || '',
-      is_premium: !!p.is_premium,
-      is_verified: !!p.is_verified,
+      name: u.user_id,
+      username: '',
+      avatar: '',
+      is_premium: false,
+      is_verified: false,
       total: Math.round(u.total),
       series,
     }

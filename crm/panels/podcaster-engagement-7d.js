@@ -24,7 +24,8 @@ let state = {
   labels: [],
   activeMetric: 'posts',
   loading: false,
-  error: null
+  error: null,
+  missingTables: []
 }
 
 function isoDay(d) { return d.toISOString().slice(0, 10) }
@@ -41,6 +42,17 @@ function buildDayLabels(days) {
   return labels
 }
 
+// episode_listening_pulses: use * (column layout unknown from inventory)
+async function fetchListeningPulses(sinceIso) {
+  const { data, error } = await sb
+    .from('episode_listening_pulses')
+    .select('*')
+    .gte('created_at', sinceIso)
+    .limit(50000)
+  if (error) return []
+  return data || []
+}
+
 async function fetchData(range) {
   const days = RANGES[range].days
   const since = new Date()
@@ -49,17 +61,29 @@ async function fetchData(range) {
   const sinceIso = since.toISOString()
   const labels = buildDayLabels(days)
 
-  const [postsR, episodesR, likesR, listensR] = await Promise.all([
-    sb.from('posts').select('user_id, created_at').gte('created_at', sinceIso).limit(20000),
-    sb.from('episodes').select('user_id, created_at').gte('created_at', sinceIso).limit(20000),
-    sb.from('post_likes').select('post_user_id, created_at').gte('created_at', sinceIso).limit(20000),
-    sb.from('episode_listens').select('episode_user_id, created_at').gte('created_at', sinceIso).limit(50000)
-  ])
+  const missing = []
 
-  const safePosts    = postsR?.data    || []
-  const safeEpisodes = episodesR?.data || []
-  const safeLikes    = likesR?.data    || []
-  const safeListens  = listensR?.data  || []
+  // posts — Tabelle existiert nicht im Schema
+  missing.push('posts')
+  const safePosts = []
+
+  // episodes — Tabelle existiert nicht im Schema
+  missing.push('episodes')
+  const safeEpisodes = []
+
+  // post_likes — Tabelle existiert nicht im Schema
+  missing.push('post_likes')
+  const safeLikes = []
+
+  // episode_listening_pulses — existiert (ersetzt episode_listens)
+  const listensRaw = await fetchListeningPulses(sinceIso)
+  // normalize: pulse rows may have user_id or episode_user_id
+  const safeListens = listensRaw.map(r => ({
+    episode_user_id: r.episode_user_id || r.user_id || null,
+    created_at: r.created_at
+  })).filter(r => r.episode_user_id)
+
+  state.missingTables = missing
 
   const agg = new Map()
   const ensure = (uid) => {
@@ -123,6 +147,16 @@ async function fetchData(range) {
   }
 
   return { rows: top, labels, days }
+}
+
+function missingTablesBanner(tables) {
+  if (!tables || !tables.length) return ''
+  return tables.map(t => `
+    <div class="glass-card" style="padding:16px 20px;display:flex;align-items:center;gap:12px;margin-bottom:12px">
+      ${iconHtml('alert')}
+      <span>Daten kommen sobald die Tabelle <strong>${htmlEscape(t)}</strong> angelegt ist.</span>
+    </div>
+  `).join('')
 }
 
 function renderHero(root, totals) {
@@ -349,6 +383,8 @@ function render(container) {
   }, { posts:0, episodes:0, listens:0, likes:0 })
 
   body.innerHTML = `
+    ${missingTablesBanner(state.missingTables)}
+
     <div class="hero-row" id="hero"></div>
 
     <div class="glass-card chart-card">

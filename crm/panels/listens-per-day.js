@@ -10,8 +10,8 @@ const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 async function fetchDaily(days = 30) {
   const since = new Date(Date.now() - days * 86400000).toISOString()
   const { data, error } = await sb
-    .from('listening_sessions')
-    .select('started_at, duration_seconds, episode_id')
+    .from('listening_activity')
+    .select('*')
     .gte('started_at', since)
     .order('started_at', { ascending: true })
   if (error) throw error
@@ -45,8 +45,8 @@ function aggregateHeatmap(rows) {
 async function fetchTopEpisodesForHour(weekday, hour, days = 30) {
   const since = new Date(Date.now() - days * 86400000).toISOString()
   const { data, error } = await sb
-    .from('listening_sessions')
-    .select('episode_id, started_at, episodes(title, podcast_title)')
+    .from('listening_activity')
+    .select('*')
     .gte('started_at', since)
   if (error) throw error
   const filtered = (data || []).filter(r => {

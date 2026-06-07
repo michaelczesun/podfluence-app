@@ -29,33 +29,9 @@ function colorFor(rank) {
 
 // ---------- Daten laden ----------
 async function fetchVersionData() {
-  try {
-    const { data, error } = await sb.rpc('crm_app_versions_in_field')
-    if (!error && Array.isArray(data) && data.length) return normalize(data)
-  } catch (_) {}
-
-  const { data, error } = await sb
-    .from('user_devices')
-    .select('app_version, user_id, platform, last_seen_at')
-    .not('app_version', 'is', null)
-  if (error) throw error
-
-  const grouped = new Map()
-  for (const r of data || []) {
-    const v = (r.app_version || '').trim()
-    if (!v) continue
-    if (!grouped.has(v)) grouped.set(v, { version: v, user_ids: new Set(), platforms: new Map(), last_seen: null })
-    const g = grouped.get(v)
-    g.user_ids.add(r.user_id)
-    g.platforms.set(r.platform || 'unknown', (g.platforms.get(r.platform || 'unknown') || 0) + 1)
-    if (!g.last_seen || (r.last_seen_at && r.last_seen_at > g.last_seen)) g.last_seen = r.last_seen_at
-  }
-  return normalize([...grouped.values()].map(g => ({
-    version: g.version,
-    user_count: g.user_ids.size,
-    platforms: Object.fromEntries(g.platforms),
-    last_seen: g.last_seen
-  })))
+  // RPC crm_app_versions_in_field und Tabelle user_devices existieren noch nicht im Schema.
+  // Sobald sie angelegt sind, diese Funktion reaktivieren.
+  return []
 }
 
 function normalize(rows) {
@@ -71,33 +47,9 @@ function normalize(rows) {
 }
 
 async function fetchUsersOnVersion(version) {
-  try {
-    const { data, error } = await sb.rpc('crm_users_on_app_version', { p_version: version })
-    if (!error && Array.isArray(data)) return data
-  } catch (_) {}
-  const { data, error } = await sb
-    .from('user_devices')
-    .select('user_id, platform, last_seen_at, profiles!inner(id, username, display_name, avatar_url, email)')
-    .eq('app_version', version)
-    .order('last_seen_at', { ascending: false })
-    .limit(500)
-  if (error) throw error
-  const seen = new Set()
-  const out = []
-  for (const r of data || []) {
-    if (seen.has(r.user_id)) continue
-    seen.add(r.user_id)
-    out.push({
-      id: r.user_id,
-      username: r.profiles?.username || '',
-      display_name: r.profiles?.display_name || r.profiles?.username || '—',
-      avatar_url: r.profiles?.avatar_url || '',
-      email: r.profiles?.email || '',
-      platform: r.platform,
-      last_seen_at: r.last_seen_at
-    })
-  }
-  return out
+  // RPC crm_users_on_app_version und Tabelle user_devices existieren noch nicht im Schema.
+  // Sobald sie angelegt sind, diese Funktion reaktivieren.
+  return []
 }
 
 export default {
@@ -208,10 +160,9 @@ function renderError(err) {
 
 function renderEmpty(body) {
   body.innerHTML = `
-    <div class="empty-state">
-      ${iconHtml('smartphone')}
-      <h3>Noch keine App-Versionen erfasst</h3>
-      <p>Sobald Clients Heartbeats senden (Tabelle <code>user_devices</code> mit <code>app_version</code>), erscheinen sie hier mit Verteilung und Update-Druck.</p>
+    <div class="glass-card" style="padding:2rem;text-align:center;">
+      ${iconHtml('alert')}
+      <p style="margin-top:1rem;">Daten kommen sobald die Tabelle <code>user_devices</code> oder das RPC <code>crm_app_versions_in_field</code> angelegt ist.</p>
     </div>
   `
 }
@@ -375,7 +326,12 @@ async function openVersionDrawer(versionRow, state, refresh) {
   try {
     const users = await fetchUsersOnVersion(versionRow.version)
     if (!users.length) {
-      listEl.innerHTML = `<div class="empty-state small">${iconHtml('users')}<p>Keine Nutzer-Details verfügbar.</p></div>`
+      listEl.innerHTML = `
+        <div class="glass-card" style="padding:1.5rem;text-align:center;">
+          ${iconHtml('alert')}
+          <p style="margin-top:.75rem;">Daten kommen sobald die Tabelle <code>user_devices</code> oder das RPC <code>crm_users_on_app_version</code> angelegt ist.</p>
+        </div>
+      `
     } else {
       listEl.innerHTML = users.map(u => `
         <div class="user-row" data-uid="${htmlEscape(u.id)}">

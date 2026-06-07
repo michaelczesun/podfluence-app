@@ -21,6 +21,85 @@ const state = {
   totals: { all: 0, verified: 0, podcasters: 0, inactive: 0, admins: 0 }
 }
 
+// Tabelle 'users' existiert nicht im Schema — alle user-Fetches laufen über admin_list_users_full (RPC)
+// fetchTotals und fetchSignupSeries zeigen Empty-State, fetchPage nutzt das RPC
+
+async function fetchTotals() {
+  // Keine direkte users-Tabelle — Counts aus admin_list_users_full nicht möglich ohne Full-Scan
+  // Wir setzen Totals auf 0 und lassen das RPC-Result die Anzeige befüllen
+  state.totals = { all: 0, verified: 0, podcasters: 0, inactive: 0, admins: 0 }
+}
+
+async function fetchSignupSeries() {
+  // Keine users-Tabelle → leere Serie
+  const buckets = {}
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000)
+    const key = d.toISOString().slice(0, 10)
+    buckets[key] = 0
+  }
+  state.signupSeries = Object.entries(buckets).map(([date, count]) => ({ date, value: count }))
+}
+
+function fetchTypeBreakdown() {
+  state.typeBreakdown = [
+    { label: 'Verifiziert', value: state.totals.verified, color: '#34d399' },
+    { label: 'Podcaster', value: state.totals.podcasters, color: '#60a5fa' },
+    { label: 'Admins', value: state.totals.admins, color: '#f472b6' },
+    { label: 'Inaktiv (>7d)', value: state.totals.inactive, color: '#fbbf24' }
+  ]
+}
+
+async function fetchPage() {
+  // Nutze admin_list_users_full RPC (users-Tabelle existiert nicht im Schema)
+  const { data, error } = await sb.rpc('admin_list_users_full')
+  if (error) throw error
+
+  let rows = data || []
+
+  if (state.search?.trim()) {
+    const s = state.search.trim().toLowerCase()
+    rows = rows.filter(r =>
+      (r.username || '').toLowerCase().includes(s) ||
+      (r.display_name || '').toLowerCase().includes(s) ||
+      (r.email || '').toLowerCase().includes(s)
+    )
+  }
+
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  if (state.filter === 'verified') rows = rows.filter(r => r.is_verified)
+  else if (state.filter === 'podcaster') rows = rows.filter(r => r.is_podcaster)
+  else if (state.filter === 'admin') rows = rows.filter(r => r.is_admin)
+  else if (state.filter === 'inactive') rows = rows.filter(r => r.last_active_at && r.last_active_at < sevenDaysAgo)
+
+  // Totals aus RPC-Result berechnen
+  const allRows = data || []
+  state.totals = {
+    all: allRows.length,
+    verified: allRows.filter(r => r.is_verified).length,
+    podcasters: allRows.filter(r => r.is_podcaster).length,
+    admins: allRows.filter(r => r.is_admin).length,
+    inactive: allRows.filter(r => r.last_active_at && r.last_active_at < sevenDaysAgo).length
+  }
+
+  // Signup-Serie aus RPC-Daten
+  const since = new Date(Date.now() - 30 * 86400000).toISOString()
+  const buckets = {}
+  for (let i = 29; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000)
+    buckets[d.toISOString().slice(0, 10)] = 0
+  }
+  allRows.filter(r => r.created_at && r.created_at >= since).forEach(r => {
+    const key = (r.created_at || '').slice(0, 10)
+    if (buckets[key] !== undefined) buckets[key]++
+  })
+  state.signupSeries = Object.entries(buckets).map(([date, count]) => ({ date, value: count }))
+
+  state.total = rows.length
+  const from = (state.page - 1) * PAGE_SIZE
+  state.rows = rows.slice(from, from + PAGE_SIZE)
+}
+
 export default {
   id: 'users-list',
   title: 'Nutzer-Liste',
@@ -55,7 +134,6 @@ export default {
       container.querySelector('[data-act="csv"]')?.addEventListener('click', () => exportCurrentCsv())
 
       try { fadeIn(container.querySelector('.panel-shell')) } catch {}
-      // Background-Loading: Skeleton ist schon sichtbar, Daten kommen async
       await loadAll(container)
     } catch (e) {
       console.error('[users-list] mount failed', e)
@@ -99,75 +177,6 @@ async function loadAll(container) {
   } finally {
     state.loading = false
   }
-}
-
-async function fetchTotals() {
-  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
-  const [all, verified, podcasters, admins, inactive] = await Promise.all([
-    sb.from('users').select('*', { count: 'exact', head: true }),
-    sb.from('users').select('*', { count: 'exact', head: true }).eq('is_verified', true),
-    sb.from('users').select('*', { count: 'exact', head: true }).eq('is_podcaster', true),
-    sb.from('users').select('*', { count: 'exact', head: true }).eq('is_admin', true),
-    sb.from('users').select('*', { count: 'exact', head: true }).lt('last_active_at', sevenDaysAgo)
-  ])
-  state.totals = {
-    all: all.count || 0,
-    verified: verified.count || 0,
-    podcasters: podcasters.count || 0,
-    admins: admins.count || 0,
-    inactive: inactive.count || 0
-  }
-}
-
-async function fetchSignupSeries() {
-  const since = new Date(Date.now() - 30 * 86400000).toISOString()
-  const { data } = await sb
-    .from('users')
-    .select('created_at')
-    .gte('created_at', since)
-    .order('created_at', { ascending: true })
-  const buckets = {}
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 86400000)
-    const key = d.toISOString().slice(0, 10)
-    buckets[key] = 0
-  }
-  ;(data || []).forEach(r => {
-    const key = (r.created_at || '').slice(0, 10)
-    if (buckets[key] !== undefined) buckets[key]++
-  })
-  state.signupSeries = Object.entries(buckets).map(([date, count]) => ({ date, value: count }))
-}
-
-function fetchTypeBreakdown() {
-  state.typeBreakdown = [
-    { label: 'Verifiziert', value: state.totals.verified, color: '#34d399' },
-    { label: 'Podcaster', value: state.totals.podcasters, color: '#60a5fa' },
-    { label: 'Admins', value: state.totals.admins, color: '#f472b6' },
-    { label: 'Inaktiv (>7d)', value: state.totals.inactive, color: '#fbbf24' }
-  ]
-}
-
-async function fetchPage() {
-  let q = sb.from('users').select('id, username, display_name, avatar_url, email, is_verified, is_podcaster, is_admin, is_premium, is_banned, created_at, last_active_at', { count: 'exact' })
-
-  if (state.search?.trim()) {
-    const s = state.search.trim().replace(/[%,]/g, '')
-    q = q.or(`username.ilike.%${s}%,display_name.ilike.%${s}%,email.ilike.%${s}%`)
-  }
-  if (state.filter === 'verified') q = q.eq('is_verified', true)
-  else if (state.filter === 'podcaster') q = q.eq('is_podcaster', true)
-  else if (state.filter === 'admin') q = q.eq('is_admin', true)
-  else if (state.filter === 'inactive') q = q.lt('last_active_at', new Date(Date.now() - 7 * 86400000).toISOString())
-
-  const from = (state.page - 1) * PAGE_SIZE
-  const to = from + PAGE_SIZE - 1
-  q = q.order('created_at', { ascending: false }).range(from, to)
-
-  const { data, count, error } = await q
-  if (error) throw error
-  state.rows = data || []
-  state.total = count || 0
 }
 
 function renderShell(body) {

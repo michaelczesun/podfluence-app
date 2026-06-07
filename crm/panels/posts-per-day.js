@@ -39,18 +39,8 @@ function buildDayAxis(rangeDays) {
 }
 
 async function fetchData(rangeDays) {
-  const since = new Date()
-  since.setHours(0, 0, 0, 0)
-  since.setDate(since.getDate() - (rangeDays - 1))
-
-  const { data, error } = await sb
-    .from('posts')
-    .select('id, created_at, type')
-    .gte('created_at', since.toISOString())
-    .order('created_at', { ascending: true })
-
-  if (error) throw error
-  return data || []
+  // Tabelle 'posts' existiert nicht im Schema — Empty-State
+  return null
 }
 
 function aggregate(rows, rangeDays) {
@@ -94,17 +84,8 @@ function aggregate(rows, rangeDays) {
 }
 
 async function fetchPostsForDay(day) {
-  const start = new Date(day + 'T00:00:00')
-  const end   = new Date(day + 'T23:59:59.999')
-  const { data, error } = await sb
-    .from('posts')
-    .select('id, type, title, content, created_at, user_id, profiles:user_id(username, display_name, avatar_url)')
-    .gte('created_at', start.toISOString())
-    .lte('created_at', end.toISOString())
-    .order('created_at', { ascending: false })
-    .limit(200)
-  if (error) throw error
-  return data || []
+  // Tabelle 'posts' existiert nicht im Schema — Empty-State
+  return null
 }
 
 function typeBadge(type) {
@@ -122,6 +103,14 @@ async function openDayDrawer(day) {
     const posts = await fetchPostsForDay(day)
     const body = document.getElementById('day-drawer-body')
     if (!body) return
+    if (posts === null) {
+      body.innerHTML = `
+        <div class="empty-state glass-card">
+          <div class="empty-icon">${iconHtml('alert')}</div>
+          <h3>Daten kommen sobald die Tabelle posts angelegt ist</h3>
+        </div>`
+      return
+    }
     if (!posts.length) {
       body.innerHTML = `
         <div class="empty-state">
@@ -312,8 +301,16 @@ async function loadAndRender(container) {
       </div>
     </div>`
   try {
-    const rows = await fetchData(parseInt(state.range, 10))
-    const agg = aggregate(rows, parseInt(state.range, 10))
+    const rawResult = await fetchData(parseInt(state.range, 10))
+    if (rawResult === null) {
+      body.innerHTML = `
+        <div class="empty-state glass-card" style="text-align:center;padding:48px 24px">
+          <div class="empty-icon">${iconHtml('alert')}</div>
+          <h3>Daten kommen sobald die Tabelle posts angelegt ist</h3>
+        </div>`
+      return
+    }
+    const agg = aggregate(rawResult, parseInt(state.range, 10))
     Object.assign(state, agg)
     body.innerHTML = `
       <div class="ppd-layout">

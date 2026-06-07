@@ -15,9 +15,13 @@ const KPI_DEFS = [
 ]
 
 async function fetchTotals() {
+  // Try dedicated RPC first
   try {
-    const { data, error } = await sb.rpc('crm_live_kpi_totals')
-    if (!error && data) return normalize(data)
+    const { data, error } = await sb.rpc('admin_db_live_stats')
+    if (!error && data) {
+      const r = Array.isArray(data) ? data[0] : data
+      if (r && (r.total_users != null || r.active_24h != null)) return normalize(r)
+    }
   } catch (_) {}
 
   const today = new Date()
@@ -28,24 +32,23 @@ async function fetchTotals() {
 
   const safe = (p) => p.then(r => r).catch(() => ({ count: 0, data: null }))
 
-  const [users, usersYday, active24, active48, posts, postsYday, listenSec, listenSecYday] = await Promise.all([
-    safe(sb.from('profiles').select('id', { count: 'exact', head: true })),
-    safe(sb.from('profiles').select('id', { count: 'exact', head: true }).lt('created_at', yesterday.toISOString())),
-    safe(sb.from('profiles').select('id', { count: 'exact', head: true }).gte('last_seen_at', since24h)),
-    safe(sb.from('profiles').select('id', { count: 'exact', head: true }).gte('last_seen_at', since48h).lt('last_seen_at', since24h)),
-    safe(sb.from('posts').select('id', { count: 'exact', head: true })),
-    safe(sb.from('posts').select('id', { count: 'exact', head: true }).lt('created_at', yesterday.toISOString())),
-    safe(sb.rpc('crm_total_listen_seconds')),
-    safe(sb.rpc('crm_total_listen_seconds_until', { until: yesterday.toISOString() }))
+  // app_opens as proxy for active users; daily_activity for total user-days
+  // episode_listening_pulses for listen duration
+  const [active24, active48, listenRows, listenRowsYday] = await Promise.all([
+    safe(sb.from('app_opens').select('id', { count: 'exact', head: true }).gte('created_at', since24h)),
+    safe(sb.from('app_opens').select('id', { count: 'exact', head: true }).gte('created_at', since48h).lt('created_at', since24h)),
+    safe(sb.from('episode_listening_pulses').select('duration_sec,pulse_seconds,created_at').gte('created_at', since24h).limit(5000)),
+    safe(sb.from('episode_listening_pulses').select('duration_sec,pulse_seconds,created_at').gte('created_at', since48h).lt('created_at', since24h).limit(5000))
   ])
 
-  const totalListenSec = Number(listenSec?.data ?? 0)
-  const ydayListenSec  = Number(listenSecYday?.data ?? 0)
+  const sumSec = (rows) => (rows || []).reduce((a, r) => a + Number(r.duration_sec || r.pulse_seconds || 0), 0)
+  const totalListenSec = sumSec(listenRows?.data)
+  const ydayListenSec  = sumSec(listenRowsYday?.data)
 
   return {
-    total_users:      { value: users.count ?? 0, prev: usersYday.count ?? 0 },
+    total_users:      { value: 0, prev: 0 },
     active_24h:       { value: active24.count ?? 0, prev: active48.count ?? 0 },
-    total_posts:      { value: posts.count ?? 0, prev: postsYday.count ?? 0 },
+    total_posts:      { value: 0, prev: 0 },
     listening_hours:  { value: Math.round(totalListenSec / 3600), prev: Math.round(ydayListenSec / 3600) }
   }
 }
@@ -67,28 +70,19 @@ function normalize(raw) {
 }
 
 async function fetchTimeSeries(kpiKey, days = 30) {
-  try {
-    const { data, error } = await sb.rpc('crm_kpi_timeseries', { kpi: kpiKey, days })
-    if (!error && Array.isArray(data) && data.length) {
-      return data.map(r => ({ date: r.date || r.day, value: Number(r.value) || 0 }))
-    }
-  } catch (_) {}
-
+  // No crm_kpi_timeseries RPC in schema — skip RPC, go direct
   const since = new Date(Date.now() - days * 86_400_000).toISOString()
   let rows = []
   try {
-    if (kpiKey === 'total_users') {
-      const { data } = await sb.from('profiles').select('created_at').gte('created_at', since)
-      rows = bucketByDay(data || [], 'created_at', days, true)
-    } else if (kpiKey === 'active_24h') {
-      const { data } = await sb.from('profiles').select('last_seen_at').gte('last_seen_at', since)
-      rows = bucketByDay(data || [], 'last_seen_at', days, false)
-    } else if (kpiKey === 'total_posts') {
-      const { data } = await sb.from('posts').select('created_at').gte('created_at', since)
-      rows = bucketByDay(data || [], 'created_at', days, true)
+    if (kpiKey === 'active_24h') {
+      const { data } = await sb.from('app_opens').select('created_at').gte('created_at', since)
+      rows = bucketByDay(data || [], 'created_at', days, false)
     } else if (kpiKey === 'listening_hours') {
-      const { data } = await sb.from('listens').select('created_at,duration_sec').gte('created_at', since)
-      rows = bucketByDay(data || [], 'created_at', days, false, r => Number(r.duration_sec || 0) / 3600)
+      const { data } = await sb.from('episode_listening_pulses').select('created_at,duration_sec,pulse_seconds').gte('created_at', since)
+      rows = bucketByDay(data || [], 'created_at', days, false, r => Number(r.duration_sec || r.pulse_seconds || 0) / 3600)
+    } else {
+      // total_users and total_posts: no accessible table — return empty
+      rows = []
     }
   } catch (_) {}
   return rows
@@ -257,7 +251,7 @@ async function renderDrilldown(def, totals) {
 
   const el = body.querySelector('#drill-chart')
   if (!series.length) {
-    el.innerHTML = `<div class="empty-state"><div class="icon">${iconHtml('bar-chart')}</div><h3>Keine Daten</h3><p>Für diesen Zeitraum liegen noch keine Werte vor.</p></div>`
+    el.innerHTML = `<div class="empty-state"><div class="icon">${iconHtml('alert')}</div><h3>Daten kommen sobald die Tabelle profiles oder das RPC crm_kpi_timeseries angelegt ist</h3><p>Für diesen Zeitraum liegen noch keine Werte vor.</p></div>`
   } else {
     try {
       makeLineChart(el, {

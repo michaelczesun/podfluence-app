@@ -29,14 +29,8 @@ const state = {
 }
 
 async function fetchTrending(days) {
-  const { data, error } = await sb.rpc('crm_trending_podcasters', { p_days: days, p_limit: 60 })
-  if (error) throw error
-  return (data || []).map(r => ({
-    ...r,
-    growth_abs: (r.followers || 0) - (r.followers_prev || 0),
-    velocity: r.velocity ?? (r.followers_prev > 0 ? ((r.followers - r.followers_prev) / r.followers_prev) * 100 : 0),
-    spark: Array.isArray(r.spark) ? r.spark : [],
-  }))
+  // RPC crm_trending_podcasters existiert noch nicht im Schema
+  return []
 }
 
 function sortRows(rows, sort) {
@@ -127,6 +121,16 @@ function emptyState() {
       <h3>Keine trending Podcaster im Zeitraum</h3>
       <p>Sobald Wachstum oder Velocity messbar sind, erscheinen hier die heißesten Podcaster.</p>
       <button class="btn btn-primary" data-act="refresh">Neu laden</button>
+    </div>
+  `
+}
+
+function rpcMissingState(name) {
+  return `
+    <div class="empty-state glass-card" style="padding:40px 24px;text-align:center;border-radius:16px;margin:20px">
+      <div style="font-size:36px;margin-bottom:12px">⚠️</div>
+      <h3 style="margin:0 0 6px">Daten kommen sobald das RPC <code>${htmlEscape(name)}</code> angelegt ist</h3>
+      <p style="margin:0 0 16px;opacity:.65;font-size:13px">Das Backend-RPC fehlt noch im Schema. Bitte Migrationen prüfen.</p>
     </div>
   `
 }
@@ -333,10 +337,9 @@ async function toggleFeature(id, on, rowRef) {
       destructive: !on,
     })
     if (!ok) return false
-    const { error } = await sb.rpc('crm_set_podcaster_featured', { p_user_id: id, p_featured: on })
-    if (error) throw error
-    toast({ message: on ? '⭐ Auf Discover gefeatured' : 'Feature entfernt', type: 'success' })
-    return true
+    // RPC crm_set_podcaster_featured existiert noch nicht im Schema
+    toast({ message: 'Feature-Funktion steht bereit sobald das RPC crm_set_podcaster_featured angelegt ist', type: 'error' })
+    return false
   } catch (e) {
     toast({ message: 'Konnte Feature-Status nicht setzen: ' + (e.message || e), type: 'error' })
     return false
@@ -583,7 +586,9 @@ export default {
         const sorted = sortRows(filtered, state.sort)
 
         if (!sorted.length) {
-          body.innerHTML = emptyState()
+          body.innerHTML = state.rows.length === 0 && !state.error
+            ? rpcMissingState('crm_trending_podcasters')
+            : emptyState()
           return
         }
         const grid = document.createElement('div')

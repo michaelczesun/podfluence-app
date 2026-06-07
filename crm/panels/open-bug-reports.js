@@ -88,8 +88,15 @@ async function fetchData() {
   const userIds = [...new Set((open || []).map(r => r.user_id).filter(Boolean))]
   let userMap = {}
   if (userIds.length) {
-    const { data: us } = await sb.from('users').select('id, username, display_name, email').in('id', userIds)
-    userMap = Object.fromEntries((us || []).map(u => [u.id, u]))
+    try {
+      const { data: us } = await sb.rpc('admin_list_users_full', {})
+      if (us) {
+        const filtered = us.filter(u => userIds.includes(u.id))
+        userMap = Object.fromEntries(filtered.map(u => [u.id, u]))
+      }
+    } catch (_) {
+      // user lookup not critical — panel still works without display names
+    }
   }
 
   return { open: open || [], trend: trend || [], change, lastWeek, prevWeek, userMap }

@@ -31,33 +31,20 @@ function rangeStartIso(range) {
 async function fetchData(range) {
   const since = rangeStartIso(range)
 
+  // episode_vibes exists in schema; post_reactions and posts do not
   let reactionRows = []
-  try {
-    const { data, error } = await sb
-      .from('post_reactions')
-      .select('vibe, post_id, created_at, user_id')
-      .gte('created_at', since)
-      .limit(20000)
-    if (error) throw error
-    reactionRows = data || []
-  } catch (e) {
-    try {
-      const { data } = await sb
-        .from('posts')
-        .select('id, vibe, created_at, user_id, like_count, comment_count')
-        .gte('created_at', since)
-        .not('vibe', 'is', null)
-        .limit(20000)
-      reactionRows = (data || []).map(p => ({
-        vibe: p.vibe,
-        post_id: p.id,
-        created_at: p.created_at,
-        user_id: p.user_id,
-      }))
-    } catch (e2) {
-      throw e
-    }
-  }
+  const { data, error } = await sb
+    .from('episode_vibes')
+    .select('vibe, episode_id, created_at, user_id')
+    .gte('created_at', since)
+    .limit(20000)
+  if (error) throw error
+  reactionRows = (data || []).map(r => ({
+    vibe: r.vibe,
+    post_id: r.episode_id,
+    created_at: r.created_at,
+    user_id: r.user_id,
+  }))
 
   const counts = Object.fromEntries(VIBES.map(v => [v.key, 0]))
   const postScores = new Map()
@@ -85,18 +72,8 @@ async function fetchData(range) {
 }
 
 async function fetchPostDetails(postIds) {
-  if (!postIds.length) return {}
-  try {
-    const { data } = await sb
-      .from('posts')
-      .select('id, body, created_at, user_id, like_count, comment_count, profiles:profiles(username, display_name, avatar_url)')
-      .in('id', postIds)
-    const map = {}
-    for (const p of (data || [])) map[p.id] = p
-    return map
-  } catch {
-    return {}
-  }
+  // posts table does not exist in schema — return empty map
+  return {}
 }
 
 function dominantVibeKey(counts) {
@@ -164,7 +141,7 @@ async function openVibeDrawer(vibeKey, data) {
         ${v.emoji}
       </div>
       <div>
-        <div style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;">Top Posts · ${state.range === '7d' ? '7 Tage' : '30 Tage'}</div>
+        <div style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;">Top Episodes · ${state.range === '7d' ? '7 Tage' : '30 Tage'}</div>
         <h3 style="margin:2px 0 0;font-size:22px;">${v.label}</h3>
       </div>
       <div style="margin-left:auto;text-align:right;">
@@ -175,13 +152,13 @@ async function openVibeDrawer(vibeKey, data) {
     ${top.length === 0 ? `
       <div class="empty-state" style="text-align:center;padding:32px;color:var(--muted);">
         <div style="font-size:42px;margin-bottom:8px;">${v.emoji}</div>
-        Noch keine Posts mit diesem Vibe im Zeitraum.
+        Noch keine Episodes mit diesem Vibe im Zeitraum.
       </div>` : `
       <table class="data-table hover-rows" style="width:100%;">
         <thead>
           <tr>
             <th style="width:32px;">#</th>
-            <th>Post</th>
+            <th>Episode</th>
             <th style="text-align:right;">Vibe-Score</th>
             <th style="text-align:right;">Zeit</th>
           </tr>
@@ -231,7 +208,7 @@ function renderBody(body, data) {
         <div class="glass-card" style="padding:20px;">
           <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
             <h3 style="margin:0;font-size:15px;">Vibe-Ranking</h3>
-            <div style="color:var(--muted);font-size:12px;">click für Top-Posts</div>
+            <div style="color:var(--muted);font-size:12px;">click für Top-Episodes</div>
           </div>
           <div id="bar-host" style="height:260px;"></div>
         </div>
@@ -246,7 +223,7 @@ function renderBody(body, data) {
             <th>Vibe</th>
             <th style="text-align:right;">Reaktionen</th>
             <th style="text-align:right;">Anteil</th>
-            <th style="text-align:right;">Top-Posts</th>
+            <th style="text-align:right;">Top-Episodes</th>
             <th style="text-align:right;"></th>
           </tr>
         </thead>
@@ -420,7 +397,6 @@ export default {
       const body = container.querySelector('#body')
       const rangeHost = container.querySelector('#range-host')
 
-      // Sofort Skeleton zeigen, damit kein weißer Screen
       try { skeletonLoader(body, { rows: 4, layout: 'chart' }) } catch {}
 
       try {
@@ -454,7 +430,6 @@ export default {
         else if (act === 'csv') exportCurrentCsv()
       })
 
-      // Data-Fetch im Hintergrund — Skeleton ist schon sichtbar
       loadAndRender(body)
     } catch (e) {
       container.innerHTML = `

@@ -9,67 +9,45 @@ import { showUserDetailModal } from '/lib/panel-actions.js'
 const PALETTE = ['#7c5cff', '#22c1c3', '#fdbb2d', '#ff5e7e', '#3ee8a3', '#ffa057', '#5d9cff', '#c97bff']
 
 async function fetchHashtags() {
-  // Versuche zuerst eine evtl. existierende aggregierte hashtags-Tabelle
+  // Versuche RPC get_trending_hashtags
+  try {
+    const { data, error } = await sb.rpc('get_trending_hashtags')
+    if (!error && data && data.length) {
+      return data.map(t => ({
+        tag: t.tag || t.hashtag || t.name || '',
+        usage_count: t.usage_count || t.count || 0,
+        posts_24h: t.posts_24h || 0,
+        posts_7d: t.posts_7d || 0,
+        last_used_at: t.last_used_at || null,
+        trend: t.trend || 'flat'
+      }))
+    }
+  } catch (_) {}
+
+  // Fallback: View trending_hashtags_
   try {
     const { data, error } = await sb
-      .from('hashtags')
-      .select('tag, usage_count, posts_24h, posts_7d, last_used_at, trend')
-      .order('usage_count', { ascending: false })
+      .from('trending_hashtags_')
+      .select('*')
       .limit(80)
-    if (!error && data && data.length) return data
-  } catch (_) {
-    // Tabelle existiert evtl. nicht — fallthrough zu Posts-Aggregation
-  }
-
-  const { data: posts, error: postsErr } = await sb
-    .from('posts')
-    .select('hashtags, created_at')
-    .not('hashtags', 'is', null)
-    .order('created_at', { ascending: false })
-    .limit(2000)
-
-  if (postsErr) throw postsErr
-  if (!posts) return []
-
-  const now = Date.now()
-  const map = new Map()
-  for (const p of posts) {
-    const tags = Array.isArray(p.hashtags) ? p.hashtags : []
-    for (const raw of tags) {
-      const tag = String(raw || '').toLowerCase().replace(/^#/, '').trim()
-      if (!tag) continue
-      const t = map.get(tag) || { tag, usage_count: 0, posts_24h: 0, posts_7d: 0, last_used_at: null }
-      t.usage_count++
-      const ageH = (now - new Date(p.created_at).getTime()) / 3600000
-      if (ageH <= 24) t.posts_24h++
-      if (ageH <= 168) t.posts_7d++
-      if (!t.last_used_at || new Date(p.created_at) > new Date(t.last_used_at)) t.last_used_at = p.created_at
-      map.set(tag, t)
+    if (!error && data && data.length) {
+      return data.map(t => ({
+        tag: t.tag || t.hashtag || t.name || '',
+        usage_count: t.usage_count || t.count || 0,
+        posts_24h: t.posts_24h || 0,
+        posts_7d: t.posts_7d || 0,
+        last_used_at: t.last_used_at || null,
+        trend: t.trend || 'flat'
+      }))
     }
-  }
-  const arr = Array.from(map.values()).map(t => {
-    const prev = Math.max(1, t.posts_7d - t.posts_24h)
-    const ratio = t.posts_24h / prev
-    t.trend = ratio > 1.2 ? 'up' : ratio < 0.7 ? 'down' : 'flat'
-    return t
-  })
-  arr.sort((a, b) => b.usage_count - a.usage_count)
-  return arr.slice(0, 60)
+  } catch (_) {}
+
+  return []
 }
 
-async function fetchPostsForTag(tag) {
-  try {
-    const { data, error } = await sb
-      .from('posts')
-      .select('id, content, user_id, created_at, like_count, comment_count, users(username, avatar_url)')
-      .contains('hashtags', [tag])
-      .order('created_at', { ascending: false })
-      .limit(30)
-    if (error) return []
-    return data || []
-  } catch (_) {
-    return []
-  }
+async function fetchPostsForTag(_tag) {
+  // posts-Tabelle existiert nicht im Schema — Empty-State zurückgeben
+  return []
 }
 
 function bubbleCloud(items) {
@@ -145,11 +123,12 @@ async function openTagDrawer(tag) {
   const body = document.getElementById('tag-drawer-body')
   if (!body) return
   if (!posts.length) {
-    body.innerHTML = `<div class="empty-state">
-      <div class="empty-icon">${iconHtml('hash')}</div>
-      <h3>Keine Posts</h3>
-      <p>Für #${htmlEscape(tag)} wurden noch keine Posts gefunden.</p>
-    </div>`
+    body.innerHTML = glassCard({
+      content: `<div class="empty-state" style="padding:24px;text-align:center">
+        <div class="empty-icon">${iconHtml('alert')}</div>
+        <p>Daten kommen sobald die Tabelle <strong>posts</strong> angelegt ist</p>
+      </div>`
+    })
     return
   }
   body.innerHTML = `
