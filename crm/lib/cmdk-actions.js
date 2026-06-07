@@ -227,66 +227,80 @@ export const ACTIONS = [
     run: () => _go('#system/settings?section=storage')
   },
 
-  // ─────────────────────── PINNED QUICK-ACTIONS ───────────────────────
+  // ─────────────────────── PINNED QUICK-ACTIONS (Sticky 5) ───────────────────────
+  // Immer sichtbar wenn Cmd-K-Input leer ist.
   {
     id: 'new-lead',
     label: 'Neuer Lead',
     kind: 'action',
-    icon: 'user-plus',
+    icon: '➕',
     keywords: ['lead', 'neu', 'new', 'kontakt', 'add'],
     shortcut: ['mod', 'l'],
     pinned: true,
     pinnedOrder: 1,
-    run: () => window.dispatchEvent(new CustomEvent('crm:open-modal', { detail: { component: 'NewLeadModal' } }))
+    run: () => {
+      _go('#leads-pipeline')
+      // Add-Modal nach Hash-Switch öffnen (Panel-Mount-Hooks lauschen darauf)
+      setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-modal', {
+        detail: { panel: 'leads-pipeline', component: 'NewLeadModal' }
+      })), 50)
+    }
   },
   {
     id: 'new-task',
     label: 'Neuer Task',
     kind: 'action',
-    icon: 'check-square',
+    icon: '✓',
     keywords: ['task', 'todo', 'aufgabe', 'neu', 'new'],
     shortcut: ['mod', 't'],
     pinned: true,
     pinnedOrder: 2,
-    run: () => window.dispatchEvent(new CustomEvent('crm:open-modal', { detail: { component: 'NewTaskModal' } }))
+    run: () => {
+      _go('#tasks-inbox')
+      setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-modal', {
+        detail: { panel: 'tasks-inbox', component: 'NewTaskModal' }
+      })), 50)
+    }
+  },
+  {
+    id: 'audit-last-hour',
+    label: 'Audit letzte Stunde',
+    kind: 'action',
+    icon: '🕐',
+    keywords: ['audit', 'log', 'stunde', '1h', 'last hour', 'recent'],
+    shortcut: ['mod', 'shift', 'a'],
+    pinned: true,
+    pinnedOrder: 3,
+    run: () => _go('#audit-log?range=1h')
   },
   {
     id: 'bulk-verify-pending',
-    label: 'Bulk-Verify wartende Podcasts',
+    label: 'Bulk-Verify wartende',
     kind: 'action',
-    icon: 'shield-check',
-    keywords: ['bulk', 'verify', 'verifizieren', 'pending', 'warteschlange', 'queue'],
+    icon: '🛡️',
+    keywords: ['bulk', 'verify', 'verifizieren', 'pending', 'warteschlange', 'queue', 'select all'],
     shortcut: ['mod', 'shift', 'v'],
     pinned: true,
-    pinnedOrder: 3,
+    pinnedOrder: 4,
     scope: ['owner', 'admin', 'mod'],
-    run: async () => {
-      if (!_confirm('Alle wartenden Podcasts verifizieren? Nicht umkehrbar ohne Audit-Log-Eintrag.')) return
-      await _rpc('crm_bulk_verify_pending', {})
-      _toast('Bulk-Verify ausgeführt.')
+    run: () => {
+      _go('#verification-queue')
+      setTimeout(() => window.dispatchEvent(new CustomEvent('crm:bulk-action', {
+        detail: { panel: 'verification-queue', action: 'select-all' }
+      })), 50)
     }
   },
   {
     id: 'push-premium',
-    label: 'Push an Premium senden',
+    label: 'Push an Premium',
     kind: 'action',
-    icon: 'send',
+    icon: '📣',
     keywords: ['push', 'premium', 'broadcast', 'notification', 'send'],
     shortcut: ['mod', 'shift', 'p'],
     pinned: true,
-    pinnedOrder: 4,
-    scope: ['owner', 'admin', 'marketing'],
-    run: () => window.dispatchEvent(new CustomEvent('crm:open-modal', { detail: { component: 'PushComposer', props: { audience: 'premium' } } }))
-  },
-  {
-    id: 'inactive-users-7d',
-    label: 'Zeige inaktive User (>7 Tage)',
-    kind: 'action',
-    icon: 'user-x',
-    keywords: ['inactive', 'inaktiv', '7d', 'tage', 'churn'],
-    pinned: true,
     pinnedOrder: 5,
-    run: () => _go('#people/users?inactive=7d')
+    scope: ['owner', 'admin', 'marketing'],
+    run: () => _go('#push-broadcast?audience=premium')
   },
 
   // ─────────────────────── USER-ACTIONS (template) ───────────────────────

@@ -1,11 +1,17 @@
 // Cmd-K Universal Bar — extracted module
-// Public API: openCmdK(), closeCmdK(), toggleCmdK(), installCmdK({sb, panels, buildHashFor})
+// Public API: openCmdK(), closeCmdK(), toggleCmdK(), installCmdK({sb, panels, buildHashFor, role})
 // Mounts a modal overlay with fuzzy-search over panels + users (via Supabase).
 // Mobile: full-screen layout. Keyboard nav: ↑↓ Enter Esc. Trigger via Cmd/Ctrl+K (caller wires the keydown).
+//
+// Sticky Quick-Actions: 5 pinned items aus cmdk-actions.js bleiben IMMER sichtbar wenn der
+// Input leer ist. Reihenfolge per pinnedOrder. Sortiert vor allen Panels.
+
+import { searchActions, getActionById } from '/crm/lib/cmdk-actions.js?v=20260608-sticky1'
 
 let _sb = null
 let _panels = []
 let _buildHashFor = (id) => id
+let _role = null
 
 let backdrop = null
 let items = []
@@ -78,6 +84,19 @@ function injectStylesOnce() {
     .cmdk-item .cmdk-title { color: var(--text, #fff); flex: 1; font-weight: 500; }
     .cmdk-item.sel, .cmdk-item:hover { background: rgba(139,92,246,0.18); }
     .cmdk-item.sel { border-left: 2px solid var(--primary-2, #A78BFA); padding-left: 12px; }
+    .cmdk-item.cmdk-sticky { background: rgba(139,92,246,0.07); }
+    .cmdk-item.cmdk-sticky.sel { background: rgba(139,92,246,0.22); }
+    .cmdk-shortcut {
+      font-family: ui-monospace, monospace;
+      font-size: 10px;
+      color: var(--text-dim, #6B7280);
+      background: rgba(255,255,255,0.05);
+      border: 1px solid var(--border, #2A2A33);
+      border-radius: 4px;
+      padding: 1px 5px;
+      margin-right: 6px;
+      letter-spacing: 0.5px;
+    }
     /* User-row: Avatar + Username + Full-Name + Action-Buttons */
     .cmdk-item.cmdk-user-row { padding: 8px 14px; }
     .cmdk-user-avatar {
@@ -171,6 +190,49 @@ function scoreMatch(haystack, needle) {
 
 function buildItems(query) {
   const q = (query || '').trim().toLowerCase()
+
+  // ── Sticky Quick-Actions: nur wenn Input LEER ist, immer am Anfang. ──
+  let pinned = []
+  if (!q) {
+    try {
+      const all = searchActions('', { role: _role })
+      pinned = all
+        .filter(a => a.pinned)
+        .sort((a, b) => (a.pinnedOrder ?? 99) - (b.pinnedOrder ?? 99))
+        .slice(0, 5)
+        .map(a => ({
+          type: 'action',
+          id: a.id,
+          title: a.label,
+          cat: 'Quick-Action',
+          icon: a.icon || '⚡',
+          match: 100,
+          action: a,
+          sticky: true
+        }))
+    } catch (e) {
+      console.warn('[cmdk] sticky actions load failed', e)
+    }
+  }
+
+  // ── Tippt der Nutzer, suche auch ALLE Actions (nicht nur pinned) ──
+  let actionMatches = []
+  if (q) {
+    try {
+      actionMatches = searchActions(q, { role: _role, limit: 8 }).map(a => ({
+        type: 'action',
+        id: a.id,
+        title: a.label,
+        cat: a.kind === 'action' ? 'Aktion' : a.kind === 'navigation' ? 'Navigation' : a.kind === 'settings' ? 'Settings' : a.kind === 'help' ? 'Hilfe' : 'Aktion',
+        icon: a.icon || '•',
+        match: (a._score ?? 1) + 5,
+        action: a
+      }))
+    } catch (e) {
+      console.warn('[cmdk] action search failed', e)
+    }
+  }
+
   const panels = (_panels || []).map(p => ({
     type: 'panel',
     id: p.id,
@@ -179,8 +241,11 @@ function buildItems(query) {
     icon: p.icon || '•',
     match: scoreMatch((p.title || '').toLowerCase(), q)
   }))
-  let out = panels.filter(i => !q || i.match > 0)
-  out.sort((a, b) => b.match - a.match || a.title.localeCompare(b.title))
+  let panelOut = panels.filter(i => !q || i.match > 0)
+  panelOut.sort((a, b) => b.match - a.match || a.title.localeCompare(b.title))
+
+  let out = [...pinned, ...actionMatches, ...panelOut]
+
   if (userResults.length) {
     out = out.concat(userResults.map(u => ({
       type: 'user',
@@ -229,12 +294,24 @@ function render(query) {
     list.innerHTML = `<div class="cmdk-empty">Nichts gefunden für „${escapeHtml(query || '')}"</div>`
     return
   }
+  let lastCat = null
   list.innerHTML = items.map((it, i) => {
-    if (it.type === 'user') return renderUserRow(it, i, i === 0)
-    return `
-    <div class="cmdk-item ${i === 0 ? 'sel' : ''}" data-idx="${i}">
+    let groupHead = ''
+    if (it.cat !== lastCat) {
+      const headLabel = it.sticky ? '⚡ Quick-Aktionen' : it.cat
+      groupHead = `<div class="cmdk-group-head">${escapeHtml(headLabel)}</div>`
+      lastCat = it.cat
+    }
+    if (it.type === 'user') return groupHead + renderUserRow(it, i, i === 0)
+    const sc = it.action?.shortcut
+    const shortcutBadge = sc
+      ? `<span class="cmdk-shortcut">${sc.map(k => k === 'mod' ? '⌘' : k === 'shift' ? '⇧' : k.toUpperCase()).join('')}</span>`
+      : ''
+    return groupHead + `
+    <div class="cmdk-item ${i === 0 ? 'sel' : ''} ${it.sticky ? 'cmdk-sticky' : ''}" data-idx="${i}">
       <span style="font-size:14px">${it.icon}</span>
       <span class="cmdk-title">${escapeHtml(it.title)}</span>
+      ${shortcutBadge}
       <span class="cmdk-cat">${escapeHtml(it.cat)}</span>
     </div>`
   }).join('')
@@ -338,10 +415,31 @@ function activate(it) {
   if (!it) return
   if (it.type === 'panel') {
     location.hash = '#' + _buildHashFor(it.id)
-  } else if (it.type === 'user') {
-    location.hash = '#people/users?u=' + it.id
+    closeCmdK()
+    return
   }
-  closeCmdK()
+  if (it.type === 'user') {
+    location.hash = '#people/users?u=' + it.id
+    closeCmdK()
+    return
+  }
+  if (it.type === 'action') {
+    // Close first so any modal/toast triggered by run() lands on a clean DOM.
+    closeCmdK()
+    try {
+      const result = it.action?.run?.()
+      if (result && typeof result.catch === 'function') {
+        result.catch(err => {
+          console.error('[cmdk] action error', it.id, err)
+          window.toast?.(err?.message || 'Aktion fehlgeschlagen')
+        })
+      }
+    } catch (err) {
+      console.error('[cmdk] action throw', it.id, err)
+      window.toast?.(err?.message || 'Aktion fehlgeschlagen')
+    }
+    return
+  }
 }
 
 // Speech-to-Text via webkitSpeechRecognition (de-DE)
@@ -471,14 +569,44 @@ export function installCmdK(opts = {}) {
   _sb = opts.sb || _sb
   _panels = opts.panels || _panels
   _buildHashFor = opts.buildHashFor || _buildHashFor
+  _role = opts.role || _role || (typeof window !== 'undefined' && window.__CRM_ROLE__) || null
   injectStylesOnce()
 
   if (opts.bindKeyboard !== false) {
     window.addEventListener('keydown', (e) => {
       const meta = e.metaKey || e.ctrlKey
-      if (meta && (e.key === 'k' || e.key === 'K')) {
+      if (!meta) return
+      // Cmd+K — Toggle palette
+      if (e.key === 'k' || e.key === 'K') {
         e.preventDefault()
         toggleCmdK()
+        return
+      }
+      // Sticky Quick-Action Shortcuts
+      // Cmd+L → Neuer Lead, Cmd+T → Neuer Task
+      // Cmd+Shift+A → Audit 1h, Cmd+Shift+V → Bulk-Verify, Cmd+Shift+P → Push Premium
+      const key = (e.key || '').toLowerCase()
+      const shift = e.shiftKey
+      let runId = null
+      if (!shift && key === 'l') runId = 'new-lead'
+      else if (!shift && key === 't') runId = 'new-task'
+      else if (shift && key === 'a') runId = 'audit-last-hour'
+      else if (shift && key === 'v') runId = 'bulk-verify-pending'
+      else if (shift && key === 'p') runId = 'push-premium'
+      if (runId) {
+        // Nicht in Inputs/Textareas hijacken (außer Cmd+Shift+* — selten getippt)
+        const inField = e.target && /INPUT|TEXTAREA|SELECT/.test(e.target.tagName) && !shift
+        if (inField) return
+        e.preventDefault()
+        const act = getActionById(runId)
+        if (!act) return
+        if (Array.isArray(act.scope) && act.scope.length && _role && !act.scope.includes(_role)) return
+        try {
+          const r = act.run?.()
+          if (r && typeof r.catch === 'function') r.catch(err => console.error('[cmdk] shortcut error', runId, err))
+        } catch (err) {
+          console.error('[cmdk] shortcut throw', runId, err)
+        }
       }
     })
   }
