@@ -362,7 +362,7 @@ async function openDayDrawer(dateKey) {
       }
     })
   } catch (e) {
-    dlg?.setContent?.(`
+    setDrawerHtml(`
       <div class="empty-state error-state">
         <div class="empty-icon">${iconHtml('alert-triangle')}</div>
         <h4>Fehler beim Laden</h4>

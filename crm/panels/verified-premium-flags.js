@@ -525,9 +525,9 @@ export default {
         const chartPremiumEl  = body.querySelector('#chart-premium')
         if (verifiedGrowth.length > 0) {
           makeBarChart(chartVerifiedEl, {
-            data: verifiedGrowth,
-            xKey: 'label', yKey: 'value',
-            color: '#3b82f6',
+            categories: verifiedGrowth.map(p => p.label),
+            series: [{ name: 'Verifiziert', data: verifiedGrowth.map(p => p.value) }],
+            colors: ['#3b82f6'],
             height: 220,
           })
         } else {
@@ -538,8 +538,8 @@ export default {
           .map(([label, value]) => ({ label, value }))
         if (donutData.length > 0) {
           makeDonutChart(chartPremiumEl, {
-            data: donutData,
-            labelKey: 'label', valueKey: 'value',
+            labels: donutData.map(d => d.label),
+            values: donutData.map(d => d.value),
             colors: ['#f59e0b', '#ef4444', '#f97316', '#eab308', '#84cc16', '#94a3b8'],
             height: 220,
           })
