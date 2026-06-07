@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>CRM-Selftest</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; background: #0e0b1f; color: #ddd; padding: 20px; }
+    h1 { color: #fff; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #333; }
+    th { background: #1a162e; color: #fff; }
+    .ok { color: #4ade80; }
+    .err { color: #f87171; }
+    .warn { color: #fbbf24; }
+    pre { background: #0a0815; padding: 8px; font-size: 11px; max-width: 600px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; }
+    .hidden-mount { position: absolute; left: -10000px; width: 800px; height: 600px; }
+    .summary { font-size: 16px; margin-top: 12px; }
+    button { background: #7C5CFF; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <h1>🔬 CRM-Panel-Selftest</h1>
+  <p>Mountet jedes Panel in eine unsichtbare DOM-Insel, sammelt Console-Errors + Network-Fehler, reportet.</p>
+  <button id="run">▶ Selftest starten</button>
+  <div class="summary" id="summary"></div>
+  <table id="results">
+    <thead><tr><th>Panel</th><th>Status</th><th>Fehler</th><th>Network-Fehler</th></tr></thead>
+    <tbody></tbody>
+  </table>
+  <div id="hidden-area" class="hidden-mount"></div>
+
+  <script type="module">
+    const PANELS = [
+      'kpi-live-totals','dau-trend','new-signups-7d','crash-rate','open-bug-reports',
+      'users-list','user-type-split','verified-premium-flags','onboarding-funnel','client-build-versions',
+      'recent-updates-feed','posts-per-day','trending-hashtags','active-polls','episodes-per-day',
+      'listens-per-day','top-listened-podcasts','vibe-distribution','top-listeners',
+      'users-by-country','referral-leaderboard','referral-overview','invite-codes-usage',
+      'podcaster-engagement-7d','trending-podcasters','achievements-unlocks',
+      'insta-approval-queue','insta-post-type-scores','newsletter-audience-sync',
+      'bug-reports-triage','push-broadcast','storage-ops','podcast-verification-queue','settings'
+    ]
+
+    const tbody = document.querySelector('#results tbody')
+    const hidden = document.getElementById('hidden-area')
+    const summary = document.getElementById('summary')
+
+    // Network-Fehler-Sammler via fetch-Monkey-Patch
+    const networkErrors = []
+    const origFetch = window.fetch
+    window.fetch = async function(...args) {
+      const url = typeof args[0] === 'string' ? args[0] : args[0].url
+      try {
+        const r = await origFetch.apply(this, args)
+        if (!r.ok) {
+          const body = await r.clone().text().catch(() => '')
+          networkErrors.push({ url, status: r.status, body: body.slice(0, 300) })
+        }
+        return r
+      } catch (e) {
+        networkErrors.push({ url, status: 'NETWORK_ERR', body: String(e.message || e) })
+        throw e
+      }
+    }
+
+    document.getElementById('run').addEventListener('click', async () => {
+      tbody.innerHTML = ''
+      summary.textContent = 'Läuft …'
+      let okCount = 0, errCount = 0
+
+      for (const id of PANELS) {
+        networkErrors.length = 0
+        const errors = []
+        const origErr = console.error
+        console.error = (...args) => { errors.push(args.map(a => a && a.message || String(a)).join(' ')); origErr.apply(console, args) }
+
+        let status = 'ok'
+        let errText = ''
+        const container = document.createElement('div')
+        hidden.innerHTML = ''
+        hidden.appendChild(container)
+
+        try {
+          const mod = await import(`/crm/panels/${id}.js?t=${Date.now()}`)
+          if (mod.default && typeof mod.default.mount === 'function') {
+            await mod.default.mount(container)
+            // 2 Sekunden warten, damit async fetches durch sind
+            await new Promise(r => setTimeout(r, 2000))
+          } else {
+            status = 'warn'; errText = 'No .default.mount export'
+          }
+        } catch (e) {
+          status = 'err'; errText = String(e.message || e).slice(0, 400)
+        }
+
+        if (errors.length && status === 'ok') status = 'warn'
+        const errStr = errText || errors.slice(0, 3).join('\n').slice(0, 400)
+        const netStr = networkErrors.map(n => `${n.status} ${n.url.split('/').slice(-2).join('/')}`).slice(0, 3).join('\n')
+
+        const tr = document.createElement('tr')
+        tr.innerHTML = `
+          <td><strong>${id}</strong></td>
+          <td class="${status === 'ok' ? 'ok' : status === 'warn' ? 'warn' : 'err'}">${status.toUpperCase()}</td>
+          <td><pre>${errStr || '—'}</pre></td>
+          <td><pre>${netStr || '—'}</pre></td>`
+        tbody.appendChild(tr)
+        if (status === 'ok') okCount++; else errCount++
+
+        console.error = origErr
+      }
+
+      summary.innerHTML = `<strong>${okCount} ok / ${errCount} mit Problemen</strong>`
+      hidden.innerHTML = ''
+    })
+  </script>
+</body>
+</html>
