@@ -172,7 +172,9 @@ function renderEmpty(body) {
 }
 
 function renderContent(body, data) {
-  const heroColor = data.crashFreeRate >= 99.5 ? '#10b981'
+  const rateKnown = data.crashFreeRate != null
+  const heroColor = !rateKnown ? 'var(--text-muted)'
+    : data.crashFreeRate >= 99.5 ? '#10b981'
     : data.crashFreeRate >= 99 ? '#84cc16'
     : data.crashFreeRate >= 98 ? '#f59e0b'
     : '#ef4444'
@@ -191,7 +193,7 @@ function renderContent(body, data) {
           <div>
             <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)">Crash-free Sessions</div>
             <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
-              <div style="font-size:44px;font-weight:700;line-height:1.1;color:${heroColor}" id="hero-rate">0.00%</div>
+              <div style="font-size:44px;font-weight:700;line-height:1.1;color:${heroColor}" id="hero-rate">${rateKnown ? '0.00%' : '—'}</div>
               ${(() => {
                 if (data.dailyRateDeltaPp == null) return ''
                 const delta = data.dailyRateDeltaPp
@@ -289,27 +291,38 @@ function renderContent(body, data) {
   `
 
   try {
-    makeRadialBar(body.querySelector('#radial-hero'), {
-      value: data.crashFreeRate,
-      max: 100,
-      label: 'crash-free',
-      color: heroColor,
-      thickness: 14,
-    })
+    if (rateKnown) {
+      makeRadialBar(body.querySelector('#radial-hero'), {
+        value: data.crashFreeRate,
+        max: 100,
+        label: 'crash-free',
+        color: heroColor,
+        thickness: 14,
+      })
+    } else {
+      const el = body.querySelector('#radial-hero')
+      if (el) el.innerHTML = `
+        <div style="text-align:center;color:var(--text-muted);padding:24px">
+          <div style="font-size:36px;margin-bottom:8px">${iconHtml('alert-circle')}</div>
+          <div style="font-size:13px">Session-Daten nicht verfügbar</div>
+          <div style="font-size:11px;margin-top:4px">Rate kann nicht berechnet werden</div>
+        </div>`
+    }
   } catch (e) { console.warn('[crash-rate] radial chart failed', e) }
 
   try {
     makeAreaChart(body.querySelector('#area-chart'), {
-      labels: data.series.map(b => b.label),
-      data: data.series.map(b => b.count),
-      color: '#ef4444',
-      smooth: true,
-      fill: true,
+      categories: data.series.map(b => b.label),
+      series: [{ name: 'Crashes', data: data.series.map(b => b.count) }],
+      colors: ['#ef4444'],
+      height: 240,
     })
   } catch (e) { console.warn('[crash-rate] area chart failed', e) }
 
   try {
-    countUp(body.querySelector('#hero-rate'), data.crashFreeRate, { suffix: '%', decimals: 2, duration: 900 })
+    if (rateKnown) {
+      countUp(body.querySelector('#hero-rate'), data.crashFreeRate, { suffix: '%', decimals: 2, duration: 900 })
+    }
     countUp(body.querySelector('#stat-total'), data.totalCrashes, { duration: 700 })
     countUp(body.querySelector('#stat-sessions'), data.crashSessions, { duration: 700 })
     if (!data.sessionsUnavailable) {
@@ -319,11 +332,11 @@ function renderContent(body, data) {
 
   body.querySelector('#csv-locations-btn')?.addEventListener('click', () => {
     try {
-      exportCsv('crash-locations.csv', data.topLocations.map(l => ({
+      exportCsv(data.topLocations.map(l => ({
         component: l.component,
         count: l.count,
         last_seen: l.last,
-      })))
+      })), [], 'crash-locations.csv')
       toast('CSV exportiert', 'success')
     } catch (e) {
       toast('CSV-Export fehlgeschlagen: ' + (e?.message || e), 'error')
@@ -439,7 +452,7 @@ const exported = {
           const data = await fetchData()
           currentData = data
           // Empty-State nur wenn crash_logs OK war UND wirklich 0 Crashes
-          if (!data.crashTableMissing && data.totalCrashes === 0 && data.sessions === 0) {
+          if (!data.crashTableMissing && data.totalCrashes === 0) {
             renderEmpty(body)
           } else {
             renderContent(body, data)
@@ -464,14 +477,14 @@ const exported = {
       container.querySelector('#csv-btn')?.addEventListener('click', () => {
         if (!currentData) return toast('Noch keine Daten geladen', 'warning')
         try {
-          exportCsv('crashes-7d.csv', currentData.raw.map(c => ({
+          exportCsv(currentData.raw.map(c => ({
             id: c.id,
             component: c.component,
             session_id: c.session_id,
             created_at: c.created_at,
             message: c.message,
             stack: c.stack,
-          })))
+          })), [], 'crashes-7d.csv')
           toast('Crash-Daten als CSV exportiert', 'success')
         } catch (e) {
           toast('CSV-Export fehlgeschlagen: ' + (e?.message || e), 'error')

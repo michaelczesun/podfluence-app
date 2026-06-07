@@ -368,22 +368,23 @@ function renderBody(body, data) {
 
   body.querySelectorAll('.funnel-step-value').forEach(el => {
     const target = parseInt(el.dataset.count || '0', 10)
-    try { countUp(el, 0, target, 900) } catch (_) {}
+    // FIX(med): countUp Sig vereinheitlichen — countUp(el, target, { duration })
+    try { countUp(el, target, { duration: 900 }) } catch (_) {}
   })
 
   const trendEl = body.querySelector('#trend-chart')
   if (data.trend.length) {
     try {
-      makeAreaChart(trendEl, {
-        data: data.trend,
-        x: 'date',
-        y: 'rate',
-        ySuffix: '%',
-        color: '#10b981',
-        gradient: true,
-        smooth: true,
-        tooltipLabel: 'Conversion-Rate'
+      // FIX(high): korrekte Chart-Sig {categories, series:[{name,data}], colors, height}
+      const chart = makeAreaChart({
+        categories: data.trend.map(t => t.date),
+        series: [{ name: 'Conversion-Rate (%)', data: data.trend.map(t => Number(t.rate.toFixed(2))) }],
+        colors: ['#10b981'],
+        height: 300
       })
+      trendEl.innerHTML = ''
+      if (chart instanceof Node) trendEl.appendChild(chart)
+      else if (typeof chart === 'string') trendEl.innerHTML = chart
     } catch (e) {
       trendEl.innerHTML = `<div class="empty-state-mini"><div class="empty-icon">${iconHtml('activity')}</div><div>Chart konnte nicht gerendert werden.</div></div>`
     }
@@ -392,19 +393,28 @@ function renderBody(body, data) {
   }
 
   const donutEl = body.querySelector('#funnel-donut')
-  try {
-    makeDonutChart(donutEl, {
-      data: [
-        { label: 'Generiert', value: Math.max(data.funnel.generated - data.funnel.shared, 0), color: '#6366f1' },
-        { label: 'Geteilt', value: Math.max(data.funnel.shared - data.funnel.used, 0), color: '#8b5cf6' },
-        { label: 'Verwendet', value: Math.max(data.funnel.used - data.funnel.signedUp, 0), color: '#ec4899' },
-        { label: 'Registriert', value: data.funnel.signedUp, color: '#10b981' }
-      ],
-      centerLabel: 'Funnel',
-      centerValue: fmtNumber(data.funnel.generated)
-    })
-  } catch (e) {
-    donutEl.innerHTML = `<div class="empty-state-mini"><div class="empty-icon">${iconHtml('pie-chart')}</div><div>Donut konnte nicht gerendert werden.</div></div>`
+  // FIX(high): korrekte Donut-Sig {labels, values, colors, height} +
+  // Funnel ohne 'shared'-Stufe (siehe critical/math Fix)
+  const unused = Math.max(data.funnel.generated - data.funnel.used, 0)
+  const usedNoSignup = Math.max(data.funnel.used - data.funnel.signedUp, 0)
+  const signedUp = data.funnel.signedUp
+  const donutTotal = unused + usedNoSignup + signedUp
+  if (donutTotal > 0) {
+    try {
+      const chart = makeDonutChart({
+        labels: ['Nicht verwendet', 'Verwendet (kein Signup)', 'Registriert'],
+        values: [unused, usedNoSignup, signedUp],
+        colors: ['#6366f1', '#ec4899', '#10b981'],
+        height: 280
+      })
+      donutEl.innerHTML = ''
+      if (chart instanceof Node) donutEl.appendChild(chart)
+      else if (typeof chart === 'string') donutEl.innerHTML = chart
+    } catch (e) {
+      donutEl.innerHTML = `<div class="empty-state-mini"><div class="empty-icon">${iconHtml('pie-chart')}</div><div>Donut konnte nicht gerendert werden.</div></div>`
+    }
+  } else {
+    donutEl.innerHTML = `<div class="empty-state-mini"><div class="empty-icon">${iconHtml('pie-chart')}</div><div>Noch keine Funnel-Verteilung — sobald Codes verwendet werden, erscheint hier die Aufteilung.</div></div>`
   }
 }
 
@@ -580,15 +590,17 @@ export default {
       container.querySelector('[data-tb="csv"]')?.addEventListener('click', () => {
         if (!state.trend.length) { toast('Keine Daten zum Exportieren', 'warning'); return }
         try {
-          exportCsv({
-            filename: `referral-trend-${state.range}.csv`,
-            rows: state.trend.map(t => ({
+          // FIX(med): exportCsv-Sig ist (rows, columns, filename) — nicht Object-Form
+          exportCsv(
+            state.trend.map(t => ({
               date: t.date,
               codes_generated: t.generated,
               signups: t.signups,
               conversion_rate_pct: t.rate.toFixed(2)
-            }))
-          })
+            })),
+            null,
+            `referral-trend-${state.range}.csv`
+          )
         } catch (e) {
           toast('CSV-Export fehlgeschlagen', 'error')
         }

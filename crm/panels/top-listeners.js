@@ -4,7 +4,16 @@ import { makeAreaChart, makeSparkline } from '/lib/charts.js?v=20260608e'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608e'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608e'
 import { drawer, segmentedControl } from '/lib/layout-extras.js?v=20260608e'
-import { showUserDetailModal, grantPremium, sendBroadcastPush } from '/lib/panel-actions.js?v=20260608e'
+import { showUserDetailModal, grantPremium } from '/lib/panel-actions.js?v=20260608e'
+
+// Local broadcast-push helper (sendBroadcastPush is not exported from panel-actions)
+async function sendBroadcastPush({ title, body, audience = 'custom', user_ids = [] }) {
+  const { data, error } = await sb.functions.invoke('send-broadcast-push', {
+    body: { title, body, audience, user_ids },
+  })
+  if (error) throw error
+  return data
+}
 
 const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 }
 
@@ -101,7 +110,7 @@ function avatarHtml(row) {
     return `<img src="${htmlEscape(row.avatar)}" alt="" class="avatar-img" />`
   }
   const initial = (row.name || '?').trim().charAt(0).toUpperCase()
-  return `<div class="avatar-fallback">${htmlEscape(initial)}</div>`
+  return `<div class="avatar-fallback" style="display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#7c5cff,#5b3df0);color:#fff;font-weight:600;font-size:14px;flex-shrink:0;">${htmlEscape(initial)}</div>`
 }
 
 function rankBadge(rank) {
@@ -168,7 +177,7 @@ function attachSparklines(scope) {
     try {
       const data = JSON.parse(host.dataset.spark || '[]')
       host.innerHTML = ''
-      makeSparkline(host, data, { width: 120, height: 32, stroke: '#7c5cff' })
+      makeSparkline(host, { data, color: '#7c5cff', height: 32, fill: true })
     } catch (e) {
       host.textContent = '—'
     }
@@ -286,9 +295,13 @@ function openListenerDrawer(row) {
       countUp(el, target, { duration: 800, format: fmtNumber })
     })
     const host = body.querySelector('#drawer-chart')
-    if (host) {
-      const series = row.series.map((v, i) => ({ x: i, y: v }))
-      makeAreaChart(host, series, { height: 180, color: '#7c5cff' })
+    if (host && row.series && row.series.length) {
+      makeAreaChart(host, {
+        categories: row.series.map((_, i) => `T-${row.series.length - 1 - i}`),
+        series: [{ name: 'Minuten', data: row.series }],
+        colors: ['#7c5cff'],
+        height: 180,
+      })
     }
   }, 50)
 }
@@ -482,11 +495,12 @@ export default {
 
         const chartHost = body.querySelector('#hero-chart')
         if (chartHost && totalsByDay.length) {
-          makeAreaChart(
-            chartHost,
-            totalsByDay.map((d) => ({ x: d.day, y: d.minutes })),
-            { height: 90, color: '#7c5cff', gradient: true, xKey: 'x', yKey: 'y' }
-          )
+          makeAreaChart(chartHost, {
+            categories: totalsByDay.map((d) => d.day),
+            series: [{ name: 'Minuten', data: totalsByDay.map((d) => d.minutes) }],
+            colors: ['#7c5cff'],
+            height: 90,
+          })
         }
 
         attachSparklines(body)

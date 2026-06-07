@@ -38,9 +38,15 @@ function buildDayAxis(rangeDays) {
   return days
 }
 
-// FIX (high): Query updates directly to get real type data per row.
-// The old admin_daily_series RPC only returns {date, value} — no type info —
-// so synthetic rows all got type='announcement', breaking the stacked chart.
+// FIX (low/data): updates has no 'type' column — classify via is_longform,
+// embedded_episode_guid, embedded_newsletter_id, is_bubble, content length.
+function classifyPost(row) {
+  if (row.is_longform) return 'longform'
+  if (row.embedded_episode_guid) return 'episode'
+  if (row.embedded_newsletter_id) return 'poll' // newsletter-embed bucket
+  return 'announcement'
+}
+
 async function fetchData(rangeDays) {
   const today = new Date()
   today.setHours(23, 59, 59, 999)
@@ -50,7 +56,7 @@ async function fetchData(rangeDays) {
 
   const { data, error } = await sb
     .from('updates')
-    .select('created_at, type')
+    .select('created_at, is_longform, is_bubble, embedded_episode_guid, embedded_newsletter_id, content')
     .gte('created_at', start.toISOString())
     .lte('created_at', today.toISOString())
     .order('created_at', { ascending: true })
@@ -73,7 +79,7 @@ function aggregate(rows, rangeDays) {
     const day = (row.created_at || '').slice(0, 10)
     if (!(day in dayIndex)) continue
     const idx = dayIndex[day]
-    const type = TYPES.some(t => t.key === row.type) ? row.type : 'announcement'
+    const type = classifyPost(row)
     perType[type][idx] += 1
     totalsPerType[type] += 1
     totalsPerDay[idx] += 1
@@ -104,15 +110,16 @@ async function fetchPostsForDay(day) {
   // FK join: updates.user_id → users.id must exist in DB schema
   const { data, error } = await sb
     .from('updates')
-    .select('id, user_id, content, type, created_at, users:user_id(id, username, full_name, avatar_url)')
+    .select('id, user_id, content, is_longform, is_bubble, embedded_episode_guid, embedded_newsletter_id, created_at, users:user_id(id, username, full_name, avatar_url)')
     .gte('created_at', start)
     .lte('created_at', end)
     .order('created_at', { ascending: false })
     .limit(200)
   if (error) throw error
-  // Remap joined user into profiles key expected by drawer
+  // Remap joined user into profiles key + derive type via classifier
   return (data || []).map(p => ({
     ...p,
+    type: classifyPost(p),
     profiles: p.users || {},
   }))
 }
@@ -195,18 +202,20 @@ async function openDayDrawer(day) {
 function renderHero(container) {
   const el = container.querySelector('#hero')
   if (!el) return
+  // FIX (high/rendering): statHero only supports {label, value, change, icon}.
+  // value must be a Number (countUp animates it internally). Sublabel/trend rendered separately.
+  const changeText = state.totals.peakDay
+    ? `Spitze: ${fmtNumber(state.totals.peakCount)} am ${state.totals.peakDay}`
+    : null
   el.innerHTML = `
     ${statHero({
       label: 'Posts im Zeitraum',
-      value: '<span id="hero-total">0</span>',
-      hint: `${RANGE_LABELS[state.range]} · Ø <span id="hero-avg">0</span>/Tag`,
-      trend: state.totals.peakDay
-        ? `Spitze: <b>${fmtNumber(state.totals.peakCount)}</b> am ${state.totals.peakDay}`
-        : '—'
+      value: state.totals.total,
+      change: changeText,
+      icon: 'edit-3',
     })}
+    <div class="hero-sub">${RANGE_LABELS[state.range]} · Ø <b>${fmtNumber(state.totals.avg)}</b>/Tag</div>
   `
-  countUp(el.querySelector('#hero-total'), state.totals.total, { duration: 900 })
-  countUp(el.querySelector('#hero-avg'),   state.totals.avg,   { duration: 900, decimals: 1 })
 }
 
 function renderChart(container) {
@@ -258,7 +267,13 @@ function renderBreakdown(container) {
       </ul>
     </div>
   `
-  makeDonutChart(el.querySelector('#break-donut'), { data: donutData, size: 180, thickness: 22 })
+  // FIX (high/data): donut API is {labels, values, colors, height}, not {data, size, thickness}
+  makeDonutChart(el.querySelector('#break-donut'), {
+    labels: donutData.map(d => d.label),
+    values: donutData.map(d => d.value),
+    colors: donutData.map(d => d.color),
+    height: 180,
+  })
 }
 
 function renderTopDays(container) {
