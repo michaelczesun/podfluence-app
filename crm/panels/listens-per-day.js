@@ -7,9 +7,7 @@ import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js?v=2026
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
-// FIX high: replaced direct table scan (RLS bypass risk + 100k-row client load)
-// with admin_daily_series RPC (SECURITY DEFINER, aggregates server-side).
-// Returns rows: { date, plays, total_minutes } — one row per day.
+// Daily aggregated series via admin RPC (SECURITY DEFINER).
 async function fetchDaily(days = 30) {
   const { data, error } = await sb.rpc('admin_daily_series', {
     p_metric: 'listens',
@@ -19,8 +17,6 @@ async function fetchDaily(days = 30) {
   return data || []
 }
 
-// admin_daily_series returns server-aggregated rows — no client aggregation needed.
-// Kept for shape-normalisation in case RPC column names differ slightly.
 function normaliseDaily(rows) {
   return rows
     .map(r => ({
@@ -32,60 +28,51 @@ function normaliseDaily(rows) {
     .sort((a, b) => a.date.localeCompare(b.date))
 }
 
-// FIX med: heatmap drill-down now reuses rawRows already fetched for the main
-// chart instead of issuing a second 50k-row scan.  rawRows is passed in from
-// the panel state, so no extra network call happens.
-// FIX high: episode title lookup switched from unknown `episodes` table to
-// `podcasts` table (confirmed in schema).  We enrich by podcast_id only —
-// episode-level titles are not available via a confirmed table, so we fall back
-// to "Episode <id>" rather than silently swallowing an error.
-async function fetchTopEpisodesForHour(weekday, hour, cachedRows) {
-  const filtered = cachedRows.filter(r => {
-    if (!r.created_at) return false
+// FIX high: heatmap needs raw timestamps. admin_daily_series gives only daily
+// aggregates → grid stayed 0. Fetch listening_activity directly (created_at,
+// podcast_title, episode_title — all confirmed columns).
+async function fetchRawActivity(days) {
+  const since = new Date(Date.now() - days * 86400_000).toISOString()
+  const { data, error } = await sb
+    .from('listening_activity')
+    .select('created_at, podcast_title, episode_title')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(20000)
+  if (error) throw error
+  return data || []
+}
+
+function aggregateHeatmapGrid(rows) {
+  const grid = Array.from({ length: 7 }, () => Array(24).fill(0))
+  for (const r of rows) {
+    if (!r.created_at) continue
+    const d = new Date(r.created_at)
+    const wd = (d.getDay() + 6) % 7 // Mon=0..Sun=6
+    const h = d.getHours()
+    grid[wd][h] += 1
+  }
+  return grid
+}
+
+// FIX low: filter raw rows that DO have created_at + titles (confirmed schema).
+function topInWindow(rawRows, weekday, hour) {
+  const counts = new Map()
+  for (const r of rawRows) {
+    if (!r.created_at) continue
     const d = new Date(r.created_at)
     const wd = (d.getDay() + 6) % 7
-    return wd === weekday && d.getHours() === hour
-  })
-
-  const counts = new Map()
-  const podcastIds = new Map() // episode_id → podcast_id
-  for (const r of filtered) {
-    const id = r.episode_id
-    if (!id) continue
-    counts.set(id, (counts.get(id) || 0) + 1)
-    if (r.podcast_id && !podcastIds.has(id)) podcastIds.set(id, r.podcast_id)
+    if (wd !== weekday || d.getHours() !== hour) continue
+    const key = `${r.podcast_title || '—'}${r.episode_title || '—'}`
+    counts.set(key, (counts.get(key) || 0) + 1)
   }
-
-  const top = Array.from(counts.entries())
-    .sort((a, b) => b[1] - a[1])
+  return Array.from(counts.entries())
+    .map(([key, plays]) => {
+      const [podcast, title] = key.split('')
+      return { podcast, title, plays }
+    })
+    .sort((a, b) => b.plays - a.plays)
     .slice(0, 10)
-
-  // Enrich with podcast titles using the confirmed `podcasts` table.
-  const uniquePodcastIds = [...new Set(top.map(([id]) => podcastIds.get(id)).filter(Boolean))]
-  let podTitles = {}
-  if (uniquePodcastIds.length > 0) {
-    try {
-      const { data: pods, error } = await sb
-        .from('podcasts')
-        .select('id, title')
-        .in('id', uniquePodcastIds)
-      if (!error) {
-        for (const p of (pods || [])) podTitles[p.id] = p.title || '—'
-      }
-    } catch (_) {
-      // Best-effort — podcast names are cosmetic, missing titles are acceptable.
-    }
-  }
-
-  return top.map(([id, plays]) => {
-    const podId = podcastIds.get(id)
-    return {
-      id,
-      title: `Episode ${id}`,
-      podcast: podTitles[podId] || '—',
-      plays,
-    }
-  })
 }
 
 export default {
@@ -97,6 +84,7 @@ export default {
     try {
       let mode = 'plays'
       let days = 30
+      let dailyRows = []
       let rawRows = []
 
       container.innerHTML = `
@@ -130,10 +118,14 @@ export default {
       async function load() {
         body.innerHTML = skeletonLoader(400, 56).outerHTML
         try {
-          rawRows = await fetchDaily(days)
-          // FIX med: render() wrapped in its own try/catch so chart errors
-          // show the inline retry UI instead of falling through to the outer
-          // init-error state.
+          // Daily series is required; raw activity is best-effort (heatmap-only).
+          const [daily, raw] = await Promise.allSettled([
+            fetchDaily(days),
+            fetchRawActivity(days),
+          ])
+          if (daily.status !== 'fulfilled') throw daily.reason
+          dailyRows = daily.value
+          rawRows = raw.status === 'fulfilled' ? raw.value : []
           try {
             render()
           } catch (renderErr) {
@@ -159,7 +151,7 @@ export default {
       }
 
       function render() {
-        const daily = normaliseDaily(rawRows)
+        const daily = normaliseDaily(dailyRows)
 
         if (daily.length === 0) {
           body.innerHTML = `
@@ -198,7 +190,7 @@ export default {
                 <p class="muted">Plays nach Wochentag × Stunde — klick eine Zelle für Top-Podcasts</p>
               </div>
             </div>
-            <div id="heatmapWrap"></div>
+            <div id="heatmapWrap" style="min-height:320px"></div>
           </section>
         `
 
@@ -239,80 +231,95 @@ export default {
           const chartHost = body.querySelector('#lineChart')
           if (!chartHost) return
           chartHost.innerHTML = ''
-          const series = daily.map(d => ({
-            x: d.date,
-            y: mode === 'plays' ? d.plays : Math.round((d.seconds / 3600) * 10) / 10
-          }))
+          // FIX high: use canonical {categories, series:[{name,data}], colors, height}
+          // shape per /lib/charts.js?v=20260608e signature.
+          const categories = daily.map(d => d.date)
+          const data = daily.map(d => mode === 'plays'
+            ? d.plays
+            : Math.round((d.seconds / 3600) * 10) / 10)
+          const seriesName = mode === 'plays' ? 'Plays' : 'Stunden'
+          const color = mode === 'plays' ? '#8b5cf6' : '#06b6d4'
           makeLineChart(chartHost, {
-            data: series,
-            xLabel: 'Datum',
-            yLabel: mode === 'plays' ? 'Plays' : 'Stunden',
-            color: mode === 'plays' ? '#8b5cf6' : '#06b6d4',
-            smooth: true,
-            area: true
+            categories,
+            series: [{ name: seriesName, data }],
+            colors: [color],
+            height: 300
           })
         }
         drawLine()
 
-        // Heatmap — note: admin_daily_series returns aggregated rows without
-        // created_at timestamps, so heatmap grid will be empty when using the
-        // RPC.  The heatmap section requires raw pulse rows with timestamps.
-        // For now the grid renders as zero-filled (no-op visually) until a
-        // dedicated heatmap RPC is available.  The drill-down drawer reuses
-        // rawRows as-is (which will also be empty from the RPC response).
+        // FIX high: heatmap now uses raw listening_activity rows (with created_at)
+        // and the ApexCharts series shape that /lib/charts.js?v=20260608e expects:
+        //   series: [{ name: 'Mo', data: [{x: '00h', y: 12}, ...] }, ...]
         const heatHost = body.querySelector('#heatmapWrap')
-        const grid = aggregateHeatmapFromRaw(rawRows)
-        const heatPoints = []
-        for (let wd = 0; wd < 7; wd++) {
-          for (let h = 0; h < 24; h++) {
-            heatPoints.push({ x: h, y: wd, value: grid[wd][h] })
-          }
+        const grid = aggregateHeatmapGrid(rawRows)
+        const totalHeat = grid.flat().reduce((s, n) => s + n, 0)
+
+        if (totalHeat === 0) {
+          heatHost.innerHTML = `
+            <div class="empty-state" style="padding:24px;text-align:center;color:var(--text)">
+              <div class="empty-icon">${iconHtml('clock')}</div>
+              <h4 style="color:var(--text)">Keine Tageszeit-Daten</h4>
+              <p class="muted">Im gewählten Zeitraum (${days} Tage) liegen noch keine zeitgestempelten Hörsessions vor.</p>
+            </div>`
+        } else {
+          const xLabels = Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}h`)
+          // Reverse so Mo is at top in ApexCharts (rendered bottom-up).
+          const series = WEEKDAYS.map((wdLabel, wdIdx) => ({
+            name: wdLabel,
+            data: xLabels.map((xl, h) => ({ x: xl, y: grid[wdIdx][h] }))
+          })).reverse()
+
+          makeHeatmap(heatHost, {
+            series,
+            height: 320,
+            colors: ['#8B5CF6']
+          })
+
+          // Delegate click on heatmap cells to open drill-down drawer.
+          heatHost.addEventListener('click', ev => {
+            const rectEl = ev.target.closest('[seriesname], rect')
+            if (!rectEl) return
+            // Heuristic: read aria-label / data attrs Apex sets, else use bounding box.
+            // Simpler reliable path: use the cell's parent <g> series-index + x-index
+            // via Apex's data-* attributes. Fallback: nothing — drawer not opened.
+            const g = rectEl.closest('g.apexcharts-series')
+            if (!g) return
+            const allSeries = heatHost.querySelectorAll('g.apexcharts-series')
+            // series order matches the reversed array → recover real weekday idx
+            let displayIdx = -1
+            allSeries.forEach((el, i) => { if (el === g) displayIdx = i })
+            if (displayIdx < 0) return
+            const weekday = (WEEKDAYS.length - 1) - displayIdx // un-reverse
+            // hour: find rect index inside the series group
+            const rects = g.querySelectorAll('rect')
+            let hour = -1
+            rects.forEach((r, i) => { if (r === rectEl) hour = i })
+            if (hour < 0 || hour > 23) return
+            const value = grid[weekday]?.[hour] || 0
+            openHourDrawer(weekday, hour, value)
+          })
         }
-        makeHeatmap(heatHost, {
-          data: heatPoints,
-          xLabels: Array.from({ length: 24 }, (_, i) => `${String(i).padStart(2, '0')}h`),
-          yLabels: WEEKDAYS,
-          colorScale: ['#1a1a2e', '#3b1d6b', '#7c3aed', '#a78bfa', '#f0abfc'],
-          onCellClick: async ({ x, y, value }) => openHourDrawer(y, x, value)
-        })
 
         fadeIn(body)
       }
 
-      // Heatmap aggregation — only useful when rawRows contain created_at timestamps.
-      function aggregateHeatmapFromRaw(rows) {
-        const grid = Array.from({ length: 7 }, () => Array(24).fill(0))
-        for (const r of rows) {
-          if (!r.created_at) continue
-          const d = new Date(r.created_at)
-          const wd = (d.getDay() + 6) % 7
-          const h = d.getHours()
-          grid[wd][h] += 1
-        }
-        return grid
-      }
-
-      // FIX med: no longer calls fetchTopEpisodesForHour with a 50k-row DB scan.
-      // Passes the already-loaded rawRows so no extra request is made.
-      // FIX med: drawer content update uses d.contentEl exclusively (the
-      // documented return property of drawer() from /lib/layout-extras.js).
       async function openHourDrawer(weekday, hour, plays) {
         const d = drawer({
           title: `${WEEKDAYS[weekday]} · ${String(hour).padStart(2, '0')}:00–${String(hour + 1).padStart(2, '0')}:00`,
           subtitle: `${fmtNumber(plays || 0)} Plays in diesem Zeitfenster`,
-          contentHtml: `<div id="hourLoading">${spinnerHtml()} Top-Episoden werden geladen…</div>`
+          contentHtml: `<div id="hourLoading">${spinnerHtml ? spinnerHtml() : ''} Top-Episoden werden geladen…</div>`
         })
-        // drawer() returns { close, root, setContent } — use setContent to update content.
         try {
-          const eps = await fetchTopEpisodesForHour(weekday, hour, rawRows)
+          const eps = topInWindow(rawRows, weekday, hour)
           const html = eps.length === 0
-            ? `<div class="empty-state"><div class="empty-icon">${iconHtml('headphones')}</div><h4>Keine Episoden in dieser Stunde</h4><p class="muted">Im gewählten Zeitraum wurde hier nichts gehört.</p></div>`
+            ? `<div class="empty-state" style="color:var(--text)"><div class="empty-icon">${iconHtml('headphones')}</div><h4 style="color:var(--text)">Keine Episoden in dieser Stunde</h4><p class="muted">Im gewählten Zeitraum wurde hier nichts gehört.</p></div>`
             : `
               <table class="data-table data-table-hover">
                 <thead><tr><th>#</th><th>Episode</th><th>Podcast</th><th style="text-align:right">Plays</th></tr></thead>
                 <tbody>
                   ${eps.map((e, i) => `
-                    <tr data-ep="${htmlEscape(String(e.id))}">
+                    <tr>
                       <td class="muted">${i + 1}</td>
                       <td>${htmlEscape(e.title)}</td>
                       <td class="muted">${htmlEscape(e.podcast)}</td>
@@ -320,7 +327,14 @@ export default {
                     </tr>`).join('')}
                 </tbody>
               </table>`
-          d.setContent(html)
+          if (typeof d.setContent === 'function') {
+            d.setContent(html)
+          } else if (d.contentEl) {
+            d.contentEl.innerHTML = html
+          } else if (d.root) {
+            const c = d.root.querySelector('.drawer-content, .drawer-body, [data-drawer-content]')
+            if (c) c.innerHTML = html
+          }
         } catch (err) {
           toast(`Fehler beim Laden: ${err.message || err}`, 'error')
         }
@@ -339,7 +353,7 @@ export default {
       })
       toolbar.querySelector('[data-act="csv"]').addEventListener('click', () => {
         try {
-          const daily = normaliseDaily(rawRows)
+          const daily = normaliseDaily(dailyRows)
           if (daily.length === 0) {
             toast('Keine Daten zum Exportieren.', 'info')
             return
@@ -361,7 +375,7 @@ export default {
       await load()
     } catch (err) {
       container.innerHTML = `
-        <div class="error-state glass-card" style="margin:24px;padding:24px;border:1px solid rgba(244,63,94,.3);border-radius:12px">
+        <div class="error-state glass-card" style="margin:24px;padding:24px;border:1px solid rgba(244,63,94,.3);border-radius:12px;color:var(--text);background:var(--bg-glass)">
           <h3>Panel konnte nicht initialisiert werden</h3>
           <p style="opacity:.8">${htmlEscape(err && (err.message || String(err)) || 'Unbekannter Fehler')}</p>
           <pre style="opacity:.6;font-size:11px;white-space:pre-wrap">${htmlEscape((err && err.stack) || '')}</pre>

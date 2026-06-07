@@ -164,28 +164,42 @@ export default {
         </div>
       `
 
-      statHero(body.querySelector('#heroTotal'), { label: 'Gesamt-User', value: effectiveTotal, icon: 'users' })
-      statHero(body.querySelector('#heroListeners'), { label: 'Listener', value: listeners.length, icon: 'headphones', accent: '#6366f1' })
-      statHero(body.querySelector('#heroPodcasters'), { label: 'Podcaster', value: podcasters.length, icon: 'mic', accent: '#ec4899' })
-      statHero(body.querySelector('#heroConv'), { label: 'Podcaster-Anteil', value: convRate, suffix: '%', icon: 'trending-up', accent: '#10b981' })
+      // FIX: statHero(opts) returns DOM-Node — first-arg-as-container war ignoriert,
+      // dadurch leere Hero-Container. Korrekt: returned-Node ans Target hängen.
+      body.querySelector('#heroTotal').replaceChildren(statHero({ label: 'Gesamt-User', value: effectiveTotal, icon: 'users' }))
+      body.querySelector('#heroListeners').replaceChildren(statHero({ label: 'Listener', value: listeners.length, icon: 'headphones', accent: '#6366f1' }))
+      body.querySelector('#heroPodcasters').replaceChildren(statHero({ label: 'Podcaster', value: podcasters.length, icon: 'mic', accent: '#ec4899' }))
+      body.querySelector('#heroConv').replaceChildren(statHero({ label: 'Podcaster-Anteil', value: convRate, suffix: '%', icon: 'trending-up', accent: '#10b981' }))
 
-      // FIX #7: countUp with raw numbers instead of parsing textContent (avoids thousands-dot misparse)
-      countUp(body.querySelector('#heroTotal .value'), effectiveTotal, { duration: 900 })
-      countUp(body.querySelector('#heroListeners .value'), listeners.length, { duration: 900 })
-      countUp(body.querySelector('#heroPodcasters .value'), podcasters.length, { duration: 900 })
-      countUp(body.querySelector('#heroConv .value'), parseFloat(convRate), { duration: 900, decimals: 1 })
+      // FIX: statHero schreibt .lx-hero-value (nicht .value) — querySelector('.value') war null.
+      // statHero feuert intern bereits countUp via requestAnimationFrame; eigener countUp-Aufruf
+      // hier zusätzlich nur für Hero-Conv (Float-Decimals) nötig — Rest skippen.
+      const convValNode = body.querySelector('#heroConv .lx-hero-value')
+      if (convValNode) countUp(convValNode, parseFloat(convRate), { duration: 900, decimals: 1 })
 
-      const donut = makeDonutChart(body.querySelector('#utsDonut'), [
-        { label: 'Listener', value: listeners.length, color: '#6366f1', key: 'listeners' },
-        { label: 'Podcaster (unverif.)', value: podcasters.length - verifiedPodcasters.length, color: '#ec4899', key: 'podcasters' },
-        { label: 'Podcaster (verif.)', value: verifiedPodcasters.length, color: '#10b981', key: 'verified' }
-      ], {
-        size: 280,
-        thickness: 36,
-        centerLabel: `${convRate}%`,
-        centerSub: 'Podcaster',
-        onSegmentClick: (seg) => this._openSegmentDrawer(seg.key, all)
-      })
+      // FIX: makeDonutChart-Signatur ist (container, {labels, values, colors, height}) —
+      // positional Array war undefined-values → leeres Donut.
+      const donutValues = [
+        listeners.length,
+        Math.max(0, podcasters.length - verifiedPodcasters.length),
+        verifiedPodcasters.length
+      ]
+      const donutLabels = ['Listener', 'Podcaster (unverif.)', 'Podcaster (verif.)']
+      const donutKeys = ['listeners', 'podcasters', 'verified']
+      const donut = (donutValues.some(v => v > 0))
+        ? makeDonutChart(body.querySelector('#utsDonut'), {
+            labels: donutLabels,
+            values: donutValues,
+            colors: ['#6366f1', '#ec4899', '#10b981'],
+            height: 280
+          })
+        : (body.querySelector('#utsDonut').innerHTML = `
+            <div class="empty-state" style="padding:48px 16px;text-align:center;color:var(--text-soft, #94a3b8);">
+              <div class="empty-icon" style="opacity:0.5;margin-bottom:8px;">${iconHtml('pie-chart')}</div>
+              <h3 style="color:var(--text, #e2e8f0);margin:0 0 4px;">Noch keine User-Verteilung</h3>
+              <p style="margin:0;font-size:13px;">Sobald Listener und Podcaster registriert sind, erscheint die Verteilung hier.</p>
+            </div>
+          `, null)
 
       // Schema-Truth: makeAreaChart erwartet { series, categories } (ApexCharts-Shape).
       makeAreaChart(body.querySelector('#utsTrend'), {
@@ -239,9 +253,11 @@ export default {
     }
 
     if (!filtered.length) {
+      // FIX: drawer-Lib akzeptiert contentHtml (String) oder content (Node). String an
+      // `content` wurde ignoriert → leerer Drawer.
       drawer({
         title,
-        content: `
+        contentHtml: `
           <div class="empty-state">
             <div class="empty-icon">${iconHtml('users')}</div>
             <h3>Keine User in dieser Gruppe</h3>
@@ -273,7 +289,7 @@ export default {
     drawer({
       title: `${title} · ${fmtNumber(filtered.length)}`,
       width: 720,
-      content: `
+      contentHtml: `
         <div class="drawer-toolbar">
           <input type="search" class="search-input" id="utsSearch" placeholder="Name oder Username suchen…">
           <button class="btn btn-ghost" data-act="csv-seg">${iconHtml('download')} CSV</button>
