@@ -46,7 +46,7 @@ async function fetchDau(days) {
   // Try admin_daily_series RPC first (SECURITY DEFINER, bypasses RLS).
   // Parameters are metric/days (no p_ prefix) per RPC signature.
   try {
-    const { data, error } = await sb.rpc('admin_daily_series', { metric: 'dau', days: Number(days) })
+    const { data, error } = await sb.rpc('admin_daily_series', { p_metric: 'dau', p_days: Number(days) })
     if (!error && data && data.length > 0) {
       return data.map(d => ({ date: d.date, users: Number(d.value) || 0 }))
     }
@@ -62,7 +62,7 @@ async function fetchDau(days) {
 
   const { data, error } = await sb
     .from('app_opens')
-    .select('user_id, created_at')
+    .select('device_fp, created_at')
     .gte('created_at', since.toISOString())
   if (error) throw error
   const buckets = new Map()
@@ -73,7 +73,7 @@ async function fetchDau(days) {
   }
   ;(data || []).forEach(row => {
     const key = formatDateKey(row.created_at)
-    if (buckets.has(key)) buckets.get(key).add(row.user_id)
+    if (buckets.has(key)) buckets.get(key).add(row.device_fp)
   })
   return Array.from(buckets.entries()).map(([date, set]) => ({
     date,
@@ -87,23 +87,13 @@ async function fetchUsersForDay(dateKey) {
   const end = new Date(start)
   end.setDate(end.getDate() + 1)
 
-  const { data: opens, error: opensErr } = await sb
-    .from('app_opens')
-    .select('user_id, created_at')
-    .gte('created_at', start.toISOString())
-    .lt('created_at', end.toISOString())
-
-  if (opensErr) throw opensErr
-
-  const ids = Array.from(new Set((opens || []).map(p => p.user_id))).filter(Boolean)
-  if (!ids.length) return []
-
-  // Query users table directly with .in() — SECURITY DEFINER RPC is not needed
-  // here since we pass explicit ids; avoids loading all 500 users and pagination issues.
+  // Schema-Truth: app_opens hat keinen user_id → User für den Tag via users.last_seen_at.
   const { data: users, error: usersErr } = await sb
     .from('users')
     .select('id, username, full_name, avatar_url, is_verified, last_seen_at')
-    .in('id', ids)
+    .gte('last_seen_at', start.toISOString())
+    .lt('last_seen_at', end.toISOString())
+    .limit(500)
 
   if (usersErr) throw usersErr
   if (!users) return []

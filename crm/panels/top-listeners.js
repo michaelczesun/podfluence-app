@@ -11,29 +11,29 @@ const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 }
 async function fetchListeners(days) {
   const since = new Date(Date.now() - days * 86400000).toISOString()
 
-  // Aggregate server-side to avoid pulling 50k raw rows and RLS ambiguity
+  // Schema-Truth: listening_activity.listener_id + listened_ms (ms!), episode_guid.
   const { data: events, error } = await sb
-    .from('episode_listening_pulses')
-    .select('user_id, minutes, created_at, episode_id')
+    .from('listening_activity')
+    .select('listener_id, listened_ms, created_at, episode_guid')
     .gte('created_at', since)
-    .not('user_id', 'is', null)
+    .not('listener_id', 'is', null)
     .limit(50000)
   if (error) throw error
 
   const perUser = new Map()
   for (const ev of events || []) {
-    if (!ev.user_id) continue
-    const m = Number(ev.minutes) || 0
+    if (!ev.listener_id) continue
+    const m = Number(ev.listened_ms || 0) / 60000  // ms → minutes
     const day = (ev.created_at || '').slice(0, 10)
-    let agg = perUser.get(ev.user_id)
+    let agg = perUser.get(ev.listener_id)
     if (!agg) {
-      agg = { user_id: ev.user_id, total: 0, byDay: {}, episodeMins: {} }
-      perUser.set(ev.user_id, agg)
+      agg = { user_id: ev.listener_id, total: 0, byDay: {}, episodeMins: {} }
+      perUser.set(ev.listener_id, agg)
     }
     agg.total += m
     agg.byDay[day] = (agg.byDay[day] || 0) + m
-    if (ev.episode_id) {
-      agg.episodeMins[ev.episode_id] = (agg.episodeMins[ev.episode_id] || 0) + m
+    if (ev.episode_guid) {
+      agg.episodeMins[ev.episode_guid] = (agg.episodeMins[ev.episode_guid] || 0) + m
     }
   }
 
@@ -45,7 +45,7 @@ async function fetchListeners(days) {
   if (topIds.length) {
     const { data: profiles, error: profErr } = await sb
       .from('users')
-      .select('id, display_name, username, avatar_url, is_premium, is_verified')
+      .select('id, full_name, username, avatar_url, is_premium, is_verified')
       .in('id', topIds)
     if (profErr) throw profErr
     for (const p of profiles || []) {
@@ -70,7 +70,7 @@ async function fetchListeners(days) {
     return {
       rank: i + 1,
       user_id: u.user_id,
-      name: profile.display_name || u.user_id,
+      name: profile.full_name || profile.username || u.user_id,
       username: profile.username || '',
       avatar: profile.avatar_url || '',
       is_premium: profile.is_premium || false,

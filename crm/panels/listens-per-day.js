@@ -12,8 +12,8 @@ const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 // Returns rows: { date, plays, total_minutes } — one row per day.
 async function fetchDaily(days = 30) {
   const { data, error } = await sb.rpc('admin_daily_series', {
-    metric: 'listens',
-    days,
+    p_metric: 'listens',
+    p_days: days,
   })
   if (error) throw error
   return data || []

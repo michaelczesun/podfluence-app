@@ -344,7 +344,10 @@ async function toggleFeature(id, on, rowRef) {
       !on,
     )
     if (!ok) return false
-    const { error } = await sb.from('podcasts').update({ is_featured: on }).eq('user_id', id)
+    // Schema-Truth: podcasts hat author_id (kein user_id) und keine is_featured-Spalte → no-op
+    toast('Featuring noch nicht backend-gepflegt — Spalte fehlt', 'info')
+    return false
+    // const { error } = await sb.from('podcasts').update({ is_featured: on }).eq('author_id', id)
     if (error) throw new Error(error.message || String(error))
     toast(on ? 'Podcaster wird jetzt gefeatured' : 'Feature entfernt', 'success')
     return true

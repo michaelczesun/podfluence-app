@@ -45,9 +45,10 @@ function buildDayLabels(days) {
 
 // FIX #3: throw on error so load() catch-block triggers error state instead of silently returning []
 async function fetchListeningPulses(sinceIso) {
+  // Schema-Truth: listening_activity ist die Quelle, mit podcaster_id + created_at.
   const { data, error } = await sb
-    .from('episode_listening_pulses')
-    .select('*')
+    .from('listening_activity')
+    .select('podcaster_id, created_at')
     .gte('created_at', sinceIso)
     .limit(50000)
   if (error) throw error
@@ -79,18 +80,18 @@ async function fetchData(range) {
     }
   }
 
-  // FIX #1: episodes proxy — use `podcasts` table (user_id + created_at available)
+  // Schema-Truth: podcasts.author_id (kein user_id)
   let safeEpisodes = []
   {
     const { data, error } = await sb
       .from('podcasts')
-      .select('user_id, created_at')
+      .select('author_id, created_at')
       .gte('created_at', sinceIso)
       .limit(50000)
     if (error) {
-      missingProxies.push('episodes (podcasts)')
+      missingProxies.push('podcasts')
     } else {
-      safeEpisodes = data || []
+      safeEpisodes = (data || []).map(r => ({ user_id: r.author_id, created_at: r.created_at }))
     }
   }
 
@@ -109,13 +110,11 @@ async function fetchData(range) {
     }
   }
 
-  // episode_listening_pulses — existiert (ersetzt episode_listens)
-  // FIX #3: throws on error (propagates to load() catch)
+  // listening_activity gibt podcaster_id direkt
   const listensRaw = await fetchListeningPulses(sinceIso)
-  const safeListens = listensRaw.map(r => ({
-    episode_user_id: r.episode_user_id || r.user_id || null,
-    created_at: r.created_at
-  })).filter(r => r.episode_user_id)
+  const safeListens = listensRaw
+    .filter(r => r.podcaster_id)
+    .map(r => ({ episode_user_id: r.podcaster_id, created_at: r.created_at }))
 
   state.missingProxies = missingProxies
 
@@ -179,12 +178,12 @@ async function fetchData(range) {
     const ids = top.map(r => r.user_id)
     const { data: users } = await sb
       .from('users')
-      .select('id, display_name, username, avatar_url')
+      .select('id, full_name, username, avatar_url')
       .in('id', ids)
     const umap = new Map((users || []).map(u => [u.id, u]))
     for (const r of top) {
       const u = umap.get(r.user_id) || {}
-      r.name = u.display_name || u.username || (r.user_id ? r.user_id.slice(0, 8) : 'Unbekannt')
+      r.name = u.full_name || u.username || (r.user_id ? r.user_id.slice(0, 8) : 'Unbekannt')
       r.username = u.username || ''
       r.avatar = u.avatar_url || ''
     }

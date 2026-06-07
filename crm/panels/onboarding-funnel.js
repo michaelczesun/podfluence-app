@@ -28,12 +28,12 @@ async function fetchFunnel() {
   const since30 = new Date(Date.now() - 30 * 86400000).toISOString()
   const since7  = new Date(Date.now() - 7  * 86400000).toISOString()
 
-  // FIX (high): use correct parameter names without p_-prefix
+  // RPC-Param-Namen sind p_limit/p_offset/p_search bzw. p_metric/p_days
   const [usersRes, signupSeriesRes, listensRes] = await Promise.all([
-    sb.rpc('admin_users_list_full', { limit: 5000, offset: 0, search: '' }),
-    sb.rpc('admin_daily_series', { metric: 'signups', days: 30 }),
-    sb.from('episode_listening_pulses')
-      .select('user_id')
+    sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' }),
+    sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: 30 }),
+    sb.from('listening_activity')
+      .select('listener_id')
       .gte('created_at', since30)
       .limit(20000)
   ])
@@ -41,12 +41,10 @@ async function fetchFunnel() {
   if (usersRes.error) throw usersRes.error
 
   const all = usersRes.data || []
-  // FIX (med): RLS may block episode_listening_pulses — treat empty result gracefully,
-  // log warning so admin is aware instead of silently returning empty listenMembers.
   if (listensRes.error) {
-    console.warn('[onboarding-funnel] episode_listening_pulses query blocked (RLS?), First-Listen-Stufe zeigt 0:', listensRes.error.message)
+    console.warn('[onboarding-funnel] listening_activity query failed:', listensRes.error.message)
   }
-  const listenSet = new Set((listensRes.data || []).map(l => l.user_id))
+  const listenSet = new Set((listensRes.data || []).map(l => l.listener_id))
 
   // Signup = all users (total registered)
   const signupMembers = all

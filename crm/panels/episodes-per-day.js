@@ -29,7 +29,7 @@ async function fetchSeries() {
   }
 
   // FIX(high): Parameternamen ohne p_-Prefix — RPC-Signatur ist admin_daily_series(metric, days)
-  const { data: series, error: seriesErr } = await sb.rpc('admin_daily_series', { metric: 'episodes', days: DAYS })
+  const { data: series, error: seriesErr } = await sb.rpc('admin_daily_series', { p_metric: 'episodes', p_days: DAYS })
   if (seriesErr) throw seriesErr
   for (const row of (series || [])) {
     const k = row.date ? isoDay(row.date) : null

@@ -26,33 +26,39 @@ function last7Days() {
 
 async function fetchSessions(days = 7) {
   const since = new Date(Date.now() - days * DAY_MS).toISOString()
-  // episode_listening_pulses has: user_id, episode_id, minutes, created_at
-  // episodes has: id, title, podcast_id; podcasts has: id, title, cover_url, host_user_id
+  // Schema-Truth: listening_activity hat alles inline (kein JOIN nötig).
+  // Spalten: listener_id, podcast_id, podcast_title, episode_guid, episode_title, episode_image,
+  //          listened_ms, created_at, podcaster_id
   const { data, error } = await sb
-    .from('episode_listening_pulses')
-    .select('user_id, episode_id, minutes, created_at, episodes:episode_id(id, title, podcast_id, podcasts:podcast_id(id, title, cover_url, host_user_id))')
+    .from('listening_activity')
+    .select('listener_id, podcast_id, podcast_title, episode_guid, episode_title, episode_image, listened_ms, created_at, podcaster_id')
     .gte('created_at', since)
     .limit(100000)
   if (error) throw error
 
   const rows = data || []
-
-  // FIX #3: warn if the hard-cap may have been hit (truncation guard)
   if (rows.length >= 100000) {
-    console.warn('[top-listened-podcasts] fetchSessions: result hit the 100 000-row cap — data may be truncated. Consider moving aggregation to a server-side RPC.')
+    console.warn('[top-listened-podcasts] fetchSessions: 100k-cap erreicht — Daten evtl. truncated.')
     toast('Hinweis: Datenmenge sehr groß – Ergebnisse könnten unvollständig sein.', 'warning')
   }
 
-  // Remap to shape aggregatePodcasts expects: r.episodes.podcasts
+  // Form an shape angleichen, die aggregatePodcasts erwartet (r.episodes.podcasts).
   return rows.map(r => ({
-    user_id: r.user_id,
-    episode_id: r.episode_id,
-    duration_seconds: (Number(r.minutes) || 0) * 60,
+    user_id: r.listener_id,
+    episode_id: r.episode_guid,
+    duration_seconds: Math.round(Number(r.listened_ms || 0) / 1000),
     started_at: r.created_at,
-    episodes: r.episodes ? {
-      ...r.episodes,
-      podcasts: r.episodes.podcasts || null,
-    } : null,
+    episodes: {
+      id: r.episode_guid,
+      title: r.episode_title || 'Unbekannte Episode',
+      podcast_id: r.podcast_id,
+      podcasts: {
+        id: r.podcast_id,
+        title: r.podcast_title || 'Unbekannter Podcast',
+        cover_url: r.episode_image || null,
+        host_user_id: r.podcaster_id || null,
+      },
+    },
   }))
 }
 

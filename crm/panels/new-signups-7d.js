@@ -36,7 +36,7 @@ function buildDayBuckets(rangeDays) {
 // FIX (high): use parameter names matching DB signature admin_daily_series(metric, days) — no p_ prefix
 // FIX (med): return { buckets, total } directly from admin_daily_series data — no dummy-row synthesis
 async function fetchSignupsInRange(rangeDays) {
-  const { data, error } = await sb.rpc('admin_daily_series', { metric: 'signups', days: rangeDays })
+  const { data, error } = await sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: rangeDays })
   if (error) throw error
   const buckets = buildDayBuckets(rangeDays)
   const idx = new Map(buckets.map((b, i) => [b.key, i]))

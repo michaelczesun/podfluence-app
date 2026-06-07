@@ -60,7 +60,7 @@ function aggregateByType(rows) {
 async function fetchUsersForType(type) {
   const { data, error } = await sb
     .from('achievements')
-    .select('user_id, unlocked_at, users(username, display_name, avatar_url)')
+    .select('user_id, unlocked_at, users(username, full_name, avatar_url)')
     .eq('achievement_type', type)
     .order('unlocked_at', { ascending: false })
     .limit(500)
@@ -80,7 +80,7 @@ async function manualGrant(type, userIdentifier) {
     const { data: uRows, error: uErr } = await sb
       .from('users')
       .select('id')
-      .or(`username.eq.${identifier},display_name.eq.${identifier}`)
+      .or(`username.eq.${identifier},full_name.eq.${identifier}`)
       .limit(1)
     if (uErr) throw uErr
     if (!uRows || !uRows.length) {

@@ -38,7 +38,7 @@ async function fetchLeaderboard() {
       // FIX: 'profiles' → 'users' (korrekte Tabelle laut Schema)
       const { data: users } = await sb
         .from('users')
-        .select('id, display_name, username, avatar_url, is_verified')
+        .select('id, full_name, username, avatar_url, is_verified')
         .in('id', ids)
       const um = new Map((users || []).map(u => [u.id, u]))
       list.forEach(l => {
@@ -99,7 +99,7 @@ async function fetchReferredUsers(inviterId) {
       // FIX: 'profiles' → 'users'
       const { data: u } = await sb
         .from('users')
-        .select('id, display_name, username, avatar_url, is_verified, created_at')
+        .select('id, full_name, username, avatar_url, is_verified, created_at')
         .in('id', ids)
       users = u || []
     } catch (_) {}

@@ -84,7 +84,7 @@ async function loadData(range) {
     const ids = sortedReferrers.map(([id]) => id)
     const { data: profiles } = await sb
       .from('users')
-      .select('id, display_name, username, avatar_url')
+      .select('id, full_name, username, avatar_url')
       .in('id', ids)
     const profileMap = {}
     ;(profiles || []).forEach(p => { profileMap[p.id] = p })
@@ -102,7 +102,7 @@ async function loadData(range) {
     const allIds = [...new Set(recent50.flatMap(r => [r.referrer_id, r.referred_id]).filter(Boolean))]
     const { data: profiles2 } = await sb
       .from('users')
-      .select('id, display_name, username, avatar_url')
+      .select('id, full_name, username, avatar_url')
       .in('id', allIds)
     const pmap = {}
     ;(profiles2 || []).forEach(p => { pmap[p.id] = p })
