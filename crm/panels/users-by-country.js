@@ -183,7 +183,10 @@ function renderRegions(countries) {
             <div class="region-name">${htmlEscape(r)}</div>
             <div class="region-count">${fmtNumber(n)}</div>
           </div>
-        `).join('') || '<div class="muted">Keine Daten</div>'}
+        `).join('') || `<div class="muted" style="text-align:center;padding:20px 12px;font-size:12px;line-height:1.4">
+          <div style="font-size:22px;opacity:.5;margin-bottom:4px">${iconHtml('globe')}</div>
+          Noch keine regionale Verteilung — sobald User ihr Land angeben, erscheint hier die Aufteilung.
+        </div>`}
       </div>
     </div>
   `
