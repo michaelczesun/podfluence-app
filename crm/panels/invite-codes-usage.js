@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js'
+import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
 import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
+import { drawer, segmentedControl } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const PAGE_SIZE = 50
@@ -128,85 +128,109 @@ function genCodeString() {
   return s
 }
 
-export default {
+function renderMountError(container, err, retryFn) {
+  container.innerHTML = `
+    <div style="padding:40px;text-align:center">
+      <div style="font-size:40px;margin-bottom:10px">⚠️</div>
+      <div style="font-weight:600;margin-bottom:6px">Panel konnte nicht geladen werden</div>
+      <div style="opacity:.6;font-size:13px;margin-bottom:18px">${htmlEscape(err?.message || String(err))}</div>
+      <button id="mount-retry" style="padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:inherit;cursor:pointer">Erneut versuchen</button>
+    </div>
+  `
+  container.querySelector('#mount-retry')?.addEventListener('click', retryFn)
+}
+
+const panel = {
   id: 'invite-codes-usage',
   title: 'Invite-Codes Nutzung',
   category: 'growth',
 
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell">
-        <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid rgba(255,255,255,.06)">
-          <div>
-            <h2 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-.3px">Invite-Codes Nutzung</h2>
-            <div style="margin-top:4px;font-size:12px;opacity:.55">Ausstellung, Einlösung und Widerruf von Einladungscodes</div>
-          </div>
-          <div class="toolbar" id="toolbar" style="display:flex;gap:8px;align-items:center"></div>
-        </div>
-        <div class="panel-body" id="body" style="padding:18px 22px"></div>
-      </div>
-    `
-
-    const body = container.querySelector('#body')
-    const toolbar = container.querySelector('#toolbar')
-
-    const tbBtn = (icon, label, cls = '') => `<button class="tb-btn ${cls}" data-act="${label}" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:inherit;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s">${iconHtml(icon)}<span>${label}</span></button>`
-
-    toolbar.innerHTML = [
-      tbBtn('refresh', 'Aktualisieren'),
-      tbBtn('plus', 'Bulk-Generate', 'primary'),
-      tbBtn('file-text', 'PDF'),
-      tbBtn('download', 'CSV'),
-    ].join('')
-
-    body.innerHTML = `
-      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px">
-        ${[1,2,3,4].map(()=>`<div class="sk" style="height:108px;border-radius:16px"></div>`).join('')}
-      </div>
-      <div class="sk" style="height:240px;border-radius:16px;margin-bottom:18px"></div>
-      <div class="sk" style="height:380px;border-radius:16px"></div>
-    `
-    body.querySelectorAll('.sk').forEach(el => skeletonLoader(el))
-
-    let codes = []
     try {
-      codes = await fetchCodes()
-    } catch (e) {
-      renderError(body, e, () => this.mount(container))
-      return
-    }
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 22px;border-bottom:1px solid rgba(255,255,255,.06)">
+            <div>
+              <h2 style="margin:0;font-size:20px;font-weight:600;letter-spacing:-.3px">Invite-Codes Nutzung</h2>
+              <div style="margin-top:4px;font-size:12px;opacity:.55">Ausstellung, Einlösung und Widerruf von Einladungscodes</div>
+            </div>
+            <div class="toolbar" id="toolbar" style="display:flex;gap:8px;align-items:center"></div>
+          </div>
+          <div class="panel-body" id="body" style="padding:18px 22px"></div>
+        </div>
+      `
 
-    state.codes = codes
-    render(body, container)
-    fadeIn(container)
+      const body = container.querySelector('#body')
+      const toolbar = container.querySelector('#toolbar')
 
-    toolbar.addEventListener('click', async (e) => {
-      const btn = e.target.closest('.tb-btn')
-      if (!btn) return
-      const act = btn.dataset.act
-      if (act === 'Aktualisieren') {
-        btn.classList.add('loading')
-        try { state.codes = await fetchCodes(); render(body, container) }
-        catch (err) { toast('Fehler beim Laden: '+(err.message||err), 'error') }
-        finally { btn.classList.remove('loading') }
-      } else if (act === 'Bulk-Generate') {
-        openBulkGenerate(container, async () => { state.codes = await fetchCodes(); render(body, container) })
-      } else if (act === 'PDF') {
-        exportPanelAsPdf(container, { filename: 'invite-codes.pdf', title: 'Invite-Codes Nutzung' })
-      } else if (act === 'CSV') {
-        exportCsv(state.codes.map(c => ({
-          code: c.code,
-          status: codeStatus(c),
-          owner: c.owner?.username || c.owner_id || '',
-          used_by: c.used?.username || c.used_by || '',
-          created_at: c.created_at,
-          used_at: c.used_at || '',
-          revoked_at: c.revoked_at || '',
-        })), 'invite-codes.csv')
+      const tbBtn = (icon, label, cls = '') => `<button class="tb-btn ${cls}" data-act="${label}" style="display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:rgba(255,255,255,.04);color:inherit;font-size:12px;font-weight:500;cursor:pointer;transition:all .15s">${iconHtml(icon)}<span>${label}</span></button>`
+
+      toolbar.innerHTML = [
+        tbBtn('refresh', 'Aktualisieren'),
+        tbBtn('plus', 'Bulk-Generate', 'primary'),
+        tbBtn('file-text', 'PDF'),
+        tbBtn('download', 'CSV'),
+      ].join('')
+
+      body.innerHTML = `
+        <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px">
+          ${[1,2,3,4].map(()=>`<div class="sk" style="height:108px;border-radius:16px"></div>`).join('')}
+        </div>
+        <div class="sk" style="height:240px;border-radius:16px;margin-bottom:18px"></div>
+        <div class="sk" style="height:380px;border-radius:16px"></div>
+      `
+      body.querySelectorAll('.sk').forEach(el => { try { skeletonLoader(el) } catch(_){} })
+
+      let codes = []
+      try {
+        codes = await fetchCodes()
+      } catch (e) {
+        renderError(body, e, () => panel.mount(container))
+        return
       }
-    })
+
+      state.codes = codes
+      render(body, container)
+      try { fadeIn(container) } catch(_) {}
+
+      toolbar.addEventListener('click', async (e) => {
+        const btn = e.target.closest('.tb-btn')
+        if (!btn) return
+        const act = btn.dataset.act
+        if (act === 'Aktualisieren') {
+          btn.classList.add('loading')
+          try { state.codes = await fetchCodes(); render(body, container) }
+          catch (err) { toast('Fehler beim Laden: '+(err.message||err), 'error') }
+          finally { btn.classList.remove('loading') }
+        } else if (act === 'Bulk-Generate') {
+          openBulkGenerate(container, async () => {
+            try { state.codes = await fetchCodes(); render(body, container) }
+            catch (err) { toast('Reload fehlgeschlagen: '+(err.message||err), 'error') }
+          })
+        } else if (act === 'PDF') {
+          try { exportPanelAsPdf(container, { filename: 'invite-codes.pdf', title: 'Invite-Codes Nutzung' }) }
+          catch (err) { toast('PDF-Export fehlgeschlagen', 'error') }
+        } else if (act === 'CSV') {
+          try {
+            exportCsv(state.codes.map(c => ({
+              code: c.code,
+              status: codeStatus(c),
+              owner: c.owner?.username || c.owner_id || '',
+              used_by: c.used?.username || c.used_by || '',
+              created_at: c.created_at,
+              used_at: c.used_at || '',
+              revoked_at: c.revoked_at || '',
+            })), 'invite-codes.csv')
+          } catch (err) { toast('CSV-Export fehlgeschlagen', 'error') }
+        }
+      })
+    } catch (err) {
+      renderMountError(container, err, () => panel.mount(container))
+    }
   },
 }
+
+export default panel
 
 function renderError(body, e, retry) {
   body.innerHTML = `
@@ -293,7 +317,10 @@ function render(body, container) {
       ${h.sub ? `<div style="font-size:11px;opacity:.55;margin-top:4px">${h.sub}</div>` : ''}
     </div>
   `).join('')
-  heros.querySelectorAll('.hero-val').forEach(el => countUp(el, parseInt(el.dataset.target,10), { duration: 800 }))
+  heros.querySelectorAll('.hero-val').forEach(el => {
+    try { countUp(el, parseInt(el.dataset.target,10), { duration: 800 }) }
+    catch(_) { el.textContent = el.dataset.target }
+  })
 
   try {
     makeAreaChart(body.querySelector('#chart-timeline'), {
@@ -367,7 +394,8 @@ function renderTable(body, container) {
       </div>
     `
     wrap.querySelector('#empty-cta')?.addEventListener('click', () => openBulkGenerate(container, async () => {
-      state.codes = await fetchCodes(); render(body, container)
+      try { state.codes = await fetchCodes(); render(body, container) }
+      catch (err) { toast('Reload fehlgeschlagen: '+(err.message||err), 'error') }
     }))
     body.querySelector('#pager').innerHTML = ''
     return
@@ -496,10 +524,12 @@ function openCodeDrawer(container, code) {
       ${s !== 'revoked' ? `<button id="revoke-drawer" style="width:100%;padding:12px;border-radius:10px;border:1px solid rgba(255,69,58,.3);background:rgba(255,69,58,.1);color:#ff453a;font-weight:600;cursor:pointer">Code widerrufen</button>` : ''}
     </div>
   `
-  const d = drawer({ title: 'Code-Details', html, width: 460 })
+  let d
+  try { d = drawer({ title: 'Code-Details', html, width: 460 }) }
+  catch (e) { toast('Drawer konnte nicht geöffnet werden', 'error'); return }
   setTimeout(() => {
     document.querySelector('#copy')?.addEventListener('click', () => {
-      navigator.clipboard.writeText(shareUrl).then(() => toast('Link kopiert', 'success'))
+      navigator.clipboard.writeText(shareUrl).then(() => toast('Link kopiert', 'success')).catch(() => toast('Kopieren fehlgeschlagen', 'error'))
     })
     document.querySelector('#revoke-drawer')?.addEventListener('click', () => {
       doRevoke(container, code, container.querySelector('#body'), () => d?.close?.())
@@ -588,6 +618,7 @@ function openBulkGenerate(container, onDone) {
   const search = document.querySelector('#user-search')
   const results = document.querySelector('#user-results')
   const pickedBox = document.querySelector('#user-picked')
+  if (!search || !results || !pickedBox) return
 
   const runSearch = debounce(async () => {
     const users = await fetchUsers(search.value)
@@ -627,7 +658,7 @@ function showShareLinks(codes) {
     ],
     onAction: (v) => {
       if (v === 'copy') {
-        navigator.clipboard.writeText(lines).then(() => toast('Alle Links kopiert', 'success'))
+        navigator.clipboard.writeText(lines).then(() => toast('Alle Links kopiert', 'success')).catch(() => toast('Kopieren fehlgeschlagen', 'error'))
         return false
       }
       return true

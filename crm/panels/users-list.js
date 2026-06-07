@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
 import { makeAreaChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+import { drawer, statHero } from '/lib/layout-extras.js'
 import { showUserDetailModal, verifyUser, banUser, grantPremium } from '/lib/panel-actions.js'
 
 const PAGE_SIZE = 50
@@ -27,36 +27,58 @@ export default {
   category: 'users',
 
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell users-list-panel">
-        <div class="panel-head">
-          <div>
-            <h2>Nutzer-Liste</h2>
-            <div class="panel-sub">Alle registrierten Podfluencer im Überblick</div>
+    try {
+      container.innerHTML = `
+        <div class="panel-shell users-list-panel">
+          <div class="panel-head">
+            <div>
+              <h2>Nutzer-Liste</h2>
+              <div class="panel-sub">Alle registrierten Podfluencer im Überblick</div>
+            </div>
+            <div class="toolbar">
+              <button class="btn btn-ghost" data-act="refresh" title="Aktualisieren">${iconHtml('refresh-cw')} Aktualisieren</button>
+              <button class="btn btn-ghost" data-act="pdf" title="PDF Export">${iconHtml('file-text')} PDF</button>
+              <button class="btn btn-ghost" data-act="csv" title="CSV Export">${iconHtml('download')} CSV</button>
+            </div>
           </div>
-          <div class="toolbar">
-            <button class="btn btn-ghost" data-act="refresh" title="Aktualisieren">${iconHtml('refresh-cw')} Aktualisieren</button>
-            <button class="btn btn-ghost" data-act="pdf" title="PDF Export">${iconHtml('file-text')} PDF</button>
-            <button class="btn btn-ghost" data-act="csv" title="CSV Export">${iconHtml('download')} CSV</button>
+          <div class="panel-body" id="ul-body">
+            ${skeletonLoader({ rows: 8 })}
           </div>
         </div>
-        <div class="panel-body" id="ul-body">
-          ${skeletonLoader({ rows: 8 })}
+      `
+
+      container.querySelector('[data-act="refresh"]')?.addEventListener('click', () => loadAll(container))
+      container.querySelector('[data-act="pdf"]')?.addEventListener('click', () => {
+        try { exportPanelAsPdf(container, 'nutzer-liste') }
+        catch (e) { toast(e?.message || 'PDF-Export fehlgeschlagen', 'error') }
+      })
+      container.querySelector('[data-act="csv"]')?.addEventListener('click', () => exportCurrentCsv())
+
+      try { fadeIn(container.querySelector('.panel-shell')) } catch {}
+      // Background-Loading: Skeleton ist schon sichtbar, Daten kommen async
+      await loadAll(container)
+    } catch (e) {
+      console.error('[users-list] mount failed', e)
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="empty-state error-state">
+            <div class="empty-icon">${iconHtml('alert-triangle')}</div>
+            <h3>Panel konnte nicht geladen werden</h3>
+            <p>${htmlEscape(e?.message || 'Unbekannter Fehler beim Mount.')}</p>
+            <button class="btn btn-primary" data-act="mount-retry">${iconHtml('refresh-cw')} Erneut versuchen</button>
+          </div>
         </div>
-      </div>
-    `
-
-    container.querySelector('[data-act="refresh"]').addEventListener('click', () => loadAll(container))
-    container.querySelector('[data-act="pdf"]').addEventListener('click', () => exportPanelAsPdf(container, 'nutzer-liste'))
-    container.querySelector('[data-act="csv"]').addEventListener('click', () => exportCurrentCsv())
-
-    fadeIn(container.querySelector('.panel-shell'))
-    await loadAll(container)
+      `
+      container.querySelector('[data-act="mount-retry"]')?.addEventListener('click', () => {
+        try { this.mount(container) } catch (err) { console.error(err) }
+      })
+    }
   }
 }
 
 async function loadAll(container) {
   const body = container.querySelector('#ul-body')
+  if (!body) return
   state.loading = true
   body.innerHTML = skeletonLoader({ rows: 8 })
 
@@ -71,7 +93,7 @@ async function loadAll(container) {
     wire(body, container)
     animateHero(body)
   } catch (e) {
-    console.error(e)
+    console.error('[users-list] loadAll failed', e)
     body.innerHTML = errorState(e?.message || 'Unbekannter Fehler')
     body.querySelector('[data-act="retry"]')?.addEventListener('click', () => loadAll(container))
   } finally {
@@ -311,7 +333,7 @@ function errorState(msg) {
     <div class="empty-state error-state">
       <div class="empty-icon">${iconHtml('alert-triangle')}</div>
       <h3>Konnte nicht geladen werden</h3>
-      <p>${htmlEscape(msg)}</p>
+      <p>Fehler: ${htmlEscape(msg)}</p>
       <button class="btn btn-primary" data-act="retry">${iconHtml('refresh-cw')} Erneut versuchen</button>
     </div>`
 }
@@ -323,7 +345,7 @@ function wire(body, container) {
       state.search = e.target.value
       state.page = 1
       state.selected.clear()
-      try { await fetchPage(); refreshTableOnly(body, container) } catch (err) { toast(err.message || 'Fehler', 'error') }
+      try { await fetchPage(); refreshTableOnly(body, container) } catch (err) { toast(err?.message || 'Fehler', 'error') }
     }, 280)
     search.addEventListener('input', onSearch)
   }
@@ -337,7 +359,7 @@ function wire(body, container) {
         await fetchPage()
         refreshTableOnly(body, container)
         body.querySelectorAll('.pill').forEach(x => x.classList.toggle('is-active', x.dataset.filter === state.filter))
-      } catch (err) { toast(err.message || 'Fehler', 'error') }
+      } catch (err) { toast(err?.message || 'Fehler', 'error') }
     })
   })
 
@@ -349,10 +371,12 @@ function wire(body, container) {
     state.search = ''
     state.filter = 'all'
     state.page = 1
-    await fetchPage()
-    refreshTableOnly(body, container)
-    const s = body.querySelector('#ul-search'); if (s) s.value = ''
-    body.querySelectorAll('.pill').forEach(x => x.classList.toggle('is-active', x.dataset.filter === 'all'))
+    try {
+      await fetchPage()
+      refreshTableOnly(body, container)
+      const s = body.querySelector('#ul-search'); if (s) s.value = ''
+      body.querySelectorAll('.pill').forEach(x => x.classList.toggle('is-active', x.dataset.filter === 'all'))
+    } catch (err) { toast(err?.message || 'Fehler', 'error') }
   })
 }
 
@@ -402,15 +426,15 @@ function wirePagination(body, container) {
   body.querySelector('[data-page="prev"]')?.addEventListener('click', async () => {
     if (state.page <= 1) return
     state.page--
-    await fetchPage()
-    refreshTableOnly(body, container)
+    try { await fetchPage(); refreshTableOnly(body, container) }
+    catch (err) { toast(err?.message || 'Fehler', 'error') }
   })
   body.querySelector('[data-page="next"]')?.addEventListener('click', async () => {
     const pages = Math.ceil(state.total / PAGE_SIZE)
     if (state.page >= pages) return
     state.page++
-    await fetchPage()
-    refreshTableOnly(body, container)
+    try { await fetchPage(); refreshTableOnly(body, container) }
+    catch (err) { toast(err?.message || 'Fehler', 'error') }
   })
 }
 
@@ -421,7 +445,7 @@ function refreshTableOnly(body, container) {
   if (pag) {
     const tmp = document.createElement('div')
     tmp.innerHTML = renderPagination()
-    pag.replaceWith(tmp.firstElementChild)
+    if (tmp.firstElementChild) pag.replaceWith(tmp.firstElementChild)
   }
   wireTable(body, container)
   wirePagination(body, container)
@@ -440,43 +464,43 @@ function updateBulkBar(body) {
 function wireBulk(body, container) {
   const bar = body.querySelector('#ul-bulk')
   if (!bar) return
-  bar.querySelector('[data-bulk="clear"]').addEventListener('click', () => {
+  bar.querySelector('[data-bulk="clear"]')?.addEventListener('click', () => {
     state.selected.clear()
     refreshTableOnly(body, container)
   })
-  bar.querySelector('[data-bulk="verify"]').addEventListener('click', async () => {
+  bar.querySelector('[data-bulk="verify"]')?.addEventListener('click', async () => {
     const ok = await confirmDialog({ title: `${state.selected.size} Nutzer verifizieren?`, message: 'Diese Nutzer werden als verifiziert markiert.' })
     if (!ok) return
     let n = 0
-    for (const id of state.selected) { try { await verifyUser(id); n++ } catch {} }
+    for (const id of state.selected) { try { await verifyUser(id); n++ } catch (e) { console.warn('verify failed', id, e) } }
     toast(`${n} verifiziert`, 'success')
     state.selected.clear()
     await loadAll(container)
   })
-  bar.querySelector('[data-bulk="premium"]').addEventListener('click', async () => {
+  bar.querySelector('[data-bulk="premium"]')?.addEventListener('click', async () => {
     const ok = await confirmDialog({ title: `${state.selected.size} × Premium freischalten?` })
     if (!ok) return
     let n = 0
-    for (const id of state.selected) { try { await grantPremium(id); n++ } catch {} }
+    for (const id of state.selected) { try { await grantPremium(id); n++ } catch (e) { console.warn('premium failed', id, e) } }
     toast(`${n} × Premium aktiviert`, 'success')
     state.selected.clear()
     await loadAll(container)
   })
-  bar.querySelector('[data-bulk="ban"]').addEventListener('click', async () => {
+  bar.querySelector('[data-bulk="ban"]')?.addEventListener('click', async () => {
     const ok = await confirmDialog({ title: `${state.selected.size} Nutzer bannen?`, message: 'Diese Aktion sperrt die Accounts.', danger: true })
     if (!ok) return
     let n = 0
-    for (const id of state.selected) { try { await banUser(id); n++ } catch {} }
+    for (const id of state.selected) { try { await banUser(id); n++ } catch (e) { console.warn('ban failed', id, e) } }
     toast(`${n} gebannt`, 'warning')
     state.selected.clear()
     await loadAll(container)
   })
-  bar.querySelector('[data-bulk="export"]').addEventListener('click', () => {
+  bar.querySelector('[data-bulk="export"]')?.addEventListener('click', () => {
     const rows = state.rows.filter(r => state.selected.has(r.id))
     exportCsv(`nutzer-auswahl-${Date.now()}.csv`, rows.map(toCsvRow))
     toast('Export gestartet', 'success')
   })
-  bar.querySelector('[data-bulk="email"]').addEventListener('click', () => {
+  bar.querySelector('[data-bulk="email"]')?.addEventListener('click', () => {
     const rows = state.rows.filter(r => state.selected.has(r.id))
     const emails = rows.map(r => r.email).filter(Boolean).join(',')
     if (!emails) { toast('Keine E-Mail-Adressen vorhanden', 'warning'); return }
@@ -494,8 +518,8 @@ function openActionMenu(anchor, userId, body, container) {
   menu.innerHTML = `
     <button data-a="view">${iconHtml('eye')} Details ansehen</button>
     <button data-a="verify" ${row.is_verified ? 'disabled' : ''}>${iconHtml('check-circle')} ${row.is_verified ? 'Bereits verifiziert' : 'Verifizieren'}</button>
-    <button data-a="premium">${iconHtml('star')} ${row.is_premium ? 'Premium ✓' : 'Premium gewähren'}</button>
-    <button data-a="ban" class="danger">${iconHtml('ban')} ${row.is_banned ? 'Gebannt ✓' : 'Bannen'}</button>
+    <button data-a="premium">${iconHtml('star')} ${row.is_premium ? 'Premium aktiv' : 'Premium gewähren'}</button>
+    <button data-a="ban" class="danger">${iconHtml('ban')} ${row.is_banned ? 'Gebannt' : 'Bannen'}</button>
   `
   document.body.appendChild(menu)
   const rect = anchor.getBoundingClientRect()
@@ -511,43 +535,45 @@ function openActionMenu(anchor, userId, body, container) {
   }
   setTimeout(() => document.addEventListener('click', close), 0)
 
-  menu.querySelector('[data-a="view"]').addEventListener('click', () => { close(); openUserDrawer(userId, container) })
-  menu.querySelector('[data-a="verify"]').addEventListener('click', async () => {
+  menu.querySelector('[data-a="view"]')?.addEventListener('click', () => { close(); openUserDrawer(userId, container) })
+  menu.querySelector('[data-a="verify"]')?.addEventListener('click', async () => {
     close()
     if (row.is_verified) return
     const ok = await confirmDialog({ title: 'Nutzer verifizieren?' })
     if (!ok) return
     try { await verifyUser(userId); toast('Verifiziert', 'success'); await loadAll(container) }
-    catch (e) { toast(e.message || 'Fehler', 'error') }
+    catch (e) { toast(e?.message || 'Fehler', 'error') }
   })
-  menu.querySelector('[data-a="premium"]').addEventListener('click', async () => {
+  menu.querySelector('[data-a="premium"]')?.addEventListener('click', async () => {
     close()
     const ok = await confirmDialog({ title: 'Premium gewähren?' })
     if (!ok) return
     try { await grantPremium(userId); toast('Premium aktiviert', 'success'); await loadAll(container) }
-    catch (e) { toast(e.message || 'Fehler', 'error') }
+    catch (e) { toast(e?.message || 'Fehler', 'error') }
   })
-  menu.querySelector('[data-a="ban"]').addEventListener('click', async () => {
+  menu.querySelector('[data-a="ban"]')?.addEventListener('click', async () => {
     close()
     const ok = await confirmDialog({ title: row.is_banned ? 'Bereits gebannt' : 'Nutzer bannen?', danger: true })
     if (!ok) return
     try { await banUser(userId); toast('Gebannt', 'warning'); await loadAll(container) }
-    catch (e) { toast(e.message || 'Fehler', 'error') }
+    catch (e) { toast(e?.message || 'Fehler', 'error') }
   })
 }
 
 function openUserDrawer(userId, container) {
-  const host = drawer({
-    title: 'Nutzer-Details',
-    width: 540,
-    content: `<div id="ul-drawer-host">${skeletonLoader({ rows: 6 })}</div>`
-  })
-  const target = host?.querySelector?.('#ul-drawer-host') || null
   try {
+    const host = drawer({
+      title: 'Nutzer-Details',
+      width: 540,
+      content: `<div id="ul-drawer-host">${skeletonLoader({ rows: 6 })}</div>`
+    })
+    const target = host?.querySelector?.('#ul-drawer-host') || null
     if (target) showUserDetailModal(userId, { mount: target })
     else showUserDetailModal(userId)
   } catch (e) {
-    try { showUserDetailModal(userId) } catch {}
+    try { showUserDetailModal(userId) } catch (err) {
+      toast(err?.message || 'Details konnten nicht geöffnet werden', 'error')
+    }
   }
 }
 
@@ -574,9 +600,9 @@ function exportCurrentCsv() {
 
 function animateHero(body) {
   const heroVal = body.querySelector('.ul-hero .stat-hero-value, .ul-hero [data-hero-value], .ul-hero .value, .ul-hero strong')
-  if (heroVal) countUp(heroVal, state.totals.all, { duration: 900 })
+  if (heroVal) { try { countUp(heroVal, state.totals.all, { duration: 900 }) } catch {} }
   body.querySelectorAll('.mini-stat-val').forEach(el => {
     const v = Number(el.dataset.count || 0)
-    countUp(el, v, { duration: 700 })
+    try { countUp(el, v, { duration: 700 }) } catch { el.textContent = String(v) }
   })
 }

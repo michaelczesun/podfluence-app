@@ -298,6 +298,7 @@ export default {
   category: 'users',
 
   async mount(container) {
+   try {
     container.innerHTML = `
       <div class="panel-shell">
         <div class="panel-head">
@@ -546,5 +547,22 @@ export default {
 
     await load()
     fadeIn(container)
+   } catch (e) {
+    container.innerHTML = `
+      <div class="panel-shell">
+        <div class="panel-body">
+          <div class="error-state">
+            <div class="error-icon">${iconHtml('alert-triangle')}</div>
+            <div class="error-title">Panel konnte nicht geladen werden</div>
+            <div class="error-sub">${htmlEscape(e?.message || String(e))}</div>
+            <button class="btn-primary" id="mount-retry-btn">Erneut versuchen</button>
+          </div>
+        </div>
+      </div>
+    `
+    container.querySelector('#mount-retry-btn')?.addEventListener('click', () => {
+      this.mount(container)
+    })
+   }
   }
 }

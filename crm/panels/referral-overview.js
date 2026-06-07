@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
-import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js'
+import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, tabs, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
+import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const RANGES = {
@@ -343,43 +343,55 @@ function renderBody(body, data) {
   `
 
   const hero = body.querySelector('#hero-row')
-  hero.appendChild(statHero({ label: 'Codes generiert', value: data.funnel.generated, icon: 'zap', accent: '#6366f1' }))
-  hero.appendChild(statHero({ label: 'Codes verwendet', value: data.funnel.used, icon: 'mouse-pointer-click', accent: '#ec4899' }))
-  hero.appendChild(statHero({ label: 'Neue User', value: data.funnel.signedUp, icon: 'user-check', accent: '#10b981' }))
-  hero.appendChild(statHero({ label: 'Conversion', value: overallConv, suffix: '%', icon: 'target', accent: '#f59e0b', decimals: 1 }))
+  try {
+    hero.appendChild(statHero({ label: 'Codes generiert', value: data.funnel.generated, icon: 'zap', accent: '#6366f1' }))
+    hero.appendChild(statHero({ label: 'Codes verwendet', value: data.funnel.used, icon: 'mouse-pointer-click', accent: '#ec4899' }))
+    hero.appendChild(statHero({ label: 'Neue User', value: data.funnel.signedUp, icon: 'user-check', accent: '#10b981' }))
+    hero.appendChild(statHero({ label: 'Conversion', value: overallConv, suffix: '%', icon: 'target', accent: '#f59e0b', decimals: 1 }))
+  } catch (e) {
+    console.warn('[referral-overview] statHero failed', e)
+  }
 
   body.querySelectorAll('.funnel-step-value').forEach(el => {
     const target = parseInt(el.dataset.count || '0', 10)
-    countUp(el, 0, target, 900)
+    try { countUp(el, 0, target, 900) } catch (_) {}
   })
 
   const trendEl = body.querySelector('#trend-chart')
   if (data.trend.length) {
-    makeAreaChart(trendEl, {
-      data: data.trend,
-      x: 'date',
-      y: 'rate',
-      ySuffix: '%',
-      color: '#10b981',
-      gradient: true,
-      smooth: true,
-      tooltipLabel: 'Conversion-Rate'
-    })
+    try {
+      makeAreaChart(trendEl, {
+        data: data.trend,
+        x: 'date',
+        y: 'rate',
+        ySuffix: '%',
+        color: '#10b981',
+        gradient: true,
+        smooth: true,
+        tooltipLabel: 'Conversion-Rate'
+      })
+    } catch (e) {
+      trendEl.innerHTML = `<div class="empty-state-mini"><div class="empty-icon">${iconHtml('activity')}</div><div>Chart konnte nicht gerendert werden.</div></div>`
+    }
   } else {
     trendEl.innerHTML = `<div class="empty-state-mini"><div class="empty-icon">${iconHtml('activity')}</div><div>Keine Trend-Daten verfügbar.</div></div>`
   }
 
   const donutEl = body.querySelector('#funnel-donut')
-  makeDonutChart(donutEl, {
-    data: [
-      { label: 'Generiert', value: Math.max(data.funnel.generated - data.funnel.shared, 0), color: '#6366f1' },
-      { label: 'Geteilt', value: Math.max(data.funnel.shared - data.funnel.used, 0), color: '#8b5cf6' },
-      { label: 'Verwendet', value: Math.max(data.funnel.used - data.funnel.signedUp, 0), color: '#ec4899' },
-      { label: 'Registriert', value: data.funnel.signedUp, color: '#10b981' }
-    ],
-    centerLabel: 'Funnel',
-    centerValue: fmtNumber(data.funnel.generated)
-  })
+  try {
+    makeDonutChart(donutEl, {
+      data: [
+        { label: 'Generiert', value: Math.max(data.funnel.generated - data.funnel.shared, 0), color: '#6366f1' },
+        { label: 'Geteilt', value: Math.max(data.funnel.shared - data.funnel.used, 0), color: '#8b5cf6' },
+        { label: 'Verwendet', value: Math.max(data.funnel.used - data.funnel.signedUp, 0), color: '#ec4899' },
+        { label: 'Registriert', value: data.funnel.signedUp, color: '#10b981' }
+      ],
+      centerLabel: 'Funnel',
+      centerValue: fmtNumber(data.funnel.generated)
+    })
+  } catch (e) {
+    donutEl.innerHTML = `<div class="empty-state-mini"><div class="empty-icon">${iconHtml('pie-chart')}</div><div>Donut konnte nicht gerendert werden.</div></div>`
+  }
 }
 
 function renderEmpty(body) {
@@ -399,7 +411,7 @@ function renderError(body, err, retry) {
     <div class="error-state glass-card">
       <div class="ic">${iconHtml('alert-triangle')}</div>
       <h3 style="margin:0 0 6px">Daten konnten nicht geladen werden</h3>
-      <p style="color:var(--text-muted,#94a3b8);font-size:13px;margin:0 0 14px">${htmlEscape(err?.message || 'Unbekannter Fehler')}</p>
+      <p style="color:var(--text-muted,#94a3b8);font-size:13px;margin:0 0 14px">Fehler: ${htmlEscape(err?.message || 'Unbekannter Fehler')}</p>
       <button class="tb-btn" id="retry-btn">${iconHtml('refresh-cw')} Erneut versuchen</button>
     </div>
   `
@@ -412,130 +424,165 @@ export default {
   category: 'growth',
 
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell">
-        <div class="panel-head">
-          <div>
-            <h2 style="margin:0">Referral-Conversion</h2>
-            <div style="font-size:12px;color:var(--text-muted,#94a3b8);margin-top:2px">Funnel von Code-Generation bis Registrierung</div>
-          </div>
-          <div id="toolbar-slot">${buildToolbar()}</div>
-        </div>
-        <div class="panel-body" id="body"></div>
-      </div>
-    `
-
-    const body = container.querySelector('#body')
-    const rangeSlot = container.querySelector('#range-picker')
-    rangeSlot.appendChild(segmentedControl({
-      options: Object.entries(RANGES).map(([k, v]) => ({ value: k, label: v.label })),
-      value: state.range,
-      onChange: (val) => { state.range = val; refresh() }
-    }))
-
-    fadeIn(container, 250)
-
-    const refresh = async () => {
-      body.innerHTML = ''
-      skeletonLoader(body, { rows: 6, height: 80 })
-      try {
-        const data = await loadData(state.range)
-        state.funnel = data.funnel
-        state.trend = data.trend
-        state.topReferrers = data.topReferrers
-        state.recentSignups = data.recentSignups
-
-        if (data.funnel.generated === 0 && data.funnel.signedUp === 0) {
-          renderEmpty(body)
-          return
-        }
-        renderBody(body, data)
-        wireBody(body)
-      } catch (err) {
-        console.error('[referral-overview] load failed', err)
-        renderError(body, err, refresh)
-      }
-    }
-
-    const wireBody = (root) => {
-      root.querySelectorAll('[data-action="user"]').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const id = btn.dataset.id
-          if (id) showUserDetailModal(id)
-        })
-      })
-      root.querySelectorAll('.referrer-row').forEach(row => {
-        row.addEventListener('click', () => {
-          const uid = row.dataset.user
-          if (uid) openReferrerDrawer(uid)
-        })
-      })
-      root.querySelector('[data-tb="view-all"]')?.addEventListener('click', openAllSignupsDrawer)
-    }
-
-    const openReferrerDrawer = (userId) => {
-      const ref = state.topReferrers.find(r => r.id === userId)
-      const name = ref?.profile?.display_name || ref?.profile?.username || 'Referrer'
-      drawer({
-        title: name,
-        subtitle: `${fmtNumber(ref?.count || 0)} erfolgreiche Einladungen`,
-        width: 480,
-        html: `
-          <div style="padding:20px">
-            <div style="display:flex;gap:14px;align-items:center;margin-bottom:20px">
-              <div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.06);overflow:hidden;display:flex;align-items:center;justify-content:center">
-                ${ref?.profile?.avatar_url ? `<img src="${htmlEscape(ref.profile.avatar_url)}" style="width:100%;height:100%;object-fit:cover">` : iconHtml('user')}
-              </div>
-              <div>
-                <div style="font-size:16px;font-weight:600">${htmlEscape(name)}</div>
-                <div style="font-size:12px;color:var(--text-muted,#94a3b8)">@${htmlEscape(ref?.profile?.username || '—')}</div>
-              </div>
+    try {
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="panel-head">
+            <div>
+              <h2 style="margin:0">Referral-Conversion</h2>
+              <div style="font-size:12px;color:var(--text-muted,#94a3b8);margin-top:2px">Funnel von Code-Generation bis Registrierung</div>
             </div>
-            <button class="tb-btn" id="open-user-detail">${iconHtml('external-link')} Vollständiges Profil öffnen</button>
+            <div id="toolbar-slot">${buildToolbar()}</div>
           </div>
-        `,
-        onMount: (el) => {
-          el.querySelector('#open-user-detail')?.addEventListener('click', () => showUserDetailModal(userId))
-        }
-      })
-    }
+          <div class="panel-body" id="body"></div>
+        </div>
+      `
 
-    const openAllSignupsDrawer = () => {
-      drawer({
-        title: 'Alle Referral-Signups',
-        subtitle: `${fmtNumber(state.recentSignups.length)} im Zeitraum`,
-        width: 720,
-        html: `<div style="padding:16px">${renderRecentTable(state.recentSignups)}</div>`,
-        onMount: (el) => {
-          el.querySelectorAll('[data-action="user"]').forEach(btn => {
-            btn.addEventListener('click', () => {
-              const id = btn.dataset.id
-              if (id) showUserDetailModal(id)
-            })
-          })
-        }
-      })
-    }
+      const body = container.querySelector('#body')
 
-    container.querySelector('[data-tb="refresh"]')?.addEventListener('click', () => {
-      refresh().then(() => toast('Daten aktualisiert', 'success'))
-    })
-    container.querySelector('[data-tb="pdf"]')?.addEventListener('click', () => {
-      exportPanelAsPdf(container, { filename: `referral-conversion-${state.range}.pdf`, title: 'Referral-Conversion' })
-    })
-    container.querySelector('[data-tb="csv"]')?.addEventListener('click', () => {
-      if (!state.trend.length) { toast('Keine Daten zum Exportieren', 'warning'); return }
-      exportCsv({
-        filename: `referral-trend-${state.range}.csv`,
-        rows: state.trend.map(t => ({
-          date: t.date,
-          codes_generated: t.generated,
-          signups: t.signups,
-          conversion_rate_pct: t.rate.toFixed(2)
+      // Initial skeleton SOFORT zeigen, bevor irgendein await läuft
+      try { skeletonLoader(body, { rows: 6, height: 80 }) } catch (_) {}
+
+      const rangeSlot = container.querySelector('#range-picker')
+      try {
+        rangeSlot.appendChild(segmentedControl({
+          options: Object.entries(RANGES).map(([k, v]) => ({ value: k, label: v.label })),
+          value: state.range,
+          onChange: (val) => { state.range = val; refresh() }
         }))
-      })
-    })
+      } catch (e) {
+        console.warn('[referral-overview] segmentedControl failed', e)
+      }
 
-    await refresh()
+      try { fadeIn(container, 250) } catch (_) {}
+
+      const refresh = async () => {
+        body.innerHTML = ''
+        try { skeletonLoader(body, { rows: 6, height: 80 }) } catch (_) {}
+        try {
+          const data = await loadData(state.range)
+          state.funnel = data.funnel
+          state.trend = data.trend
+          state.topReferrers = data.topReferrers
+          state.recentSignups = data.recentSignups
+
+          if (data.funnel.generated === 0 && data.funnel.signedUp === 0) {
+            renderEmpty(body)
+            return
+          }
+          renderBody(body, data)
+          wireBody(body)
+        } catch (err) {
+          console.error('[referral-overview] load failed', err)
+          renderError(body, err, refresh)
+        }
+      }
+
+      const wireBody = (root) => {
+        root.querySelectorAll('[data-action="user"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.dataset.id
+            if (id) showUserDetailModal(id)
+          })
+        })
+        root.querySelectorAll('.referrer-row').forEach(row => {
+          row.addEventListener('click', () => {
+            const uid = row.dataset.user
+            if (uid) openReferrerDrawer(uid)
+          })
+        })
+        root.querySelector('[data-tb="view-all"]')?.addEventListener('click', openAllSignupsDrawer)
+      }
+
+      const openReferrerDrawer = (userId) => {
+        const ref = state.topReferrers.find(r => r.id === userId)
+        const name = ref?.profile?.display_name || ref?.profile?.username || 'Referrer'
+        try {
+          drawer({
+            title: name,
+            subtitle: `${fmtNumber(ref?.count || 0)} erfolgreiche Einladungen`,
+            width: 480,
+            html: `
+              <div style="padding:20px">
+                <div style="display:flex;gap:14px;align-items:center;margin-bottom:20px">
+                  <div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.06);overflow:hidden;display:flex;align-items:center;justify-content:center">
+                    ${ref?.profile?.avatar_url ? `<img src="${htmlEscape(ref.profile.avatar_url)}" style="width:100%;height:100%;object-fit:cover">` : iconHtml('user')}
+                  </div>
+                  <div>
+                    <div style="font-size:16px;font-weight:600">${htmlEscape(name)}</div>
+                    <div style="font-size:12px;color:var(--text-muted,#94a3b8)">@${htmlEscape(ref?.profile?.username || '—')}</div>
+                  </div>
+                </div>
+                <button class="tb-btn" id="open-user-detail">${iconHtml('external-link')} Vollständiges Profil öffnen</button>
+              </div>
+            `,
+            onMount: (el) => {
+              el.querySelector('#open-user-detail')?.addEventListener('click', () => showUserDetailModal(userId))
+            }
+          })
+        } catch (e) {
+          showUserDetailModal(userId)
+        }
+      }
+
+      const openAllSignupsDrawer = () => {
+        try {
+          drawer({
+            title: 'Alle Referral-Signups',
+            subtitle: `${fmtNumber(state.recentSignups.length)} im Zeitraum`,
+            width: 720,
+            html: `<div style="padding:16px">${renderRecentTable(state.recentSignups)}</div>`,
+            onMount: (el) => {
+              el.querySelectorAll('[data-action="user"]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                  const id = btn.dataset.id
+                  if (id) showUserDetailModal(id)
+                })
+              })
+            }
+          })
+        } catch (e) {
+          toast('Drawer konnte nicht geöffnet werden', 'error')
+        }
+      }
+
+      container.querySelector('[data-tb="refresh"]')?.addEventListener('click', () => {
+        refresh().then(() => toast('Daten aktualisiert', 'success'))
+      })
+      container.querySelector('[data-tb="pdf"]')?.addEventListener('click', () => {
+        try {
+          exportPanelAsPdf(container, { filename: `referral-conversion-${state.range}.pdf`, title: 'Referral-Conversion' })
+        } catch (e) {
+          toast('PDF-Export fehlgeschlagen', 'error')
+        }
+      })
+      container.querySelector('[data-tb="csv"]')?.addEventListener('click', () => {
+        if (!state.trend.length) { toast('Keine Daten zum Exportieren', 'warning'); return }
+        try {
+          exportCsv({
+            filename: `referral-trend-${state.range}.csv`,
+            rows: state.trend.map(t => ({
+              date: t.date,
+              codes_generated: t.generated,
+              signups: t.signups,
+              conversion_rate_pct: t.rate.toFixed(2)
+            }))
+          })
+        } catch (e) {
+          toast('CSV-Export fehlgeschlagen', 'error')
+        }
+      })
+
+      await refresh()
+    } catch (mountErr) {
+      console.error('[referral-overview] mount failed', mountErr)
+      container.innerHTML = `
+        <div style="padding:48px 24px;text-align:center">
+          <div style="width:56px;height:56px;margin:0 auto 14px;border-radius:14px;background:rgba(239,68,68,0.12);display:flex;align-items:center;justify-content:center;color:#ef4444">!</div>
+          <h3 style="margin:0 0 6px">Panel konnte nicht geladen werden</h3>
+          <p style="color:#94a3b8;font-size:13px;margin:0">Fehler: ${(mountErr && mountErr.message) ? String(mountErr.message).replace(/[<>&]/g, '') : 'Unbekannter Mount-Fehler'}</p>
+        </div>
+      `
+    }
   }
 }

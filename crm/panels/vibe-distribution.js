@@ -397,58 +397,75 @@ export default {
   category: 'listening',
 
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell">
-        <div class="panel-head" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px;">
-          <div>
-            <h2 style="margin:0;font-size:22px;">Vibe-Verteilung</h2>
-            <div style="color:var(--muted);font-size:13px;margin-top:2px;">
-              Wie schwingen Posts? Emoji-Reaktionen auf einen Blick.
+    try {
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="panel-head" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px;">
+            <div>
+              <h2 style="margin:0;font-size:22px;">Vibe-Verteilung</h2>
+              <div style="color:var(--muted);font-size:13px;margin-top:2px;">
+                Wie schwingen Posts? Emoji-Reaktionen auf einen Blick.
+              </div>
+            </div>
+            <div id="range-host" style="margin-left:auto;"></div>
+            <div class="toolbar" style="display:flex;gap:8px;">
+              <button class="btn btn-ghost" data-act="refresh" title="Aktualisieren">${iconHtml('refresh')} Aktualisieren</button>
+              <button class="btn btn-ghost" data-act="pdf" title="Als PDF">${iconHtml('file')} PDF</button>
+              <button class="btn btn-ghost" data-act="csv" title="Als CSV">${iconHtml('download')} CSV</button>
             </div>
           </div>
-          <div id="range-host" style="margin-left:auto;"></div>
-          <div class="toolbar" style="display:flex;gap:8px;">
-            <button class="btn btn-ghost" data-act="refresh" title="Aktualisieren">${iconHtml('refresh')} Aktualisieren</button>
-            <button class="btn btn-ghost" data-act="pdf" title="Als PDF">${iconHtml('file')} PDF</button>
-            <button class="btn btn-ghost" data-act="csv" title="Als CSV">${iconHtml('download')} CSV</button>
-          </div>
-        </div>
-        <div class="panel-body" id="body"></div>
-      </div>`
-
-    const body = container.querySelector('#body')
-    const rangeHost = container.querySelector('#range-host')
-
-    try {
-      const seg = segmentedControl({
-        options: [
-          { value: '7d', label: '7 Tage' },
-          { value: '30d', label: '30 Tage' },
-        ],
-        value: state.range,
-        onChange: (v) => { state.range = v; loadAndRender(body) },
-      })
-      const segEl = seg?.el || seg
-      if (segEl instanceof Node) rangeHost.appendChild(segEl)
-    } catch {
-      rangeHost.innerHTML = `
-        <div class="seg-fallback" style="display:inline-flex;gap:4px;background:rgba(255,255,255,0.04);padding:4px;border-radius:10px;">
-          <button class="btn btn-ghost" data-range="7d">7 Tage</button>
-          <button class="btn btn-ghost" data-range="30d">30 Tage</button>
+          <div class="panel-body" id="body"></div>
         </div>`
-      rangeHost.querySelectorAll('[data-range]').forEach(b =>
-        b.addEventListener('click', () => { state.range = b.getAttribute('data-range'); loadAndRender(body) }))
+
+      const body = container.querySelector('#body')
+      const rangeHost = container.querySelector('#range-host')
+
+      // Sofort Skeleton zeigen, damit kein weißer Screen
+      try { skeletonLoader(body, { rows: 4, layout: 'chart' }) } catch {}
+
+      try {
+        const seg = segmentedControl({
+          options: [
+            { value: '7d', label: '7 Tage' },
+            { value: '30d', label: '30 Tage' },
+          ],
+          value: state.range,
+          onChange: (v) => { state.range = v; loadAndRender(body) },
+        })
+        const segEl = seg?.el || seg
+        if (segEl instanceof Node) rangeHost.appendChild(segEl)
+        else throw new Error('no seg el')
+      } catch {
+        rangeHost.innerHTML = `
+          <div class="seg-fallback" style="display:inline-flex;gap:4px;background:rgba(255,255,255,0.04);padding:4px;border-radius:10px;">
+            <button class="btn btn-ghost" data-range="7d">7 Tage</button>
+            <button class="btn btn-ghost" data-range="30d">30 Tage</button>
+          </div>`
+        rangeHost.querySelectorAll('[data-range]').forEach(b =>
+          b.addEventListener('click', () => { state.range = b.getAttribute('data-range'); loadAndRender(body) }))
+      }
+
+      container.addEventListener('click', (e) => {
+        const btn = e.target.closest('[data-act]')
+        if (!btn) return
+        const act = btn.getAttribute('data-act')
+        if (act === 'refresh') { loadAndRender(body); toast('Aktualisiert') }
+        else if (act === 'pdf') exportPdf(container)
+        else if (act === 'csv') exportCurrentCsv()
+      })
+
+      // Data-Fetch im Hintergrund — Skeleton ist schon sichtbar
+      loadAndRender(body)
+    } catch (e) {
+      container.innerHTML = `
+        <div class="empty-state glass-card" style="text-align:center;padding:48px 24px;border:1px solid rgba(255,90,90,0.25);margin:20px;">
+          <div style="font-size:48px;margin-bottom:12px;">⚠️</div>
+          <h3 style="margin:0 0 8px;">Panel konnte nicht geladen werden</h3>
+          <p style="color:var(--muted);max-width:480px;margin:0 auto 20px;font-family:monospace;font-size:12px;">
+            ${htmlEscape(e?.message || String(e))}
+          </p>
+          <button class="btn btn-primary" onclick="location.reload()">Seite neu laden</button>
+        </div>`
     }
-
-    container.addEventListener('click', (e) => {
-      const btn = e.target.closest('[data-act]')
-      if (!btn) return
-      const act = btn.getAttribute('data-act')
-      if (act === 'refresh') { loadAndRender(body); toast('Aktualisiert') }
-      else if (act === 'pdf') exportPdf(container)
-      else if (act === 'csv') exportCurrentCsv()
-    })
-
-    await loadAndRender(body)
   },
 }

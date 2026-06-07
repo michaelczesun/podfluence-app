@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
-import { makeLineChart, makeBarChart, makeAreaChart } from '/lib/charts.js'
+import { toast, confirmDialog, fmtNumber, htmlEscape, iconHtml } from '/lib/ui.js'
+import { makeLineChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
+import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js'
 import { showUserDetailModal, sendBroadcastPush } from '/lib/panel-actions.js'
 
 const RANGES = {
@@ -116,7 +116,7 @@ async function fetchData(range) {
     const umap = new Map((users || []).map(u => [u.id, u]))
     for (const r of top) {
       const u = umap.get(r.user_id) || {}
-      r.name = u.display_name || u.username || r.user_id.slice(0, 8)
+      r.name = u.display_name || u.username || (r.user_id ? r.user_id.slice(0, 8) : 'Unbekannt')
       r.username = u.username || ''
       r.avatar = u.avatar_url || ''
     }
@@ -139,8 +139,10 @@ function renderHero(root, totals) {
 }
 
 function renderMultiLineChart(root, rows, labels, metric) {
+  if (!root) return
   if (!rows.length) {
-    root.innerHTML = `<div class="empty-mini">Keine Daten für ${METRICS.find(m=>m.key===metric).label}.</div>`
+    const m = METRICS.find(x => x.key === metric)
+    root.innerHTML = `<div class="empty-mini">Keine Daten für ${htmlEscape(m ? m.label : metric)}.</div>`
     return
   }
   const palette = ['#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444']
@@ -315,9 +317,14 @@ function openDrawer(row) {
 
 async function load(container) {
   const body = container.querySelector('#body')
+  if (!body) return
   state.loading = true
   state.error = null
-  body.innerHTML = skeletonLoader({ lines: 6, withChart: true })
+  try {
+    body.innerHTML = skeletonLoader({ lines: 6, withChart: true })
+  } catch (_) {
+    body.innerHTML = '<div class="muted" style="padding:24px">Lade Daten…</div>'
+  }
   try {
     const { rows, labels } = await fetchData(state.range)
     state.rows = rows
@@ -334,6 +341,7 @@ async function load(container) {
 
 function render(container) {
   const body = container.querySelector('#body')
+  if (!body) return
   const totals = state.rows.reduce((acc, r) => {
     acc.posts += r.posts; acc.episodes += r.episodes
     acc.listens += r.listens; acc.likes += r.likes
@@ -368,15 +376,17 @@ function render(container) {
   renderHero(body.querySelector('#hero'), totals)
 
   const switchHost = body.querySelector('#metric-switch')
-  switchHost.innerHTML = ''
-  segmentedControl(switchHost, {
-    options: METRICS.map(m => ({ value: m.key, label: m.label })),
-    value: state.activeMetric,
-    onChange: (v) => {
-      state.activeMetric = v
-      renderMultiLineChart(body.querySelector('#multiline'), state.rows, state.labels, state.activeMetric)
-    }
-  })
+  if (switchHost) {
+    switchHost.innerHTML = ''
+    segmentedControl(switchHost, {
+      options: METRICS.map(m => ({ value: m.key, label: m.label })),
+      value: state.activeMetric,
+      onChange: (v) => {
+        state.activeMetric = v
+        renderMultiLineChart(body.querySelector('#multiline'), state.rows, state.labels, state.activeMetric)
+      }
+    })
+  }
 
   renderMultiLineChart(body.querySelector('#multiline'), state.rows, state.labels, state.activeMetric)
 
@@ -415,7 +425,7 @@ function render(container) {
     })
   })
 
-  fadeIn(body)
+  try { fadeIn(body) } catch (_) {}
 }
 
 function refreshSubnav(container) {
@@ -432,60 +442,88 @@ export default {
   category: 'engagement',
 
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell">
-        <div class="panel-head">
-          <div>
-            <h2>Podcaster-Engagement</h2>
-            <div class="muted">Posts · Episodes · Listens · Likes — Top 5 im Zeitraum</div>
-          </div>
-          <div class="toolbar">
-            <div class="seg-control" id="range-switch">
-              <button data-range="7d"  class="${state.range==='7d'?'active':''}">7 Tage</button>
-              <button data-range="30d" class="${state.range==='30d'?'active':''}">30 Tage</button>
+    try {
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="panel-head">
+            <div>
+              <h2>Podcaster-Engagement</h2>
+              <div class="muted">Posts · Episodes · Listens · Likes — Top 5 im Zeitraum</div>
             </div>
-            <button class="btn btn-ghost" id="btn-refresh" title="Aktualisieren">${iconHtml('refresh')} Aktualisieren</button>
-            <button class="btn btn-ghost" id="btn-pdf"     title="Als PDF">${iconHtml('file')} PDF</button>
-            <button class="btn btn-ghost" id="btn-csv"     title="Als CSV">${iconHtml('download')} CSV</button>
+            <div class="toolbar">
+              <div class="seg-control" id="range-switch">
+                <button data-range="7d"  class="${state.range==='7d'?'active':''}">7 Tage</button>
+                <button data-range="30d" class="${state.range==='30d'?'active':''}">30 Tage</button>
+              </div>
+              <button class="btn btn-ghost" id="btn-refresh" title="Aktualisieren">${iconHtml('refresh')} Aktualisieren</button>
+              <button class="btn btn-ghost" id="btn-pdf"     title="Als PDF">${iconHtml('file')} PDF</button>
+              <button class="btn btn-ghost" id="btn-csv"     title="Als CSV">${iconHtml('download')} CSV</button>
+            </div>
+          </div>
+          <div class="panel-body" id="body">
+            <div class="muted" style="padding:24px">Lade…</div>
           </div>
         </div>
-        <div class="panel-body" id="body"></div>
-      </div>
-    `
+      `
 
-    container.querySelectorAll('#range-switch [data-range]').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (state.range === btn.dataset.range) return
-        state.range = btn.dataset.range
-        refreshSubnav(container)
-        load(container)
+      container.querySelectorAll('#range-switch [data-range]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          if (state.range === btn.dataset.range) return
+          state.range = btn.dataset.range
+          refreshSubnav(container)
+          load(container)
+        })
       })
-    })
 
-    container.querySelector('#btn-refresh')?.addEventListener('click', () => load(container))
+      container.querySelector('#btn-refresh')?.addEventListener('click', () => load(container))
 
-    container.querySelector('#btn-pdf')?.addEventListener('click', () => {
-      exportPanelAsPdf({
-        title: `Podcaster-Engagement (${RANGES[state.range].label})`,
-        element: container.querySelector('.panel-shell')
+      container.querySelector('#btn-pdf')?.addEventListener('click', () => {
+        try {
+          exportPanelAsPdf({
+            title: `Podcaster-Engagement (${RANGES[state.range].label})`,
+            element: container.querySelector('.panel-shell')
+          })
+        } catch (e) {
+          toast('PDF-Export fehlgeschlagen: ' + (e?.message || e), 'error')
+        }
       })
-    })
 
-    container.querySelector('#btn-csv')?.addEventListener('click', () => {
-      const rows = state.rows.map((r, i) => ({
-        rank: i+1,
-        user_id: r.user_id,
-        name: r.name,
-        username: r.username,
-        posts: r.posts,
-        episodes: r.episodes,
-        listens: r.listens,
-        likes: r.likes,
-        score: Math.round(r.total)
-      }))
-      exportCsv(`podcaster-engagement-${state.range}.csv`, rows)
-    })
+      container.querySelector('#btn-csv')?.addEventListener('click', () => {
+        try {
+          const rows = state.rows.map((r, i) => ({
+            rank: i+1,
+            user_id: r.user_id,
+            name: r.name,
+            username: r.username,
+            posts: r.posts,
+            episodes: r.episodes,
+            listens: r.listens,
+            likes: r.likes,
+            score: Math.round(r.total)
+          }))
+          exportCsv(`podcaster-engagement-${state.range}.csv`, rows)
+        } catch (e) {
+          toast('CSV-Export fehlgeschlagen: ' + (e?.message || e), 'error')
+        }
+      })
 
-    await load(container)
+      // Background-Load: erst Skeleton, dann Daten
+      load(container)
+    } catch (e) {
+      const msg = e?.message || String(e)
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="empty-state error-state" style="padding:32px">
+            <div class="empty-icon">${iconHtml ? iconHtml('alert') : '!'}</div>
+            <h3>Panel konnte nicht initialisiert werden</h3>
+            <p>${(htmlEscape ? htmlEscape(msg) : msg)}</p>
+            <button class="btn btn-primary" data-act="mount-retry">Erneut versuchen</button>
+          </div>
+        </div>
+      `
+      container.querySelector('[data-act="mount-retry"]')?.addEventListener('click', () => {
+        this.mount(container)
+      })
+    }
   }
 }

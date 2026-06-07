@@ -62,7 +62,7 @@ async function fetchUsersForType(type) {
 }
 
 async function manualGrant(type, userIdentifier) {
-  const identifier = userIdentifier.trim()
+  const identifier = (userIdentifier || '').trim().replace(/^@/, '')
   if (!identifier) throw new Error('User-ID oder Username erforderlich')
   let userId = identifier
   if (!/^[0-9a-f-]{36}$/i.test(identifier)) {
@@ -105,7 +105,7 @@ function openTypeDrawer(type, refreshAll) {
       <div style="font-size:12px;color:var(--muted);margin-top:6px">UUID, oder exakter Username/Display-Name</div>
     </div>
     <div id="users-list" style="margin-top:8px">
-      <div class="loading-state">${skeletonLoader ? skeletonLoader(6) : 'Lädt…'}</div>
+      <div class="loading-state">${typeof skeletonLoader === 'function' ? skeletonLoader(6) : 'Lädt…'}</div>
     </div>
   `
 
@@ -136,7 +136,7 @@ function openTypeDrawer(type, refreshAll) {
 
   const listEl = content.querySelector('#users-list')
   async function loadUsers() {
-    listEl.innerHTML = `<div>${skeletonLoader ? skeletonLoader(5) : 'Lädt…'}</div>`
+    listEl.innerHTML = `<div>${typeof skeletonLoader === 'function' ? skeletonLoader(5) : 'Lädt…'}</div>`
     try {
       const rows = await fetchUsersForType(type)
       if (!rows.length) {
@@ -169,7 +169,11 @@ function openTypeDrawer(type, refreshAll) {
       listEl.querySelectorAll('.user-row').forEach(el => {
         el.addEventListener('click', () => {
           const uid = el.dataset.uid
-          showUserDetailModal && showUserDetailModal(uid)
+          if (typeof showUserDetailModal === 'function') {
+            showUserDetailModal(uid)
+          } else {
+            toast('User-Details in Vorbereitung', 'info')
+          }
         })
       })
       listEl.querySelector('#exp-users').addEventListener('click', () => {
@@ -182,7 +186,7 @@ function openTypeDrawer(type, refreshAll) {
       })
     } catch (e) {
       listEl.innerHTML = `<div class="error-state" style="padding:24px;text-align:center;color:var(--danger)">
-        <div>Fehler beim Laden</div>
+        <div style="margin-bottom:8px">Fehler: ${htmlEscape(e.message || 'Unbekannter Fehler')}</div>
         <button class="btn btn-sm" id="retry-users">Erneut versuchen</button>
       </div>`
       listEl.querySelector('#retry-users').addEventListener('click', loadUsers)
@@ -196,183 +200,206 @@ export default {
   title: 'Achievement-Unlocks',
   category: 'engagement',
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell">
-        <div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
-          <div>
-            <h2 style="margin:0">Achievement-Unlocks</h2>
-            <div style="font-size:13px;color:var(--muted);margin-top:2px">Verteilung freigeschalteter Achievements · Klick auf Balken für User-Liste</div>
+    try {
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">
+            <div>
+              <h2 style="margin:0">Achievement-Unlocks</h2>
+              <div style="font-size:13px;color:var(--muted);margin-top:2px">Verteilung freigeschalteter Achievements · Klick auf Balken für User-Liste</div>
+            </div>
+            <div class="toolbar" style="display:flex;gap:8px">
+              <button id="btn-refresh" class="btn btn-ghost" title="Aktualisieren">🔄</button>
+              <button id="btn-pdf" class="btn btn-ghost" title="PDF Export">📄</button>
+              <button id="btn-csv" class="btn btn-ghost" title="CSV Export">💾</button>
+            </div>
           </div>
-          <div class="toolbar" style="display:flex;gap:8px">
-            <button id="btn-refresh" class="btn btn-ghost" title="Aktualisieren">🔄</button>
-            <button id="btn-pdf" class="btn btn-ghost" title="PDF Export">📄</button>
-            <button id="btn-csv" class="btn btn-ghost" title="CSV Export">💾</button>
+          <div class="panel-body" id="body">
+            <div class="hero-row" id="hero-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px"></div>
+            <div class="charts-row" style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
+              <div class="glass-card" id="bar-card" style="padding:16px;border-radius:14px;min-height:340px">
+                <div style="font-weight:600;margin-bottom:8px">Unlocks pro Achievement-Type</div>
+                <div id="bar-chart" style="height:300px"></div>
+              </div>
+              <div class="glass-card" id="donut-card" style="padding:16px;border-radius:14px;min-height:340px">
+                <div style="font-weight:600;margin-bottom:8px">Verteilung</div>
+                <div id="donut-chart" style="height:300px"></div>
+              </div>
+            </div>
+            <div class="glass-card" style="padding:16px;border-radius:14px">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+                <div style="font-weight:600">Alle Achievement-Types</div>
+                <div style="font-size:12px;color:var(--muted)">Klick für Details</div>
+              </div>
+              <div id="table-wrap"></div>
+            </div>
           </div>
         </div>
-        <div class="panel-body" id="body">
-          <div class="hero-row" id="hero-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-bottom:16px"></div>
-          <div class="charts-row" style="display:grid;grid-template-columns:2fr 1fr;gap:16px;margin-bottom:16px">
-            <div class="glass-card" id="bar-card" style="padding:16px;border-radius:14px;min-height:340px">
-              <div style="font-weight:600;margin-bottom:8px">Unlocks pro Achievement-Type</div>
-              <div id="bar-chart" style="height:300px"></div>
-            </div>
-            <div class="glass-card" id="donut-card" style="padding:16px;border-radius:14px;min-height:340px">
-              <div style="font-weight:600;margin-bottom:8px">Verteilung</div>
-              <div id="donut-chart" style="height:300px"></div>
-            </div>
-          </div>
-          <div class="glass-card" style="padding:16px;border-radius:14px">
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-              <div style="font-weight:600">Alle Achievement-Types</div>
-              <div style="font-size:12px;color:var(--muted)">Klick für Details</div>
-            </div>
-            <div id="table-wrap"></div>
-          </div>
-        </div>
-      </div>
-    `
+      `
 
-    fadeIn(container)
+      if (typeof fadeIn === 'function') fadeIn(container)
 
-    const body = container.querySelector('#body')
-    const heroRow = container.querySelector('#hero-row')
-    const barEl = container.querySelector('#bar-chart')
-    const donutEl = container.querySelector('#donut-chart')
-    const tableWrap = container.querySelector('#table-wrap')
+      const body = container.querySelector('#body')
+      const heroRow = container.querySelector('#hero-row')
+      const barEl = container.querySelector('#bar-chart')
+      const donutEl = container.querySelector('#donut-chart')
+      const tableWrap = container.querySelector('#table-wrap')
 
-    heroRow.innerHTML = skeletonLoader ? skeletonLoader(3) : ''
-    barEl.innerHTML = skeletonLoader ? skeletonLoader(4) : ''
-    donutEl.innerHTML = skeletonLoader ? skeletonLoader(4) : ''
-    tableWrap.innerHTML = skeletonLoader ? skeletonLoader(6) : ''
+      const skel = (n) => (typeof skeletonLoader === 'function' ? skeletonLoader(n) : '<div style="opacity:.5">Lädt…</div>')
+      heroRow.innerHTML = skel(3)
+      barEl.innerHTML = skel(4)
+      donutEl.innerHTML = skel(4)
+      tableWrap.innerHTML = skel(6)
 
-    let lastAgg = []
+      let lastAgg = []
 
-    const self = this
-    const render = async () => {
-      try {
-        const rows = await fetchAchievementStats()
-        const agg = aggregateByType(rows)
-        lastAgg = agg
+      const self = this
+      const render = async () => {
+        try {
+          const rows = await fetchAchievementStats()
+          const agg = aggregateByType(rows)
+          lastAgg = agg
 
-        const totalUnlocks = rows.length
-        const uniqueUsers = new Set(rows.map(r => r.user_id)).size
-        const typesCount = agg.length
-        const last24h = rows.filter(r => new Date(r.unlocked_at) > new Date(Date.now() - 86400000)).length
+          const totalUnlocks = rows.length
+          const uniqueUsers = new Set(rows.map(r => r.user_id)).size
+          const typesCount = agg.length
+          const last24h = rows.filter(r => new Date(r.unlocked_at) > new Date(Date.now() - 86400000)).length
 
-        heroRow.innerHTML = ''
-        const heroes = [
-          { label: 'Unlocks gesamt', value: totalUnlocks, icon: '🏆' },
-          { label: 'Aktive User', value: uniqueUsers, icon: '👥' },
-          { label: 'Achievement-Types', value: typesCount, icon: '🎯' },
-          { label: 'Letzte 24h', value: last24h, icon: '⏱️' }
-        ]
-        heroes.forEach(h => {
-          const el = document.createElement('div')
-          el.className = 'glass-card stat-hero'
-          el.style.cssText = 'padding:14px 16px;border-radius:12px'
-          el.innerHTML = `<div style="font-size:20px">${h.icon}</div><div style="font-size:12px;color:var(--muted);margin-top:4px">${h.label}</div><div class="hero-val" style="font-size:26px;font-weight:700;margin-top:2px">0</div>`
-          heroRow.appendChild(el)
-          const valEl = el.querySelector('.hero-val')
-          countUp && countUp(valEl, h.value)
-        })
+          heroRow.innerHTML = ''
+          const heroes = [
+            { label: 'Unlocks gesamt', value: totalUnlocks, icon: '🏆' },
+            { label: 'Aktive User', value: uniqueUsers, icon: '👥' },
+            { label: 'Achievement-Types', value: typesCount, icon: '🎯' },
+            { label: 'Letzte 24h', value: last24h, icon: '⏱️' }
+          ]
+          heroes.forEach(h => {
+            const el = document.createElement('div')
+            el.className = 'glass-card stat-hero'
+            el.style.cssText = 'padding:14px 16px;border-radius:12px'
+            el.innerHTML = `<div style="font-size:20px">${h.icon}</div><div style="font-size:12px;color:var(--muted);margin-top:4px">${h.label}</div><div class="hero-val" style="font-size:26px;font-weight:700;margin-top:2px">0</div>`
+            heroRow.appendChild(el)
+            const valEl = el.querySelector('.hero-val')
+            if (typeof countUp === 'function') {
+              countUp(valEl, h.value)
+            } else {
+              valEl.textContent = fmtNumber(h.value)
+            }
+          })
 
-        if (!agg.length) {
-          barEl.innerHTML = `<div class="empty-state" style="text-align:center;padding:40px;color:var(--muted)">
-            <div style="font-size:48px">🏆</div>
-            <div style="font-weight:600;margin-top:8px">Noch keine Achievements freigeschaltet</div>
-            <div style="font-size:13px;margin-top:4px">Sobald User Achievements erhalten, erscheinen hier Daten.</div>
-          </div>`
+          if (!agg.length) {
+            barEl.innerHTML = `<div class="empty-state" style="text-align:center;padding:40px;color:var(--muted)">
+              <div style="font-size:48px">🏆</div>
+              <div style="font-weight:600;margin-top:8px">Noch keine Achievements freigeschaltet</div>
+              <div style="font-size:13px;margin-top:4px">Sobald User Achievements erhalten, erscheinen hier Daten.</div>
+            </div>`
+            donutEl.innerHTML = ''
+            tableWrap.innerHTML = ''
+            return
+          }
+
+          barEl.innerHTML = ''
+          const barLabels = agg.map(a => metaFor(a.type).icon + ' ' + metaFor(a.type).label)
+          const barValues = agg.map(a => a.count)
+          makeBarChart(barEl, {
+            labels: barLabels,
+            values: barValues,
+            height: 300,
+            onBarClick: (idx) => openTypeDrawer(agg[idx].type, render),
+            tooltip: (idx) => `${metaFor(agg[idx].type).label}: ${fmtNumber(agg[idx].count)} Unlocks (${agg[idx].uniqueUsers} User)`
+          })
+
           donutEl.innerHTML = ''
-          tableWrap.innerHTML = ''
-          return
-        }
+          const topN = agg.slice(0, 6)
+          const rest = agg.slice(6).reduce((s, a) => s + a.count, 0)
+          const donutLabels = topN.map(a => metaFor(a.type).label).concat(rest ? ['Andere'] : [])
+          const donutValues = topN.map(a => a.count).concat(rest ? [rest] : [])
+          makeDonutChart(donutEl, { labels: donutLabels, values: donutValues, height: 300 })
 
-        barEl.innerHTML = ''
-        const barLabels = agg.map(a => metaFor(a.type).icon + ' ' + metaFor(a.type).label)
-        const barValues = agg.map(a => a.count)
-        makeBarChart(barEl, {
-          labels: barLabels,
-          values: barValues,
-          height: 300,
-          onBarClick: (idx) => openTypeDrawer(agg[idx].type, render),
-          tooltip: (idx) => `${metaFor(agg[idx].type).label}: ${fmtNumber(agg[idx].count)} Unlocks (${agg[idx].uniqueUsers} User)`
-        })
-
-        donutEl.innerHTML = ''
-        const topN = agg.slice(0, 6)
-        const rest = agg.slice(6).reduce((s, a) => s + a.count, 0)
-        const donutLabels = topN.map(a => metaFor(a.type).label).concat(rest ? ['Andere'] : [])
-        const donutValues = topN.map(a => a.count).concat(rest ? [rest] : [])
-        makeDonutChart(donutEl, { labels: donutLabels, values: donutValues, height: 300 })
-
-        tableWrap.innerHTML = `
-          <table class="data-table" style="width:100%;border-collapse:collapse">
-            <thead>
-              <tr>
-                <th style="text-align:left;padding:10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)">Achievement</th>
-                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)">Unlocks</th>
-                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)">Unique User</th>
-                <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)">Zuletzt</th>
-                <th style="padding:10px;border-bottom:1px solid var(--border)"></th>
-              </tr>
-            </thead>
-            <tbody>
-              ${agg.map(a => {
-                const meta = metaFor(a.type)
-                return `<tr class="data-row" data-type="${htmlEscape(a.type)}" style="cursor:pointer;transition:background .15s" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background='transparent'">
-                  <td style="padding:10px;border-bottom:1px solid var(--border)">
-                    <div style="display:flex;align-items:center;gap:10px">
-                      <div style="font-size:20px">${meta.icon}</div>
-                      <div>
-                        <div style="font-weight:500">${htmlEscape(meta.label)}</div>
-                        <div style="font-size:11px;color:var(--muted);font-family:monospace">${htmlEscape(a.type)}</div>
+          tableWrap.innerHTML = `
+            <table class="data-table" style="width:100%;border-collapse:collapse">
+              <thead>
+                <tr>
+                  <th style="text-align:left;padding:10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)">Achievement</th>
+                  <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)">Unlocks</th>
+                  <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)">Unique User</th>
+                  <th style="text-align:right;padding:10px;border-bottom:1px solid var(--border);font-size:12px;color:var(--muted)">Zuletzt</th>
+                  <th style="padding:10px;border-bottom:1px solid var(--border)"></th>
+                </tr>
+              </thead>
+              <tbody>
+                ${agg.map(a => {
+                  const meta = metaFor(a.type)
+                  return `<tr class="data-row" data-type="${htmlEscape(a.type)}" style="cursor:pointer;transition:background .15s" onmouseover="this.style.background='var(--hover)'" onmouseout="this.style.background='transparent'">
+                    <td style="padding:10px;border-bottom:1px solid var(--border)">
+                      <div style="display:flex;align-items:center;gap:10px">
+                        <div style="font-size:20px">${meta.icon}</div>
+                        <div>
+                          <div style="font-weight:500">${htmlEscape(meta.label)}</div>
+                          <div style="font-size:11px;color:var(--muted);font-family:monospace">${htmlEscape(a.type)}</div>
+                        </div>
                       </div>
-                    </div>
-                  </td>
-                  <td style="padding:10px;border-bottom:1px solid var(--border);text-align:right;font-weight:600">${fmtNumber(a.count)}</td>
-                  <td style="padding:10px;border-bottom:1px solid var(--border);text-align:right">${fmtNumber(a.uniqueUsers)}</td>
-                  <td style="padding:10px;border-bottom:1px solid var(--border);text-align:right;font-size:12px;color:var(--muted)">${a.last ? fmtRelativeTime(a.last) : '—'}</td>
-                  <td style="padding:10px;border-bottom:1px solid var(--border);text-align:right">
-                    <button class="btn btn-sm btn-ghost" data-action="open">Details →</button>
-                  </td>
-                </tr>`
-              }).join('')}
-            </tbody>
-          </table>
-        `
-        tableWrap.querySelectorAll('.data-row').forEach(row => {
-          row.addEventListener('click', () => openTypeDrawer(row.dataset.type, render))
-        })
-      } catch (e) {
-        body.innerHTML = `<div class="error-state glass-card" style="padding:32px;text-align:center;border-radius:14px">
-          <div style="font-size:40px">⚠️</div>
-          <div style="font-weight:600;margin-top:8px">Daten konnten nicht geladen werden</div>
-          <div style="font-size:13px;color:var(--muted);margin-top:4px">${htmlEscape(e.message || 'Unbekannter Fehler')}</div>
-          <button id="retry" class="btn btn-primary" style="margin-top:12px">Erneut versuchen</button>
-        </div>`
-        body.querySelector('#retry').addEventListener('click', () => self.mount(container))
+                    </td>
+                    <td style="padding:10px;border-bottom:1px solid var(--border);text-align:right;font-weight:600">${fmtNumber(a.count)}</td>
+                    <td style="padding:10px;border-bottom:1px solid var(--border);text-align:right">${fmtNumber(a.uniqueUsers)}</td>
+                    <td style="padding:10px;border-bottom:1px solid var(--border);text-align:right;font-size:12px;color:var(--muted)">${a.last ? fmtRelativeTime(a.last) : '—'}</td>
+                    <td style="padding:10px;border-bottom:1px solid var(--border);text-align:right">
+                      <button class="btn btn-sm btn-ghost" data-action="open">Details →</button>
+                    </td>
+                  </tr>`
+                }).join('')}
+              </tbody>
+            </table>
+          `
+          tableWrap.querySelectorAll('.data-row').forEach(row => {
+            row.addEventListener('click', () => openTypeDrawer(row.dataset.type, render))
+          })
+        } catch (e) {
+          body.innerHTML = `<div class="error-state glass-card" style="padding:32px;text-align:center;border-radius:14px">
+            <div style="font-size:40px">⚠️</div>
+            <div style="font-weight:600;margin-top:8px">Daten konnten nicht geladen werden</div>
+            <div style="font-size:13px;color:var(--muted);margin-top:4px">Fehler: ${htmlEscape(e.message || 'Unbekannter Fehler')}</div>
+            <button id="retry" class="btn btn-primary" style="margin-top:12px">Erneut versuchen</button>
+          </div>`
+          const retryBtn = body.querySelector('#retry')
+          if (retryBtn) retryBtn.addEventListener('click', () => self.mount(container))
+        }
       }
+
+      const refreshBtn = container.querySelector('#btn-refresh')
+      const pdfBtn = container.querySelector('#btn-pdf')
+      const csvBtn = container.querySelector('#btn-csv')
+
+      refreshBtn && refreshBtn.addEventListener('click', async () => {
+        toast('Aktualisiere…', 'info')
+        await render()
+        toast('Aktualisiert', 'success')
+      })
+      pdfBtn && pdfBtn.addEventListener('click', () => {
+        try {
+          exportPanelAsPdf(container, 'achievement-unlocks.pdf')
+        } catch (e) {
+          toast('PDF-Export fehlgeschlagen: ' + (e.message || ''), 'error')
+        }
+      })
+      csvBtn && csvBtn.addEventListener('click', () => {
+        if (!lastAgg.length) { toast('Keine Daten zum Exportieren', 'warn'); return }
+        exportCsv(lastAgg.map(a => ({
+          type: a.type,
+          label: metaFor(a.type).label,
+          count: a.count,
+          unique_users: a.uniqueUsers,
+          last_unlocked: a.last
+        })), 'achievement-unlocks.csv')
+      })
+
+      // Fire & forget — Skeletons sind schon sichtbar
+      render()
+    } catch (mountErr) {
+      container.innerHTML = `<div class="error-state" style="padding:32px;text-align:center;border-radius:14px;border:1px solid var(--danger,#e33);margin:16px">
+        <div style="font-size:40px">⚠️</div>
+        <div style="font-weight:600;margin-top:8px">Panel konnte nicht geladen werden</div>
+        <div style="font-size:13px;color:var(--muted);margin-top:4px;font-family:monospace">Fehler: ${(mountErr && mountErr.message) ? String(mountErr.message).replace(/[<>&]/g, '') : 'Unbekannter Fehler'}</div>
+      </div>`
     }
-
-    container.querySelector('#btn-refresh').addEventListener('click', async () => {
-      toast('Aktualisiere…', 'info')
-      await render()
-      toast('Aktualisiert', 'success')
-    })
-    container.querySelector('#btn-pdf').addEventListener('click', () => {
-      exportPanelAsPdf(container, 'achievement-unlocks.pdf')
-    })
-    container.querySelector('#btn-csv').addEventListener('click', () => {
-      if (!lastAgg.length) { toast('Keine Daten zum Exportieren', 'warn'); return }
-      exportCsv(lastAgg.map(a => ({
-        type: a.type,
-        label: metaFor(a.type).label,
-        count: a.count,
-        unique_users: a.uniqueUsers,
-        last_unlocked: a.last
-      })), 'achievement-unlocks.csv')
-    })
-
-    await render()
   }
 }

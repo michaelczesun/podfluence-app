@@ -402,6 +402,7 @@ export default {
   title: 'Posts pro Tag',
   category: 'content',
   async mount(container) {
+    try {
     container.innerHTML = `
       <div class="panel-shell ppd-panel">
         <div class="panel-head">
@@ -476,5 +477,17 @@ export default {
     buildToolbar(container)
     await loadAndRender(container)
     fadeIn(container.querySelector('.ppd-panel'), { duration: 250 })
+    } catch (err) {
+      container.innerHTML = `
+        <div class="error-state glass-card" style="text-align:center;padding:40px 20px;border-radius:16px;border:1px solid #1f2937">
+          <h3 style="margin:10px 0 4px">Panel konnte nicht initialisiert werden</h3>
+          <p style="color:#94a3b8">${(err && err.message) ? String(err.message).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) : 'Unbekannter Fehler beim Mount'}</p>
+          <button class="btn-primary" id="mount-retry" style="margin-top:10px;padding:8px 16px;border-radius:10px;border:0;background:#6366f1;color:#fff;cursor:pointer">Erneut versuchen</button>
+        </div>`
+      const retry = container.querySelector('#mount-retry')
+      if (retry) retry.addEventListener('click', () => {
+        try { this.mount(container) } catch (_) {}
+      })
+    }
   }
 }

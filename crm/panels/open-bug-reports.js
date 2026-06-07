@@ -104,7 +104,7 @@ function buildTrendSeries(trend) {
     buckets[key] = 0
   }
   for (const r of trend) {
-    const key = r.created_at.slice(0, 10)
+    const key = (r.created_at || '').slice(0, 10)
     if (key in buckets) buckets[key]++
   }
   return Object.entries(buckets).map(([date, count]) => ({ x: date, y: count }))
@@ -176,12 +176,18 @@ function wireTable(root, rows, userMap, refresh) {
   root.querySelectorAll('.obr-resolve-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const id = btn.dataset.id
-      const row = rows.find(r => r.id === id)
+      const row = rows.find(r => String(r.id) === String(id))
       if (row) openResolveDrawer(row, userMap[row.user_id], refresh)
     })
   })
   root.querySelectorAll('.obr-user-link').forEach(el => {
-    el.addEventListener('click', () => showUserDetailModal && showUserDetailModal(el.dataset.uid))
+    el.addEventListener('click', () => {
+      if (typeof showUserDetailModal === 'function') {
+        showUserDetailModal(el.dataset.uid)
+      } else {
+        toast('User-Detail in Vorbereitung.', 'info')
+      }
+    })
   })
   root.querySelectorAll('.obr-prio-select').forEach(sel => {
     sel.addEventListener('change', async () => {
@@ -193,7 +199,7 @@ function wireTable(root, rows, userMap, refresh) {
         toast(`Priorität auf "${PRIO[newPrio].label}" gesetzt`, 'success')
         refresh()
       } catch (err) {
-        toast('Fehler: ' + err.message, 'error')
+        toast('Fehler: ' + (err.message || err), 'error')
       }
     })
   })
@@ -227,7 +233,7 @@ function wireTable(root, rows, userMap, refresh) {
         toast(`Priorität übernommen: "${PRIO[targetPrio].label}"`, 'success')
         refresh()
       } catch (err) {
-        toast('Fehler: ' + err.message, 'error')
+        toast('Fehler: ' + (err.message || err), 'error')
       }
     })
   })
@@ -268,12 +274,12 @@ function openResolveDrawer(row, user, refresh) {
   setTimeout(() => {
     const ta = document.getElementById('obr-resolution')
     const btn = document.getElementById('obr-resolve-submit')
-    ta && ta.focus()
-    btn && btn.addEventListener('click', async () => {
-      const resolution = (ta && ta.value || '').trim()
+    if (ta) ta.focus()
+    if (btn) btn.addEventListener('click', async () => {
+      const resolution = ((ta && ta.value) || '').trim()
       if (!resolution) {
         toast('Bitte Lösungs-Notiz angeben.', 'error')
-        ta && ta.focus()
+        if (ta) ta.focus()
         return
       }
       btn.disabled = true
@@ -290,12 +296,12 @@ function openResolveDrawer(row, user, refresh) {
           if (error) throw error
         }
         toast('Bug als gelöst markiert.', 'success')
-        d && d.close && d.close()
+        if (d && typeof d.close === 'function') d.close()
         refresh()
       } catch (err) {
         btn.disabled = false
         btn.textContent = 'Als gelöst markieren'
-        toast('Fehler: ' + err.message, 'error')
+        toast('Fehler: ' + (err.message || err), 'error')
       }
     })
   }, 50)
@@ -306,150 +312,164 @@ export default {
   title: 'Offene Bug-Reports',
   category: 'overview',
   async mount(container) {
-    injectStyles()
-    container.innerHTML = `
-      <div class="panel-shell" id="obr-shell">
-        <div class="panel-head">
-          <div>
-            <h2 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-.02em">Offene Bug-Reports</h2>
-            <div style="font-size:13px;color:var(--text-muted,#8e8e93);margin-top:2px">Live-Übersicht aller ungelösten Meldungen</div>
+    try {
+      injectStyles()
+      container.innerHTML = `
+        <div class="panel-shell" id="obr-shell">
+          <div class="panel-head">
+            <div>
+              <h2 style="margin:0;font-size:22px;font-weight:700;letter-spacing:-.02em">Offene Bug-Reports</h2>
+              <div style="font-size:13px;color:var(--text-muted,#8e8e93);margin-top:2px">Live-Übersicht aller ungelösten Meldungen</div>
+            </div>
+            <div class="obr-toolbar">
+              <button class="obr-tool-btn" id="obr-refresh">${iconHtml ? iconHtml('refresh') : '🔄'} Aktualisieren</button>
+              <button class="obr-tool-btn" id="obr-pdf">${iconHtml ? iconHtml('file-text') : '📄'} PDF</button>
+              <button class="obr-tool-btn" id="obr-csv">${iconHtml ? iconHtml('download') : '💾'} CSV</button>
+            </div>
           </div>
-          <div class="obr-toolbar">
-            <button class="obr-tool-btn" id="obr-refresh">${iconHtml ? iconHtml('refresh') : '🔄'} Aktualisieren</button>
-            <button class="obr-tool-btn" id="obr-pdf">${iconHtml ? iconHtml('file-text') : '📄'} PDF</button>
-            <button class="obr-tool-btn" id="obr-csv">${iconHtml ? iconHtml('download') : '💾'} CSV</button>
+          <div class="panel-body" id="obr-body">
+            <div class="obr-hero-grid" id="obr-hero">${skeletonLoader ? skeletonLoader({ count: 3, height: 110 }) : (spinnerHtml ? spinnerHtml() : 'Lade…')}</div>
+            <div class="obr-chart-grid" id="obr-charts">${skeletonLoader ? skeletonLoader({ count: 2, height: 240 }) : ''}</div>
+            <div id="obr-list">${skeletonLoader ? skeletonLoader({ count: 6, height: 48 }) : ''}</div>
           </div>
         </div>
-        <div class="panel-body" id="obr-body">
-          <div class="obr-hero-grid" id="obr-hero">${skeletonLoader ? skeletonLoader({ count: 3, height: 110 }) : ''}</div>
-          <div class="obr-chart-grid" id="obr-charts">${skeletonLoader ? skeletonLoader({ count: 2, height: 240 }) : ''}</div>
-          <div id="obr-list">${skeletonLoader ? skeletonLoader({ count: 6, height: 48 }) : ''}</div>
-        </div>
-      </div>
-    `
+      `
 
-    const body = container.querySelector('#obr-body')
-    let state = { open: [], userMap: {} }
+      const body = container.querySelector('#obr-body')
+      let state = { open: [], userMap: {} }
 
-    const render = async () => {
-      try {
-        const data = await fetchData()
-        state = data
-        const { open, trend, change, lastWeek, userMap } = data
-
-        const heroEl = container.querySelector('#obr-hero')
-        const critCount = open.filter(r => r.priority === 'critical').length
-        const oldest = open.length ? open[open.length - 1] : null
-        const oldestDays = oldest ? Math.floor((Date.now() - new Date(oldest.created_at).getTime()) / 86400e3) : 0
-        const changeLabel = change > 0 ? `+${change}% vs. Vorwoche` : `${change}% vs. Vorwoche`
-        const changeKind = change > 0 ? 'negative' : 'positive'
-        heroEl.innerHTML = `
-          ${statHero({ label: 'Offen gesamt', value: open.length, change: changeLabel, trend: changeKind, icon: 'bug' })}
-          ${statHero({ label: 'Kritisch', value: critCount, change: critCount > 0 ? 'Sofort beheben' : 'Keine kritischen', trend: critCount > 0 ? 'negative' : 'positive', icon: 'alert-triangle' })}
-          ${statHero({ label: 'Neu (7 Tage)', value: lastWeek, change: `Älteste: ${oldestDays} Tg.`, trend: 'neutral', icon: 'clock' })}
-        `
-        heroEl.querySelectorAll('.stat-hero-value, .hero-value, [data-stat-value]').forEach((el, i) => {
-          const vals = [open.length, critCount, lastWeek]
-          if (countUp && vals[i] != null) countUp(el, vals[i])
-        })
-
-        const chartsEl = container.querySelector('#obr-charts')
-        chartsEl.innerHTML = `
-          <div class="obr-section glass-card">
-            <h3>Neue Reports — letzte 14 Tage</h3>
-            <div id="obr-chart-trend" style="height:240px"></div>
-          </div>
-          <div class="obr-section glass-card">
-            <h3>Priorität-Verteilung</h3>
-            <div id="obr-chart-prio" style="height:240px"></div>
-          </div>
-        `
+      const render = async () => {
         try {
-          makeAreaChart(chartsEl.querySelector('#obr-chart-trend'), {
-            data: buildTrendSeries(trend),
-            color: '#0a84ff',
-            yLabel: 'Reports'
+          const data = await fetchData()
+          state = data
+          const { open, trend, change, lastWeek, userMap } = data
+
+          const heroEl = container.querySelector('#obr-hero')
+          const critCount = open.filter(r => r.priority === 'critical').length
+          const oldest = open.length ? open[open.length - 1] : null
+          const oldestDays = oldest ? Math.floor((Date.now() - new Date(oldest.created_at).getTime()) / 86400e3) : 0
+          const changeLabel = change > 0 ? `+${change}% vs. Vorwoche` : `${change}% vs. Vorwoche`
+          const changeKind = change > 0 ? 'negative' : 'positive'
+          heroEl.innerHTML = `
+            ${statHero({ label: 'Offen gesamt', value: open.length, change: changeLabel, trend: changeKind, icon: 'bug' })}
+            ${statHero({ label: 'Kritisch', value: critCount, change: critCount > 0 ? 'Sofort beheben' : 'Keine kritischen', trend: critCount > 0 ? 'negative' : 'positive', icon: 'alert-triangle' })}
+            ${statHero({ label: 'Neu (7 Tage)', value: lastWeek, change: `Älteste: ${oldestDays} Tg.`, trend: 'neutral', icon: 'clock' })}
+          `
+          heroEl.querySelectorAll('.stat-hero-value, .hero-value, [data-stat-value]').forEach((el, i) => {
+            const vals = [open.length, critCount, lastWeek]
+            if (countUp && vals[i] != null) countUp(el, vals[i])
           })
-        } catch (_) {}
-        try {
-          makeDonutChart(chartsEl.querySelector('#obr-chart-prio'), {
-            data: buildPrioDistribution(open),
-            centerLabel: open.length + ' offen'
+
+          const chartsEl = container.querySelector('#obr-charts')
+          chartsEl.innerHTML = `
+            <div class="obr-section glass-card">
+              <h3>Neue Reports — letzte 14 Tage</h3>
+              <div id="obr-chart-trend" style="height:240px"></div>
+            </div>
+            <div class="obr-section glass-card">
+              <h3>Priorität-Verteilung</h3>
+              <div id="obr-chart-prio" style="height:240px"></div>
+            </div>
+          `
+          try {
+            makeAreaChart(chartsEl.querySelector('#obr-chart-trend'), {
+              data: buildTrendSeries(trend),
+              color: '#0a84ff',
+              yLabel: 'Reports'
+            })
+          } catch (_) {}
+          try {
+            makeDonutChart(chartsEl.querySelector('#obr-chart-prio'), {
+              data: buildPrioDistribution(open),
+              centerLabel: open.length + ' offen'
+            })
+          } catch (_) {}
+
+          const sorted = [...open].sort((a, b) => {
+            const ra = (PRIO[a.priority] || { rank: 0 }).rank
+            const rb = (PRIO[b.priority] || { rank: 0 }).rank
+            if (rb !== ra) return rb - ra
+            return new Date(b.created_at) - new Date(a.created_at)
           })
-        } catch (_) {}
 
-        const sorted = [...open].sort((a, b) => {
-          const ra = (PRIO[a.priority] || { rank: 0 }).rank
-          const rb = (PRIO[b.priority] || { rank: 0 }).rank
-          if (rb !== ra) return rb - ra
-          return new Date(b.created_at) - new Date(a.created_at)
-        })
+          const listEl = container.querySelector('#obr-list')
+          listEl.innerHTML = `<div class="obr-section glass-card">
+            <h3>Offene Reports (${open.length}) — Drag&Drop oder Dropdown zum Ändern der Priorität</h3>
+            ${renderTable(sorted, userMap)}
+          </div>`
+          wireTable(listEl, sorted, userMap, render)
 
-        const listEl = container.querySelector('#obr-list')
-        listEl.innerHTML = `<div class="obr-section glass-card">
-          <h3>Offene Reports (${open.length}) — Drag&Drop oder Dropdown zum Ändern der Priorität</h3>
-          ${renderTable(sorted, userMap)}
-        </div>`
-        wireTable(listEl, sorted, userMap, render)
-
-        if (fadeIn) fadeIn(body)
-      } catch (err) {
-        body.innerHTML = `
-          <div class="obr-error glass-card">
-            <div style="font-size:48px">⚠️</div>
-            <div style="font-size:16px;font-weight:600">Daten konnten nicht geladen werden</div>
-            <div style="color:var(--text-muted,#8e8e93);font-size:13px">${htmlEscape(err.message || String(err))}</div>
-            <button id="obr-retry">Erneut versuchen</button>
-          </div>
-        `
-        body.querySelector('#obr-retry')?.addEventListener('click', render)
+          if (fadeIn) fadeIn(body)
+        } catch (err) {
+          body.innerHTML = `
+            <div class="obr-error glass-card">
+              <div style="font-size:48px">⚠️</div>
+              <div style="font-size:16px;font-weight:600">Daten konnten nicht geladen werden</div>
+              <div style="color:var(--text-muted,#8e8e93);font-size:13px">${htmlEscape(err.message || String(err))}</div>
+              <button id="obr-retry">Erneut versuchen</button>
+            </div>
+          `
+          const retry = body.querySelector('#obr-retry')
+          if (retry) retry.addEventListener('click', render)
+        }
       }
+
+      const refreshBtn = container.querySelector('#obr-refresh')
+      if (refreshBtn) refreshBtn.addEventListener('click', () => {
+        toast('Aktualisiere…', 'info')
+        render()
+      })
+      const pdfBtn = container.querySelector('#obr-pdf')
+      if (pdfBtn) pdfBtn.addEventListener('click', async () => {
+        try {
+          await exportPanelAsPdf({
+            title: 'Offene Bug-Reports',
+            subtitle: `Stand: ${fmtDateTime(new Date().toISOString())} · ${state.open.length} offen`,
+            element: container.querySelector('#obr-shell'),
+            rows: state.open.map(r => ({
+              Priorität: (PRIO[r.priority] || {}).label || r.priority,
+              Titel: r.title || '',
+              Kategorie: r.category || '',
+              Gemeldet: fmtDateTime(r.created_at),
+              App: r.app_version || ''
+            }))
+          })
+          toast('PDF erstellt.', 'success')
+        } catch (err) {
+          toast('PDF-Fehler: ' + (err.message || err), 'error')
+        }
+      })
+      const csvBtn = container.querySelector('#obr-csv')
+      if (csvBtn) csvBtn.addEventListener('click', () => {
+        try {
+          exportCsv({
+            filename: `open-bug-reports-${new Date().toISOString().slice(0, 10)}.csv`,
+            rows: state.open.map(r => ({
+              id: r.id,
+              priority: r.priority,
+              title: r.title,
+              description: r.description,
+              category: r.category,
+              user_id: r.user_id,
+              created_at: r.created_at,
+              app_version: r.app_version
+            }))
+          })
+          toast('CSV exportiert.', 'success')
+        } catch (err) {
+          toast('CSV-Fehler: ' + (err.message || err), 'error')
+        }
+      })
+
+      await render()
+    } catch (mountErr) {
+      container.innerHTML = `
+        <div class="obr-error glass-card" style="display:flex;flex-direction:column;align-items:center;gap:12px;padding:40px;text-align:center">
+          <div style="font-size:48px">⚠️</div>
+          <div style="font-size:16px;font-weight:600">Panel konnte nicht initialisiert werden</div>
+          <div style="color:var(--text-muted,#8e8e93);font-size:13px">${(mountErr && (mountErr.message || String(mountErr))) || 'Unbekannter Fehler'}</div>
+        </div>
+      `
     }
-
-    container.querySelector('#obr-refresh').addEventListener('click', () => {
-      toast('Aktualisiere…', 'info')
-      render()
-    })
-    container.querySelector('#obr-pdf').addEventListener('click', async () => {
-      try {
-        await exportPanelAsPdf({
-          title: 'Offene Bug-Reports',
-          subtitle: `Stand: ${fmtDateTime(new Date().toISOString())} · ${state.open.length} offen`,
-          element: container.querySelector('#obr-shell'),
-          rows: state.open.map(r => ({
-            Priorität: (PRIO[r.priority] || {}).label || r.priority,
-            Titel: r.title || '',
-            Kategorie: r.category || '',
-            Gemeldet: fmtDateTime(r.created_at),
-            App: r.app_version || ''
-          }))
-        })
-        toast('PDF erstellt.', 'success')
-      } catch (err) {
-        toast('PDF-Fehler: ' + err.message, 'error')
-      }
-    })
-    container.querySelector('#obr-csv').addEventListener('click', () => {
-      try {
-        exportCsv({
-          filename: `open-bug-reports-${new Date().toISOString().slice(0, 10)}.csv`,
-          rows: state.open.map(r => ({
-            id: r.id,
-            priority: r.priority,
-            title: r.title,
-            description: r.description,
-            category: r.category,
-            user_id: r.user_id,
-            created_at: r.created_at,
-            app_version: r.app_version
-          }))
-        })
-        toast('CSV exportiert.', 'success')
-      } catch (err) {
-        toast('CSV-Fehler: ' + err.message, 'error')
-      }
-    })
-
-    await render()
   }
 }

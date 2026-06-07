@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js'
+import { toast, confirmDialog, fmtNumber, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js'
 import { makeBarChart, makeDonutChart, makeRadialBar } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, tabs, statHero, glassCard } from '/lib/layout-extras.js'
+import { drawer } from '/lib/layout-extras.js'
 
 const TOTAL_BYTES = 1024 * 1024 * 1024 // 1 GB Free-Tier
 const WARN_THRESHOLD = 0.7
@@ -23,14 +23,9 @@ function pct(used, total) {
 }
 
 async function fetchBuckets() {
-  try {
-    const { data, error } = await sb.storage.listBuckets()
-    if (error) throw error
-    return data || []
-  } catch (e) {
-    console.warn('[storage-ops] listBuckets failed', e)
-    return []
-  }
+  const { data, error } = await sb.storage.listBuckets()
+  if (error) throw error
+  return data || []
 }
 
 async function fetchBucketContents(bucketName, prefix = '', acc = [], depth = 0) {
@@ -64,11 +59,12 @@ async function fetchBucketContents(bucketName, prefix = '', acc = [], depth = 0)
 
 async function fetchJobStatus() {
   try {
-    const { data } = await sb
+    const { data, error } = await sb
       .from('storage_recompress_jobs')
       .select('*')
       .order('created_at', { ascending: false })
       .limit(5)
+    if (error) return []
     return data || []
   } catch {
     return []
@@ -97,7 +93,7 @@ function renderError(body, msg, retry) {
     <div class="glass-card empty-state">
       <div class="empty-icon">${iconHtml('alert-triangle')}</div>
       <h3>Konnte Storage nicht laden</h3>
-      <p>${htmlEscape(msg || 'Unbekannter Fehler')}</p>
+      <p>Fehler: ${htmlEscape(msg || 'Unbekannter Fehler')}</p>
       <button class="btn btn-primary" id="retryBtn">Erneut versuchen</button>
     </div>`
   body.querySelector('#retryBtn')?.addEventListener('click', retry)
@@ -109,6 +105,25 @@ function renderEmpty(body) {
       <div class="empty-icon">${iconHtml('database')}</div>
       <h3>Keine Buckets gefunden</h3>
       <p>Es sind aktuell keine Storage-Buckets konfiguriert.</p>
+    </div>`
+}
+
+function renderSkeleton(body) {
+  try {
+    const skel = skeletonLoader({ rows: 4, type: 'card' })
+    if (typeof skel === 'string') {
+      body.innerHTML = skel
+      return
+    }
+    if (skel instanceof Node) {
+      body.appendChild(skel)
+      return
+    }
+  } catch {}
+  // Fallback
+  body.innerHTML = `
+    <div class="glass-card" style="padding:24px;text-align:center">
+      ${spinnerHtml()} <span class="muted">Lade Storage-Daten…</span>
     </div>`
 }
 
@@ -168,7 +183,7 @@ function renderJobStatus(body, jobs) {
       <span class="muted small">letzte 5</span>
     </div>
     <div class="job-list">
-      ${(!jobs.length) ? `<div class="muted small" style="padding:12px">Keine Jobs in Historie.</div>` :
+      ${(!jobs.length) ? `<div class="muted small" style="padding:12px">Noch keine Recompress-Jobs in der Historie. Sobald ein Bucket-Recompress läuft, erscheinen Status und Fortschritt hier.</div>` :
         jobs.map(j => {
           const st = (j.status || 'unknown').toLowerCase()
           const cls = st === 'done' ? 'ok' : st === 'failed' ? 'err' : st === 'running' ? 'run' : 'idle'
@@ -306,16 +321,20 @@ function renderBucketCard(bucket, files, totalUsed, onAction) {
       sublabel: fmtBytes(used),
       color: usedPct > 70 ? '#ff5b5b' : usedPct > 40 ? '#ffb547' : '#5be3a4'
     })
-  } catch (e) {
+  } catch {
     const el = card.querySelector(`#${radialId}`)
     if (el) el.innerHTML = `<div class="muted">${usedPct.toFixed(1)}%</div>`
   }
 
   card.querySelector('[data-act="export"]').addEventListener('click', () => {
-    exportCsv(`storage-${bucket.name}.csv`, files.map(f => ({
-      path: f.path, name: f.name, size: f.size, mime: f.mime, updated: f.updated
-    })))
-    toast(`CSV exportiert (${fileCount} Dateien)`)
+    try {
+      exportCsv(`storage-${bucket.name}.csv`, files.map(f => ({
+        path: f.path, name: f.name, size: f.size, mime: f.mime, updated: f.updated
+      })))
+      toast(`CSV exportiert (${fileCount} Dateien)`)
+    } catch (e) {
+      toast(`Export-Fehler: ${e.message}`, 'error')
+    }
   })
 
   card.querySelector('[data-act="recompress"]').addEventListener('click', async () => {
@@ -341,11 +360,15 @@ function renderBucketCard(bucket, files, totalUsed, onAction) {
   })
 
   card.querySelector('[data-act="all"]').addEventListener('click', () => {
-    drawer({
-      title: `Alle Dateien · ${bucket.name}`,
-      width: 720,
-      content: renderAllFilesDrawer(files, bucket.name, onAction)
-    })
+    try {
+      drawer({
+        title: `Alle Dateien · ${bucket.name}`,
+        width: 720,
+        content: renderAllFilesDrawer(files, bucket.name, onAction)
+      })
+    } catch (e) {
+      toast(`Drawer-Fehler: ${e.message}`, 'error')
+    }
   })
 
   card.querySelectorAll('[data-row-act="delete"]').forEach(btn => {
@@ -408,98 +431,113 @@ export default {
   title: 'Storage & Cleanup',
   category: 'admin_actions',
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell storage-ops-panel">
-        <div class="panel-head">
-          <div>
-            <h2>${iconHtml('database')} Storage &amp; Cleanup</h2>
-            <p class="muted small">Bucket-Auslastung, größte Dateien &amp; Recompress-Steuerung</p>
+    try {
+      container.innerHTML = `
+        <div class="panel-shell storage-ops-panel">
+          <div class="panel-head">
+            <div>
+              <h2>${iconHtml('database')} Storage &amp; Cleanup</h2>
+              <p class="muted small">Bucket-Auslastung, größte Dateien &amp; Recompress-Steuerung</p>
+            </div>
+            <div class="toolbar">
+              <button class="btn btn-secondary" id="refreshBtn">${iconHtml('refresh-cw')} Aktualisieren</button>
+              <button class="btn btn-secondary" id="pdfBtn">${iconHtml('file-text')} PDF</button>
+              <button class="btn btn-secondary" id="csvBtn">${iconHtml('download')} CSV</button>
+            </div>
           </div>
-          <div class="toolbar">
-            <button class="btn btn-secondary" id="refreshBtn">${iconHtml('refresh-cw')} Aktualisieren</button>
-            <button class="btn btn-secondary" id="pdfBtn">${iconHtml('file-text')} PDF</button>
-            <button class="btn btn-secondary" id="csvBtn">${iconHtml('download')} CSV</button>
-          </div>
-        </div>
-        <div class="panel-body" id="body"></div>
-      </div>`
+          <div class="panel-body" id="body"></div>
+        </div>`
 
-    const body = container.querySelector('#body')
+      const body = container.querySelector('#body')
 
-    const load = async () => {
-      body.innerHTML = ''
-      try {
-        const skelHtml = skeletonLoader({ rows: 4, type: 'card' })
-        const skel = document.createElement('div')
-        skel.innerHTML = typeof skelHtml === 'string' ? skelHtml : ''
-        body.appendChild(skel)
-      } catch {}
+      const load = async () => {
+        renderSkeleton(body)
 
-      let buckets = []
-      try {
-        buckets = await fetchBuckets()
-      } catch (e) {
-        return renderError(body, e.message, load)
-      }
+        let buckets = []
+        try {
+          buckets = await fetchBuckets()
+        } catch (e) {
+          return renderError(body, e.message, load)
+        }
 
-      if (!buckets.length) {
+        if (!buckets.length) {
+          body.innerHTML = ''
+          return renderEmpty(body)
+        }
+
+        let contents = []
+        let jobs = []
+        try {
+          contents = await Promise.all(buckets.map(b => fetchBucketContents(b.name)))
+          jobs = await fetchJobStatus()
+        } catch (e) {
+          return renderError(body, e.message, load)
+        }
+
+        const bucketSummaries = buckets.map((b, i) => ({
+          ...b,
+          files: contents[i] || [],
+          used: (contents[i] || []).reduce((a, f) => a + (f.size || 0), 0),
+          count: (contents[i] || []).length
+        }))
+        const totalUsed = bucketSummaries.reduce((a, s) => a + s.used, 0)
+        const allFiles = bucketSummaries.flatMap(s => s.files.map(f => ({ ...f, bucket: s.name })))
+
+        container._exportPayload = { bucketSummaries, totalUsed, allFiles, jobs }
+
         body.innerHTML = ''
-        return renderEmpty(body)
+
+        renderTotalHero(body, totalUsed)
+        renderDistribution(body, bucketSummaries)
+        renderJobStatus(body, jobs)
+
+        const grid = document.createElement('div')
+        grid.className = 'bucket-grid'
+        body.appendChild(grid)
+        for (const b of bucketSummaries) {
+          grid.appendChild(renderBucketCard(b, b.files, totalUsed, load))
+        }
+
+        try { fadeIn(body) } catch {}
       }
 
-      const contents = await Promise.all(buckets.map(b => fetchBucketContents(b.name)))
-      const jobs = await fetchJobStatus()
+      container.querySelector('#refreshBtn').addEventListener('click', () => {
+        toast('Wird aktualisiert…')
+        load()
+      })
 
-      const bucketSummaries = buckets.map((b, i) => ({
-        ...b,
-        files: contents[i],
-        used: contents[i].reduce((a, f) => a + (f.size || 0), 0),
-        count: contents[i].length
-      }))
-      const totalUsed = bucketSummaries.reduce((a, s) => a + s.used, 0)
-      const allFiles = bucketSummaries.flatMap(s => s.files.map(f => ({ ...f, bucket: s.name })))
+      container.querySelector('#csvBtn').addEventListener('click', () => {
+        const p = container._exportPayload
+        if (!p) return toast('Noch keine Daten', 'error')
+        try {
+          exportCsv('storage-overview.csv', p.allFiles.map(f => ({
+            bucket: f.bucket, path: f.path, size: f.size, mime: f.mime, updated: f.updated
+          })))
+          toast(`${p.allFiles.length} Zeilen exportiert`, 'success')
+        } catch (e) {
+          toast(`CSV-Fehler: ${e.message}`, 'error')
+        }
+      })
 
-      container._exportPayload = { bucketSummaries, totalUsed, allFiles, jobs }
+      container.querySelector('#pdfBtn').addEventListener('click', async () => {
+        try {
+          await exportPanelAsPdf(container, 'Storage & Cleanup')
+          toast('PDF erstellt', 'success')
+        } catch (e) {
+          toast(`PDF-Fehler: ${e.message}`, 'error')
+        }
+      })
 
-      body.innerHTML = ''
-
-      renderTotalHero(body, totalUsed)
-      renderDistribution(body, bucketSummaries)
-      renderJobStatus(body, jobs)
-
-      const grid = document.createElement('div')
-      grid.className = 'bucket-grid'
-      body.appendChild(grid)
-      for (const b of bucketSummaries) {
-        grid.appendChild(renderBucketCard(b, b.files, totalUsed, load))
-      }
-
-      try { fadeIn(body) } catch {}
+      await load()
+    } catch (e) {
+      console.error('[storage-ops] mount failed', e)
+      container.innerHTML = `
+        <div class="glass-card empty-state" style="margin:24px">
+          <div class="empty-icon">${iconHtml ? iconHtml('alert-triangle') : '⚠'}</div>
+          <h3>Panel konnte nicht geladen werden</h3>
+          <p>Fehler: ${htmlEscape ? htmlEscape(e.message || String(e)) : (e.message || String(e))}</p>
+          <button class="btn btn-primary" onclick="location.reload()">Seite neu laden</button>
+        </div>`
     }
-
-    container.querySelector('#refreshBtn').addEventListener('click', () => {
-      toast('Wird aktualisiert…')
-      load()
-    })
-
-    container.querySelector('#csvBtn').addEventListener('click', () => {
-      const p = container._exportPayload
-      if (!p) return toast('Noch keine Daten', 'error')
-      exportCsv('storage-overview.csv', p.allFiles.map(f => ({
-        bucket: f.bucket, path: f.path, size: f.size, mime: f.mime, updated: f.updated
-      })))
-      toast(`${p.allFiles.length} Zeilen exportiert`, 'success')
-    })
-
-    container.querySelector('#pdfBtn').addEventListener('click', async () => {
-      try {
-        await exportPanelAsPdf(container, 'Storage & Cleanup')
-        toast('PDF erstellt', 'success')
-      } catch (e) {
-        toast(`PDF-Fehler: ${e.message}`, 'error')
-      }
-    })
-
-    await load()
   }
 }

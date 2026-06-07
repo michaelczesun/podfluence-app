@@ -1,5 +1,5 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js'
 import { makeBarChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
@@ -106,65 +106,92 @@ export default {
   category: 'users',
 
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell">
-        <div class="panel-head">
-          <div>
-            <h2>App-Versionen im Feld</h2>
-            <p class="panel-sub">Verteilung aktiver Builds, Update-Druck und Force-Push pro Version.</p>
+    try {
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="panel-head">
+            <div>
+              <h2>App-Versionen im Feld</h2>
+              <p class="panel-sub">Verteilung aktiver Builds, Update-Druck und Force-Push pro Version.</p>
+            </div>
+            <div class="toolbar" id="cbv-toolbar">
+              <button class="btn btn-ghost" data-act="refresh">${iconHtml('refresh')} Aktualisieren</button>
+              <button class="btn btn-ghost" data-act="pdf">${iconHtml('file-text')} PDF</button>
+              <button class="btn btn-ghost" data-act="csv">${iconHtml('download')} CSV</button>
+            </div>
           </div>
-          <div class="toolbar" id="cbv-toolbar">
-            <button class="btn btn-ghost" data-act="refresh">${iconHtml('refresh')} Aktualisieren</button>
-            <button class="btn btn-ghost" data-act="pdf">${iconHtml('file-text')} PDF</button>
-            <button class="btn btn-ghost" data-act="csv">${iconHtml('download')} CSV</button>
+          <div class="panel-body" id="cbv-body"></div>
+        </div>
+      `
+
+      const body = container.querySelector('#cbv-body')
+      body.innerHTML = skeletonLoader({ rows: 6, height: 64 })
+      fadeIn(container)
+
+      const state = { rows: [], latest: null }
+
+      const renderAll = async () => {
+        body.innerHTML = skeletonLoader({ rows: 6, height: 64 })
+        try {
+          const rows = await fetchVersionData()
+          state.rows = rows
+          state.latest = rows.length ? rows.map(r => r.version).sort((a, b) => cmpVersion(b, a))[0] : null
+          renderContent(body, state, renderAll)
+        } catch (err) {
+          console.error(err)
+          body.innerHTML = renderError(err)
+          body.querySelector('[data-act="retry"]')?.addEventListener('click', renderAll)
+        }
+      }
+
+      container.querySelector('[data-act="refresh"]').addEventListener('click', () => {
+        toast('Aktualisiere…')
+        renderAll()
+      })
+      container.querySelector('[data-act="pdf"]').addEventListener('click', () => {
+        try {
+          exportPanelAsPdf({ container, title: 'App-Versionen im Feld' })
+        } catch (err) {
+          console.error(err)
+          toast(`PDF-Export fehlgeschlagen: ${err?.message || 'Fehler'}`, 'error')
+        }
+      })
+      container.querySelector('[data-act="csv"]').addEventListener('click', () => {
+        if (!state.rows.length) return toast('Keine Daten')
+        try {
+          exportCsv({
+            filename: `app-versions-${new Date().toISOString().slice(0, 10)}.csv`,
+            rows: state.rows.map(r => ({
+              Version: r.version,
+              Nutzer: r.user_count,
+              Status: colorFor(r.rank).label,
+              Plattformen: Object.entries(r.platforms).map(([k, v]) => `${k}:${v}`).join('|'),
+              'Zuletzt aktiv': r.last_seen ? fmtDateTime(r.last_seen) : ''
+            }))
+          })
+        } catch (err) {
+          console.error(err)
+          toast(`CSV-Export fehlgeschlagen: ${err?.message || 'Fehler'}`, 'error')
+        }
+      })
+
+      await renderAll()
+    } catch (mountErr) {
+      console.error('client-build-versions mount failed', mountErr)
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="empty-state error">
+            ${iconHtml('alert-triangle')}
+            <h3>Panel konnte nicht geladen werden</h3>
+            <p>${htmlEscape(mountErr?.message || 'Unbekannter Fehler beim Initialisieren')}</p>
+            <button class="btn btn-primary" data-act="mount-retry">${iconHtml('refresh')} Erneut versuchen</button>
           </div>
         </div>
-        <div class="panel-body" id="cbv-body"></div>
-      </div>
-    `
-
-    const body = container.querySelector('#cbv-body')
-    body.innerHTML = skeletonLoader({ rows: 6, height: 64 })
-    fadeIn(container)
-
-    const state = { rows: [], latest: null }
-
-    const renderAll = async () => {
-      body.innerHTML = skeletonLoader({ rows: 6, height: 64 })
-      try {
-        const rows = await fetchVersionData()
-        state.rows = rows
-        state.latest = rows.length ? rows.map(r => r.version).sort((a, b) => cmpVersion(b, a))[0] : null
-        renderContent(body, state, renderAll)
-      } catch (err) {
-        console.error(err)
-        body.innerHTML = renderError(err)
-        body.querySelector('[data-act="retry"]')?.addEventListener('click', renderAll)
-      }
-    }
-
-    container.querySelector('[data-act="refresh"]').addEventListener('click', () => {
-      toast('Aktualisiere…')
-      renderAll()
-    })
-    container.querySelector('[data-act="pdf"]').addEventListener('click', () => {
-      exportPanelAsPdf({ container, title: 'App-Versionen im Feld' })
-    })
-    container.querySelector('[data-act="csv"]').addEventListener('click', () => {
-      if (!state.rows.length) return toast('Keine Daten')
-      exportCsv({
-        filename: `app-versions-${new Date().toISOString().slice(0, 10)}.csv`,
-        rows: state.rows.map(r => ({
-          Version: r.version,
-          Nutzer: r.user_count,
-          Status: colorFor(r.rank).label,
-          Plattformen: Object.entries(r.platforms).map(([k, v]) => `${k}:${v}`).join('|'),
-          'Zuletzt aktiv': r.last_seen ? fmtDateTime(r.last_seen) : ''
-        }))
+      `
+      container.querySelector('[data-act="mount-retry"]')?.addEventListener('click', () => {
+        try { this.mount(container) } catch (_) {}
       })
-    })
-
-    await renderAll()
+    }
   }
 }
 
@@ -184,7 +211,7 @@ function renderEmpty(body) {
     <div class="empty-state">
       ${iconHtml('smartphone')}
       <h3>Noch keine App-Versionen erfasst</h3>
-      <p>Sobald Clients Heartbeats senden, erscheinen sie hier mit Verteilung und Update-Druck.</p>
+      <p>Sobald Clients Heartbeats senden (Tabelle <code>user_devices</code> mit <code>app_version</code>), erscheinen sie hier mit Verteilung und Update-Druck.</p>
     </div>
   `
 }
@@ -271,28 +298,36 @@ function renderContent(body, state, refresh) {
   })
 
   const sortedAsc = [...rows].sort((a, b) => a.user_count - b.user_count)
-  makeBarChart(body.querySelector('#cbv-bar'), {
-    horizontal: true,
-    categories: sortedAsc.map(r => r.version),
-    series: [{
-      name: 'Nutzer',
-      data: sortedAsc.map(r => ({
-        x: r.version,
-        y: r.user_count,
-        fillColor: colorFor(r.rank).fill
-      }))
-    }],
-    onBarClick: (i) => {
-      const r = sortedAsc[i]
-      if (r) openVersionDrawer(r, state, refresh)
-    }
-  })
+  try {
+    makeBarChart(body.querySelector('#cbv-bar'), {
+      horizontal: true,
+      categories: sortedAsc.map(r => r.version),
+      series: [{
+        name: 'Nutzer',
+        data: sortedAsc.map(r => ({
+          x: r.version,
+          y: r.user_count,
+          fillColor: colorFor(r.rank).fill
+        }))
+      }],
+      onBarClick: (i) => {
+        const r = sortedAsc[i]
+        if (r) openVersionDrawer(r, state, refresh)
+      }
+    })
+  } catch (err) {
+    console.error('bar chart failed', err)
+  }
 
-  makeDonutChart(body.querySelector('#cbv-donut'), {
-    labels: ['Aktuell', 'Eine alt', 'Mehrere alt'],
-    series: [latestUsers, oneOld, stale],
-    colors: ['#8b5cf6', '#eab308', '#ef4444']
-  })
+  try {
+    makeDonutChart(body.querySelector('#cbv-donut'), {
+      labels: ['Aktuell', 'Eine alt', 'Mehrere alt'],
+      series: [latestUsers, oneOld, stale],
+      colors: ['#8b5cf6', '#eab308', '#ef4444']
+    })
+  } catch (err) {
+    console.error('donut chart failed', err)
+  }
 
   body.querySelectorAll('tr[data-version]').forEach(tr => {
     tr.addEventListener('click', (ev) => {

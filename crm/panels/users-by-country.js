@@ -298,6 +298,7 @@ export default {
   category: 'growth',
 
   async mount(container) {
+    try {
     if (!document.querySelector('style[data-panel="users-by-country"]')) {
       document.head.insertAdjacentHTML('beforeend', styles)
     }
@@ -469,5 +470,19 @@ export default {
     }
 
     await load()
+    } catch (mountErr) {
+      console.error('[users-by-country] mount failed', mountErr)
+      try {
+        container.innerHTML = `
+          <div class="panel-shell">
+            <div class="error-state glass-card">
+              <div class="error-icon">!</div>
+              <div class="error-title">Panel konnte nicht geladen werden</div>
+              <div class="error-sub">${(mountErr && mountErr.message) ? mountErr.message.replace(/[<>&]/g, '') : 'Unbekannter Fehler'}</div>
+            </div>
+          </div>
+        `
+      } catch (_) {}
+    }
   }
 }

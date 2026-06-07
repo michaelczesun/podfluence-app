@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
+import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
 import { makeAreaChart, makeLineChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
-import { countUp, fadeIn, skeletonLoader, pulse } from '/lib/animations.js'
-import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+import { countUp, fadeIn, pulse } from '/lib/animations.js'
+import { drawer } from '/lib/layout-extras.js'
 
 const REFRESH_MS = 60_000
 
@@ -228,11 +228,15 @@ async function renderDrilldown(def, totals) {
   body.innerHTML = `
     <h3>${htmlEscape(def.label)} — 30 Tage</h3>
     <div class="sub">Lade historische Daten …</div>
-    <div class="chart-wrap" id="drill-chart">${skeletonLoader ? '' : ''}<div class="skel-card" style="height:280px"></div></div>`
+    <div class="chart-wrap" id="drill-chart"><div class="skel-card" style="height:280px"></div></div>`
 
-  drawer({ title: def.label, content: body, width: 720 })
+  try { drawer({ title: def.label, content: body, width: 720 }) }
+  catch (e) { toast({ type: 'error', message: 'Drawer konnte nicht geöffnet werden' }); return }
 
-  const series = await fetchTimeSeries(def.key, 30)
+  let series = []
+  try { series = await fetchTimeSeries(def.key, 30) }
+  catch (_) { series = [] }
+
   const valuesOnly = series.map(s => s.value)
   const avg = valuesOnly.length ? Math.round(valuesOnly.reduce((a,b)=>a+b,0) / valuesOnly.length) : 0
   const t = totals[def.key] || { value: 0, prev: 0 }
@@ -274,7 +278,8 @@ async function renderDrilldown(def, totals) {
     }
   }
   body.querySelector('#drill-csv')?.addEventListener('click', () => {
-    exportCsv(`${def.key}_30d.csv`, series.map(s => ({ date: s.date, value: s.value })))
+    try { exportCsv(`${def.key}_30d.csv`, series.map(s => ({ date: s.date, value: s.value }))) }
+    catch (_) { toast({ type: 'error', message: 'CSV-Export fehlgeschlagen' }) }
   })
 }
 
@@ -284,137 +289,155 @@ export default {
   category: 'overview',
 
   async mount(container) {
-    container.innerHTML = `${styles()}
-      <div class="panel-shell">
-        <div class="panel-head">
-          <div>
-            <h2>Live-Kennzahlen</h2>
-            <div class="sub" id="last-updated">Lädt aktuelle Werte …</div>
+    try {
+      container.innerHTML = `${styles()}
+        <div class="panel-shell">
+          <div class="panel-head">
+            <div>
+              <h2>Live-Kennzahlen</h2>
+              <div class="sub" id="last-updated">Lädt aktuelle Werte …</div>
+            </div>
+            ${toolbarHtml()}
           </div>
-          ${toolbarHtml()}
-        </div>
-        <div class="panel-body" id="body">
-          <div class="skeleton-grid">
-            ${[1,2,3,4].map(()=>`<div class="skel-card"></div>`).join('')}
+          <div class="panel-body" id="body">
+            <div class="skeleton-grid">
+              ${[1,2,3,4].map(()=>`<div class="skel-card"></div>`).join('')}
+            </div>
           </div>
-        </div>
-      </div>`
-
-    try { fadeIn(container) } catch (_) {}
-
-    let currentTotals = null
-    let refreshTimer = null
-
-    const body = container.querySelector('#body')
-    const lastUpd = container.querySelector('#last-updated')
-
-    const renderError = (err) => {
-      body.innerHTML = `
-        <div class="error-state">
-          <div class="icon">${iconHtml('alert-triangle')}</div>
-          <h3>Daten konnten nicht geladen werden</h3>
-          <p>${htmlEscape(err?.message || 'Unbekannter Fehler')}</p>
-          <button class="retry-btn" id="retry">${iconHtml('refresh')} Erneut versuchen</button>
         </div>`
-      body.querySelector('#retry')?.addEventListener('click', () => load(true))
-    }
 
-    const animateCard = (key, oldVal, newVal, fmt) => {
-      const el = container.querySelector(`#kpi-val-${key}`)
-      if (!el) return
-      try {
-        countUp(el, { from: oldVal, to: newVal, duration: 1200,
-          format: (n) => formatValue(Math.round(n), fmt) })
-      } catch (_) {
-        el.textContent = formatValue(newVal, fmt)
+      try { fadeIn(container) } catch (_) {}
+
+      let currentTotals = null
+      let refreshTimer = null
+
+      const body = container.querySelector('#body')
+      const lastUpd = container.querySelector('#last-updated')
+
+      const renderError = (err) => {
+        body.innerHTML = `
+          <div class="error-state">
+            <div class="icon">${iconHtml('alert-triangle')}</div>
+            <h3>Daten konnten nicht geladen werden</h3>
+            <p>${htmlEscape(err?.message || 'Unbekannter Fehler')}</p>
+            <button class="retry-btn" id="retry">${iconHtml('refresh')} Erneut versuchen</button>
+          </div>`
+        body.querySelector('#retry')?.addEventListener('click', () => load(true))
       }
-      if (oldVal !== newVal) {
-        const card = container.querySelector(`.kpi-card[data-kpi="${key}"]`)
-        if (card) {
-          card.classList.add('pulsing')
-          setTimeout(() => card.classList.remove('pulsing'), 1300)
-          try { pulse(card) } catch (_) {}
+
+      const animateCard = (key, oldVal, newVal, fmt) => {
+        const el = container.querySelector(`#kpi-val-${key}`)
+        if (!el) return
+        try {
+          countUp(el, { from: oldVal, to: newVal, duration: 1200,
+            format: (n) => formatValue(Math.round(n), fmt) })
+        } catch (_) {
+          el.textContent = formatValue(newVal, fmt)
         }
-      }
-    }
-
-    const wireCards = () => {
-      container.querySelectorAll('.kpi-card').forEach(card => {
-        const handler = () => {
-          const key = card.dataset.kpi
-          const def = KPI_DEFS.find(d => d.key === key)
-          if (def && currentTotals) renderDrilldown(def, currentTotals)
-        }
-        card.addEventListener('click', handler)
-        card.addEventListener('keydown', e => {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler() }
-        })
-      })
-    }
-
-    const load = async (isInitial = false) => {
-      try {
-        const totals = await fetchTotals()
-        const prev = currentTotals
-        currentTotals = totals
-
-        if (isInitial || !prev || !container.querySelector('#hero-grid')) {
-          body.innerHTML = renderHeroGrid(totals)
-          wireCards()
-          for (const def of KPI_DEFS) {
-            animateCard(def.key, 0, totals[def.key].value, def.fmt)
+        if (oldVal !== newVal) {
+          const card = container.querySelector(`.kpi-card[data-kpi="${key}"]`)
+          if (card) {
+            card.classList.add('pulsing')
+            setTimeout(() => card.classList.remove('pulsing'), 1300)
+            try { pulse(card) } catch (_) {}
           }
-        } else {
-          for (const def of KPI_DEFS) {
-            const t = totals[def.key]
-            const p = prev[def.key] || { value: 0, prev: 0 }
-            animateCard(def.key, p.value, t.value, def.fmt)
-            const card = container.querySelector(`.kpi-card[data-kpi="${def.key}"]`)
-            if (card) {
-              const change = pctChange(t.value, t.prev)
-              const up = change >= 0
-              const chEl = card.querySelector('.kpi-change')
-              if (chEl) {
-                chEl.className = `kpi-change ${up ? 'up' : 'down'}`
-                chEl.innerHTML = `${iconHtml(up ? 'trending-up' : 'trending-down')}
-                  <span>${up?'+':''}${change.toFixed(1)}%</span>
-                  <span class="kpi-change-sub">vs gestern</span>`
+        }
+      }
+
+      const wireCards = () => {
+        container.querySelectorAll('.kpi-card').forEach(card => {
+          const handler = () => {
+            const key = card.dataset.kpi
+            const def = KPI_DEFS.find(d => d.key === key)
+            if (def && currentTotals) renderDrilldown(def, currentTotals)
+          }
+          card.addEventListener('click', handler)
+          card.addEventListener('keydown', e => {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler() }
+          })
+        })
+      }
+
+      const load = async (isInitial = false) => {
+        try {
+          const totals = await fetchTotals()
+          const prev = currentTotals
+          currentTotals = totals
+
+          if (isInitial || !prev || !container.querySelector('#hero-grid')) {
+            body.innerHTML = renderHeroGrid(totals)
+            wireCards()
+            for (const def of KPI_DEFS) {
+              animateCard(def.key, 0, totals[def.key].value, def.fmt)
+            }
+          } else {
+            for (const def of KPI_DEFS) {
+              const t = totals[def.key]
+              const p = prev[def.key] || { value: 0, prev: 0 }
+              animateCard(def.key, p.value, t.value, def.fmt)
+              const card = container.querySelector(`.kpi-card[data-kpi="${def.key}"]`)
+              if (card) {
+                const change = pctChange(t.value, t.prev)
+                const up = change >= 0
+                const chEl = card.querySelector('.kpi-change')
+                if (chEl) {
+                  chEl.className = `kpi-change ${up ? 'up' : 'down'}`
+                  chEl.innerHTML = `${iconHtml(up ? 'trending-up' : 'trending-down')}
+                    <span>${up?'+':''}${change.toFixed(1)}%</span>
+                    <span class="kpi-change-sub">vs gestern</span>`
+                }
               }
             }
           }
+
+          if (lastUpd) lastUpd.textContent = `Zuletzt aktualisiert: ${fmtDateTime(new Date())} · Auto-Refresh 60s`
+        } catch (err) {
+          console.error('[kpi-live-totals]', err)
+          if (isInitial) renderError(err)
+          else {
+            try { toast({ type: 'error', message: 'Aktualisierung fehlgeschlagen' }) } catch (_) {}
+          }
         }
-
-        lastUpd.textContent = `Zuletzt aktualisiert: ${fmtDateTime(new Date())} · Auto-Refresh 60s`
-      } catch (err) {
-        console.error('[kpi-live-totals]', err)
-        if (isInitial) renderError(err)
-        else toast({ type: 'error', message: 'Aktualisierung fehlgeschlagen' })
       }
+
+      container.querySelector('#btn-refresh')?.addEventListener('click', async () => {
+        await load(false)
+        try { toast({ type: 'success', message: 'Kennzahlen aktualisiert' }) } catch (_) {}
+      })
+      container.querySelector('#btn-pdf')?.addEventListener('click', () => {
+        try { exportPanelAsPdf(container, 'Live-Kennzahlen.pdf') }
+        catch (_) { toast({ type: 'error', message: 'PDF-Export nicht verfügbar' }) }
+      })
+      container.querySelector('#btn-csv')?.addEventListener('click', () => {
+        if (!currentTotals) { toast({ type: 'info', message: 'Keine Daten zum Exportieren' }); return }
+        const rows = KPI_DEFS.map(d => ({
+          kpi: d.label,
+          value: currentTotals[d.key].value,
+          previous: currentTotals[d.key].prev,
+          change_pct: pctChange(currentTotals[d.key].value, currentTotals[d.key].prev).toFixed(2)
+        }))
+        try { exportCsv('live-kennzahlen.csv', rows) }
+        catch (_) { toast({ type: 'error', message: 'CSV-Export fehlgeschlagen' }) }
+      })
+
+      await load(true)
+
+      refreshTimer = setInterval(() => load(false), REFRESH_MS)
+
+      return () => { if (refreshTimer) clearInterval(refreshTimer) }
+    } catch (mountErr) {
+      console.error('[kpi-live-totals] mount error', mountErr)
+      try {
+        container.innerHTML = `
+          <div style="padding:40px; text-align:center;">
+            <div style="font-size:42px; opacity:0.5; margin-bottom:12px;">${iconHtml('alert-triangle')}</div>
+            <h3 style="font-size:18px; margin:0 0 6px;">Panel konnte nicht initialisiert werden</h3>
+            <p style="color:#9ca3af; margin:0 0 16px;">${htmlEscape(mountErr?.message || 'Unbekannter Fehler')}</p>
+          </div>`
+      } catch (_) {
+        container.textContent = 'Panel-Fehler: ' + (mountErr?.message || 'unbekannt')
+      }
+      return () => {}
     }
-
-    container.querySelector('#btn-refresh')?.addEventListener('click', async () => {
-      await load(false)
-      toast({ type: 'success', message: 'Kennzahlen aktualisiert' })
-    })
-    container.querySelector('#btn-pdf')?.addEventListener('click', () => {
-      try { exportPanelAsPdf(container, 'Live-Kennzahlen.pdf') }
-      catch (_) { toast({ type: 'error', message: 'PDF-Export nicht verfügbar' }) }
-    })
-    container.querySelector('#btn-csv')?.addEventListener('click', () => {
-      if (!currentTotals) { toast({ type: 'info', message: 'Keine Daten zum Exportieren' }); return }
-      const rows = KPI_DEFS.map(d => ({
-        kpi: d.label,
-        value: currentTotals[d.key].value,
-        previous: currentTotals[d.key].prev,
-        change_pct: pctChange(currentTotals[d.key].value, currentTotals[d.key].prev).toFixed(2)
-      }))
-      exportCsv('live-kennzahlen.csv', rows)
-    })
-
-    await load(true)
-
-    refreshTimer = setInterval(() => load(false), REFRESH_MS)
-
-    return () => { if (refreshTimer) clearInterval(refreshTimer) }
   }
 }

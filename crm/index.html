@@ -531,9 +531,41 @@ window.toast = function(msg) {
 // ---- Sidebar Toggle (mobile + Cmd+/) ----
 const shellEl = document.getElementById('shell')
 const sidebarToggle = document.getElementById('sidebar-toggle')
-sidebarToggle?.addEventListener('click', () => {
+
+// Default-State: auf Mobile (<768px) sidebar GESCHLOSSEN, auf Desktop offen
+function initSidebarState() {
+  if (window.innerWidth < 768) {
+    shellEl.classList.remove('sidebar-open')
+  } else {
+    shellEl.classList.add('sidebar-open')
+    shellEl.classList.remove('sidebar-collapsed')
+  }
+}
+initSidebarState()
+
+sidebarToggle?.addEventListener('click', (e) => {
+  e.stopPropagation()
   shellEl.classList.toggle('sidebar-open')
-  shellEl.classList.toggle('sidebar-collapsed')
+  // Desktop-Collapse-Modus nur >=1024px
+  if (window.innerWidth >= 1024) {
+    shellEl.classList.toggle('sidebar-collapsed')
+  }
+})
+
+// Mobile: Klick auf Backdrop (außerhalb der Sidebar) schließt sie
+shellEl.addEventListener('click', (e) => {
+  if (e.target.closest('aside')) return
+  if (e.target.closest('#sidebar-toggle')) return
+  if (window.innerWidth < 768) {
+    shellEl.classList.remove('sidebar-open')
+  }
+})
+
+// Mobile: Klick auf einen Sidebar-Link schließt die Sidebar danach
+sidebar.addEventListener('click', (e) => {
+  if (e.target.matches('a[data-pid]') && window.innerWidth < 768) {
+    shellEl.classList.remove('sidebar-open')
+  }
 })
 
 // ---- Settings stub ----

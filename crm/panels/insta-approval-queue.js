@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, confirmDialog } from '/lib/ui.js'
-import { makeAreaChart, makeDonutChart, makeBarChart } from '/lib/charts.js'
+import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, confirmDialog } from '/lib/ui.js'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
-import { countUp, fadeIn, skeletonLoader, pulse } from '/lib/animations.js'
-import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+import { countUp, fadeIn } from '/lib/animations.js'
+import { drawer } from '/lib/layout-extras.js'
 
 function loadImage(url) {
   return new Promise((resolve, reject) => {
@@ -118,7 +118,8 @@ async function handleRenderImage(item, refresh) {
       const { error } = await sb.storage.from('insta-marketing').upload(filename, blob, { upsert: true, contentType: 'image/png' })
       if (error) { toast('Upload fehlgeschlagen: ' + error.message, 'error'); return }
       const { data: pub } = sb.storage.from('insta-marketing').getPublicUrl(filename)
-      await sb.from('insta_posts_queue').update({ image_url: pub.publicUrl }).eq('id', item.id)
+      const { error: updErr } = await sb.from('insta_posts_queue').update({ image_url: pub.publicUrl }).eq('id', item.id)
+      if (updErr) { toast('DB-Update fehlgeschlagen: ' + updErr.message, 'error'); return }
       toast('Bild gespeichert ✓', 'success')
       refresh()
     }, 'image/png')
@@ -206,8 +207,9 @@ function buildHero(stats) {
     `
     grid.appendChild(card)
     setTimeout(() => {
-      try { countUp(card.querySelector('.hero-value'), it.value, { duration: 900 + i * 80 }) }
-      catch { card.querySelector('.hero-value').textContent = fmtNumber(it.value) }
+      const el = card.querySelector('.hero-value')
+      try { countUp(el, it.value, { duration: 900 + i * 80 }) }
+      catch { el.textContent = fmtNumber(it.value) }
     }, 60)
   })
   return grid
@@ -345,10 +347,18 @@ function renderQueueCard(item, refresh) {
     if (!ok) return
     approveBtn.disabled = true
     approveBtn.innerHTML = '⏳ Wird gepostet…'
-    await sb.from('insta_posts_queue').update({ status: 'approved' }).eq('id', item.id)
-    const { error } = await sb.functions.invoke('insta-publish', { body: { queue_id: item.id } })
-    if (error) toast('Publish-Fehler: ' + error.message, 'error')
-    else toast('Erfolgreich gepostet ✓', 'success')
+    try {
+      const { error: updErr } = await sb.from('insta_posts_queue').update({ status: 'approved' }).eq('id', item.id)
+      if (updErr) throw updErr
+      const { error } = await sb.functions.invoke('insta-publish', { body: { queue_id: item.id } })
+      if (error) toast('Publish-Fehler: ' + error.message, 'error')
+      else toast('Erfolgreich gepostet ✓', 'success')
+    } catch (e) {
+      toast('Fehler: ' + (e?.message || 'unbekannt'), 'error')
+      approveBtn.disabled = false
+      approveBtn.innerHTML = '✓ Approven & jetzt posten'
+      return
+    }
     card.style.transition = 'opacity .35s, transform .35s'
     card.style.opacity = '0'
     card.style.transform = 'translateX(40px)'
@@ -373,8 +383,8 @@ function renderQueueCard(item, refresh) {
     }
     if (!ok) return
     const { error } = await sb.from('insta_posts_queue').update({ status: 'rejected' }).eq('id', item.id)
-    if (error) toast('Fehler: ' + error.message, 'error')
-    else toast('Verworfen', 'info')
+    if (error) { toast('Fehler: ' + error.message, 'error'); return }
+    toast('Verworfen', 'info')
     card.style.transition = 'opacity .3s, transform .3s'
     card.style.opacity = '0'
     card.style.transform = 'translateX(-40px)'
@@ -437,169 +447,183 @@ export default {
   category: 'marketing',
   summary: 'Generierte IG-Marketing-Posts zur Freigabe oder Ablehnung.',
   async mount(container) {
-    styles()
-    container.innerHTML = `
-      <div class="panel-shell">
-        <div class="panel-head" style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;">
-          <h2>Instagram-Posts Freigabe</h2>
-          <div class="toolbar" style="margin-left:auto;">
-            <button class="btn-secondary refresh-btn">🔄 Aktualisieren</button>
-            <button class="btn-secondary pdf-btn">📄 PDF</button>
-            <button class="btn-secondary csv-btn">💾 CSV</button>
-            <button class="btn-primary generate-btn">✨ Generator starten</button>
+    try {
+      styles()
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="panel-head" style="display:flex;align-items:center;gap:12px;margin-bottom:18px;flex-wrap:wrap;">
+            <h2>Instagram-Posts Freigabe</h2>
+            <div class="toolbar" style="margin-left:auto;">
+              <button class="btn-secondary refresh-btn">🔄 Aktualisieren</button>
+              <button class="btn-secondary pdf-btn">📄 PDF</button>
+              <button class="btn-secondary csv-btn">💾 CSV</button>
+              <button class="btn-primary generate-btn">✨ Generator starten</button>
+            </div>
           </div>
+          <div class="panel-body" id="ia-body"></div>
         </div>
-        <div class="panel-body" id="ia-body"></div>
-      </div>
-    `
-    const body = container.querySelector('#ia-body')
+      `
+      const body = container.querySelector('#ia-body')
 
-    const renderSkeleton = () => {
-      body.innerHTML = `
-        <div class="insta-hero-grid">
-          ${Array.from({ length: 5 }).map(() => '<div class="skel" style="height:96px;"></div>').join('')}
+      const renderSkeleton = () => {
+        body.innerHTML = `
+          <div class="insta-hero-grid">
+            ${Array.from({ length: 5 }).map(() => '<div class="skel" style="height:96px;"></div>').join('')}
+          </div>
+          <div class="insta-grid-2">
+            <div class="skel" style="height:220px;"></div>
+            <div class="skel" style="height:220px;"></div>
+          </div>
+          <div class="skel" style="height:180px;margin-bottom:14px;"></div>
+          <div class="skel" style="height:180px;"></div>
+        `
+      }
+
+      // Sofort Skeleton zeigen, damit kein weißer Screen entsteht
+      renderSkeleton()
+
+      let posted = []
+
+      const refresh = async () => {
+        renderSkeleton()
+        try {
+          const [{ data: queueItems, error: qErr }, { data: postedItems, error: pErr }] = await Promise.all([
+            sb.from('insta_posts_queue').select('*').in('status', ['ready', 'draft']).order('slot_time', { ascending: true }),
+            sb.from('insta_posts_queue').select('*').eq('status', 'posted').order('posted_at', { ascending: false }).limit(50),
+          ])
+          if (qErr) throw qErr
+          if (pErr) throw pErr
+
+          const queue = queueItems || []
+          posted = postedItems || []
+          const stats = computeStats(queue, posted)
+
+          body.innerHTML = ''
+
+          // Hero
+          body.appendChild(buildHero(stats))
+
+          // Charts grid (2 cols)
+          const chartsGrid = document.createElement('div')
+          chartsGrid.className = 'insta-grid-2'
+
+          const timeCard = document.createElement('div')
+          timeCard.className = 'glass-card'
+          timeCard.innerHTML = `<h3 class="insta-section-title">📈 Posts der letzten 14 Tage</h3>`
+          timeCard.appendChild(buildTimeChart(stats.byDay))
+          chartsGrid.appendChild(timeCard)
+
+          const audCard = document.createElement('div')
+          audCard.className = 'glass-card'
+          audCard.innerHTML = `<h3 class="insta-section-title">🎯 Zielgruppen-Verteilung</h3>`
+          audCard.appendChild(buildAudienceChart(stats.byAudience))
+          chartsGrid.appendChild(audCard)
+
+          body.appendChild(chartsGrid)
+
+          // Queue section
+          const queueSection = document.createElement('div')
+          queueSection.className = 'glass-card'
+          queueSection.style.marginBottom = '20px'
+          const queueHead = document.createElement('h3')
+          queueHead.className = 'insta-section-title'
+          queueHead.innerHTML = `📥 Warteschlange <span class="count-badge">${queue.length}</span>`
+          queueSection.appendChild(queueHead)
+
+          if (queue.length === 0) {
+            const empty = document.createElement('div')
+            empty.className = 'empty-state'
+            empty.innerHTML = `
+              <div class="empty-icon">🎉</div>
+              <div class="empty-title">Alles abgearbeitet!</div>
+              <div class="empty-sub">Keine Posts warten auf Freigabe. Starte den Generator für neue Vorschläge.</div>
+              <button class="btn-primary" style="margin-top:16px;" id="empty-gen">✨ Generator starten</button>
+            `
+            empty.querySelector('#empty-gen').addEventListener('click', () => container.querySelector('.generate-btn').click())
+            queueSection.appendChild(empty)
+          } else {
+            for (const item of queue) {
+              queueSection.appendChild(renderQueueCard(item, refresh))
+            }
+          }
+          body.appendChild(queueSection)
+
+          // History section
+          const histSection = document.createElement('div')
+          histSection.className = 'glass-card'
+          const histHead = document.createElement('h3')
+          histHead.className = 'insta-section-title'
+          histHead.innerHTML = `📚 Verlauf <span class="count-badge">${posted.length}</span>`
+          histSection.appendChild(histHead)
+
+          if (posted.length === 0) {
+            const empty = document.createElement('div')
+            empty.className = 'empty-state'
+            empty.innerHTML = `
+              <div class="empty-icon">📭</div>
+              <div class="empty-title">Noch keine Veröffentlichungen</div>
+              <div class="empty-sub">Sobald Posts live gehen, erscheinen sie hier mit Insights.</div>
+            `
+            histSection.appendChild(empty)
+          } else {
+            const list = document.createElement('div')
+            posted.slice(0, 20).forEach(it => list.appendChild(renderHistoryRow(it)))
+            histSection.appendChild(list)
+          }
+          body.appendChild(histSection)
+
+          try { fadeIn(body) } catch {}
+        } catch (e) {
+          body.innerHTML = `
+            <div class="insta-error">
+              <div style="font-size:32px;margin-bottom:8px;">⚠️</div>
+              <div style="font-weight:600;color:#fff;margin-bottom:6px;">Fehler beim Laden</div>
+              <div style="font-size:13px;margin-bottom:14px;">${htmlEscape(e?.message || 'unbekannt')}</div>
+              <button class="btn-secondary retry-btn">🔄 Erneut versuchen</button>
+            </div>
+          `
+          body.querySelector('.retry-btn').addEventListener('click', refresh)
+        }
+      }
+
+      container.querySelector('.refresh-btn').addEventListener('click', refresh)
+      container.querySelector('.pdf-btn').addEventListener('click', () => {
+        try { exportPanelAsPdf(container, 'instagram-freigabe') } catch { toast('PDF-Export nicht verfügbar', 'error') }
+      })
+      container.querySelector('.csv-btn').addEventListener('click', () => {
+        try {
+          const rows = posted.map(p => ({
+            posted_at: p.posted_at || '',
+            audience: p.audience || '',
+            post_type: p.post_type || '',
+            caption: p.caption || '',
+            image_url: p.image_url || '',
+          }))
+          exportCsv(rows, 'instagram-verlauf.csv')
+        } catch { toast('CSV-Export nicht verfügbar', 'error') }
+      })
+      container.querySelector('.generate-btn').addEventListener('click', async () => {
+        toast('Generator startet…', 'info')
+        try {
+          const { error } = await sb.functions.invoke('insta-marketing-generator', { body: {} })
+          if (error) toast('Generator-Fehler: ' + error.message, 'error')
+          else toast('Generator fertig ✓', 'success')
+        } catch (e) {
+          toast('Generator-Fehler: ' + (e?.message || 'unbekannt'), 'error')
+        }
+        refresh()
+      })
+
+      // Daten im Hintergrund laden (Skeleton ist schon sichtbar)
+      refresh()
+    } catch (mountErr) {
+      container.innerHTML = `
+        <div style="padding:24px;border-radius:16px;background:rgba(239,68,68,.08);border:1px solid rgba(239,68,68,.2);color:#FCA5A5;text-align:center;">
+          <div style="font-size:32px;margin-bottom:8px;">⚠️</div>
+          <div style="font-weight:600;color:#fff;margin-bottom:6px;">Panel konnte nicht geladen werden</div>
+          <div style="font-size:13px;">${(mountErr && mountErr.message) ? String(mountErr.message).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) : 'unbekannter Fehler'}</div>
         </div>
-        <div class="insta-grid-2">
-          <div class="skel" style="height:220px;"></div>
-          <div class="skel" style="height:220px;"></div>
-        </div>
-        <div class="skel" style="height:180px;margin-bottom:14px;"></div>
-        <div class="skel" style="height:180px;"></div>
       `
     }
-
-    let posted = []
-
-    const refresh = async () => {
-      renderSkeleton()
-      try {
-        const [{ data: queueItems, error: qErr }, { data: postedItems, error: pErr }] = await Promise.all([
-          sb.from('insta_posts_queue').select('*').in('status', ['ready', 'draft']).order('slot_time', { ascending: true }),
-          sb.from('insta_posts_queue').select('*').eq('status', 'posted').order('posted_at', { ascending: false }).limit(50),
-        ])
-        if (qErr) throw qErr
-        if (pErr) throw pErr
-
-        const queue = queueItems || []
-        posted = postedItems || []
-        const stats = computeStats(queue, posted)
-
-        body.innerHTML = ''
-
-        // Hero
-        body.appendChild(buildHero(stats))
-
-        // Charts grid (2 cols)
-        const chartsGrid = document.createElement('div')
-        chartsGrid.className = 'insta-grid-2'
-
-        const timeCard = document.createElement('div')
-        timeCard.className = 'glass-card'
-        timeCard.innerHTML = `<h3 class="insta-section-title">📈 Posts der letzten 14 Tage</h3>`
-        timeCard.appendChild(buildTimeChart(stats.byDay))
-        chartsGrid.appendChild(timeCard)
-
-        const audCard = document.createElement('div')
-        audCard.className = 'glass-card'
-        audCard.innerHTML = `<h3 class="insta-section-title">🎯 Zielgruppen-Verteilung</h3>`
-        audCard.appendChild(buildAudienceChart(stats.byAudience))
-        chartsGrid.appendChild(audCard)
-
-        body.appendChild(chartsGrid)
-
-        // Queue section
-        const queueSection = document.createElement('div')
-        queueSection.className = 'glass-card'
-        queueSection.style.marginBottom = '20px'
-        const queueHead = document.createElement('h3')
-        queueHead.className = 'insta-section-title'
-        queueHead.innerHTML = `📥 Warteschlange <span class="count-badge">${queue.length}</span>`
-        queueSection.appendChild(queueHead)
-
-        if (queue.length === 0) {
-          const empty = document.createElement('div')
-          empty.className = 'empty-state'
-          empty.innerHTML = `
-            <div class="empty-icon">🎉</div>
-            <div class="empty-title">Alles abgearbeitet!</div>
-            <div class="empty-sub">Keine Posts warten auf Freigabe. Starte den Generator für neue Vorschläge.</div>
-            <button class="btn-primary" style="margin-top:16px;" id="empty-gen">✨ Generator starten</button>
-          `
-          empty.querySelector('#empty-gen').addEventListener('click', () => container.querySelector('.generate-btn').click())
-          queueSection.appendChild(empty)
-        } else {
-          for (const item of queue) {
-            queueSection.appendChild(renderQueueCard(item, refresh))
-          }
-        }
-        body.appendChild(queueSection)
-
-        // History section
-        const histSection = document.createElement('div')
-        histSection.className = 'glass-card'
-        const histHead = document.createElement('h3')
-        histHead.className = 'insta-section-title'
-        histHead.innerHTML = `📚 Verlauf <span class="count-badge">${posted.length}</span>`
-        histSection.appendChild(histHead)
-
-        if (posted.length === 0) {
-          const empty = document.createElement('div')
-          empty.className = 'empty-state'
-          empty.innerHTML = `
-            <div class="empty-icon">📭</div>
-            <div class="empty-title">Noch keine Veröffentlichungen</div>
-            <div class="empty-sub">Sobald Posts live gehen, erscheinen sie hier mit Insights.</div>
-          `
-          histSection.appendChild(empty)
-        } else {
-          const list = document.createElement('div')
-          posted.slice(0, 20).forEach(it => list.appendChild(renderHistoryRow(it)))
-          histSection.appendChild(list)
-        }
-        body.appendChild(histSection)
-
-        try { fadeIn(body) } catch {}
-      } catch (e) {
-        body.innerHTML = `
-          <div class="insta-error">
-            <div style="font-size:32px;margin-bottom:8px;">⚠️</div>
-            <div style="font-weight:600;color:#fff;margin-bottom:6px;">Fehler beim Laden</div>
-            <div style="font-size:13px;margin-bottom:14px;">${htmlEscape(e?.message || 'unbekannt')}</div>
-            <button class="btn-secondary retry-btn">🔄 Erneut versuchen</button>
-          </div>
-        `
-        body.querySelector('.retry-btn').addEventListener('click', refresh)
-      }
-    }
-
-    container.querySelector('.refresh-btn').addEventListener('click', refresh)
-    container.querySelector('.pdf-btn').addEventListener('click', () => {
-      try { exportPanelAsPdf(container, 'instagram-freigabe') } catch { toast('PDF-Export nicht verfügbar', 'error') }
-    })
-    container.querySelector('.csv-btn').addEventListener('click', () => {
-      try {
-        const rows = posted.map(p => ({
-          posted_at: p.posted_at || '',
-          audience: p.audience || '',
-          post_type: p.post_type || '',
-          caption: p.caption || '',
-          image_url: p.image_url || '',
-        }))
-        exportCsv(rows, 'instagram-verlauf.csv')
-      } catch { toast('CSV-Export nicht verfügbar', 'error') }
-    })
-    container.querySelector('.generate-btn').addEventListener('click', async () => {
-      toast('Generator startet…', 'info')
-      try {
-        const { error } = await sb.functions.invoke('insta-marketing-generator', { body: {} })
-        if (error) toast('Generator-Fehler: ' + error.message, 'error')
-        else toast('Generator fertig ✓', 'success')
-      } catch (e) {
-        toast('Generator-Fehler: ' + (e?.message || 'unbekannt'), 'error')
-      }
-      refresh()
-    })
-
-    await refresh()
   }
 }

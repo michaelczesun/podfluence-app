@@ -17,18 +17,32 @@ async function fetchFunnel() {
   try {
     const { data, error } = await sb.rpc('onboarding_funnel_stats', { days: 30 })
     if (!error && data) return normalizeRpc(data)
-  } catch (_) {}
+  } catch (_) { /* fall through to manual aggregation */ }
 
   const since = new Date(Date.now() - 30 * 86400000).toISOString()
 
-  const usersRes = await sb.from('users').select('id, email, username, full_name, created_at, avatar_url, bio, last_seen_at').gte('created_at', since).limit(5000)
-  const profilesRes = await sb.from('profiles').select('user_id, avatar_url, bio').limit(5000).then(r => r, () => ({ data: [] }))
-  const listensRes = await sb.from('listening_history').select('user_id').gte('created_at', since).limit(20000).then(r => r, () => ({ data: [] }))
-  const actionsRes = await sb.from('user_actions').select('user_id, created_at').gte('created_at', since).limit(50000).then(r => r, () => ({ data: [] }))
+  const usersRes = await sb.from('users')
+    .select('id, email, username, full_name, created_at, avatar_url, bio, last_seen_at')
+    .gte('created_at', since)
+    .limit(5000)
+
+  if (usersRes.error) throw usersRes.error
+
+  const safeFetch = async (q) => {
+    try {
+      const r = await q
+      if (r.error) return { data: [] }
+      return r
+    } catch (_) { return { data: [] } }
+  }
+
+  const profilesRes = await safeFetch(sb.from('profiles').select('user_id, avatar_url, bio').limit(5000))
+  const listensRes  = await safeFetch(sb.from('listening_history').select('user_id').gte('created_at', since).limit(20000))
+  const actionsRes  = await safeFetch(sb.from('user_actions').select('user_id, created_at').gte('created_at', since).limit(50000))
 
   const all = usersRes.data || []
   const profileSet = new Set((profilesRes.data || []).filter(p => p.avatar_url && p.bio).map(p => p.user_id))
-  const listenSet = new Set((listensRes.data || []).map(l => l.user_id))
+  const listenSet  = new Set((listensRes.data || []).map(l => l.user_id))
   const actionCount = new Map()
   for (const a of (actionsRes.data || [])) actionCount.set(a.user_id, (actionCount.get(a.user_id) || 0) + 1)
 
@@ -126,8 +140,22 @@ function injectStyles() {
     .of-btn-primary { background:linear-gradient(135deg,#6366f1,#8b5cf6); color:#fff; border:0; padding:10px 16px; border-radius:10px; font-weight:600; cursor:pointer; display:inline-flex; align-items:center; gap:8px; }
     .of-btn-primary:hover { filter:brightness(1.08); }
     .of-btn-primary:disabled { opacity:.5; cursor:not-allowed; }
+    @keyframes of-shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+    .of-shimmer { background:linear-gradient(90deg,#eee,#f6f6f6,#eee); background-size:200% 100%; animation:of-shimmer 1.4s linear infinite; }
   `
   document.head.appendChild(s)
+}
+
+function appendSkeleton(host, opts) {
+  try {
+    const sk = skeletonLoader(opts)
+    if (sk instanceof Node) { host.appendChild(sk); return }
+    if (typeof sk === 'string') { host.insertAdjacentHTML('beforeend', sk); return }
+  } catch (_) { /* fallthrough */ }
+  const div = document.createElement('div')
+  div.className = 'of-shimmer'
+  div.style.cssText = `height:${opts?.height || 80}px; border-radius:${opts?.radius || 14}px;`
+  host.appendChild(div)
 }
 
 function renderFunnelHTML(data) {
@@ -208,14 +236,19 @@ function renderCharts(host, data) {
   const donut = host.querySelector('#of-donut')
 
   if (data.series && data.series.length) {
-    makeAreaChart(area, { data: data.series, xKey: 'x', yKey: 'y', color: '#6366f1', label: 'Signups' })
+    try { makeAreaChart(area, { data: data.series, xKey: 'x', yKey: 'y', color: '#6366f1', label: 'Signups' }) }
+    catch (e) { area.innerHTML = `<div class="of-empty">${iconHtml('alert-triangle')}<div>Chart-Fehler: ${htmlEscape(e.message || '')}</div></div>` }
   } else {
     area.innerHTML = `<div class="of-empty">${iconHtml('bar-chart')}<div>Noch keine Signups im Zeitraum</div></div>`
   }
 
-  makeDonutChart(donut, {
-    data: STAGES.map(s => ({ label: s.label, value: data.counts[s.key] || 0, color: s.color }))
-  })
+  try {
+    makeDonutChart(donut, {
+      data: STAGES.map(s => ({ label: s.label, value: data.counts[s.key] || 0, color: s.color }))
+    })
+  } catch (e) {
+    donut.innerHTML = `<div class="of-empty">${iconHtml('alert-triangle')}<div>Chart-Fehler: ${htmlEscape(e.message || '')}</div></div>`
+  }
 }
 
 async function sendReactivationMails(userIds) {
@@ -284,15 +317,16 @@ function openDropoffDrawer(data, stageKey) {
       const sub = u.email
         ? htmlEscape(u.email)
         : (u.last_seen_at ? `zuletzt ${fmtRelativeTime(u.last_seen_at)}` : `seit ${fmtDateTime(u.created_at)}`)
+      const uid = htmlEscape(String(u.id || ''))
       return `
-        <label class="of-drop-row" data-uid="${htmlEscape(u.id)}">
-          <input type="checkbox" class="of-cb" value="${htmlEscape(u.id)}"/>
+        <label class="of-drop-row" data-uid="${uid}">
+          <input type="checkbox" class="of-cb" value="${uid}"/>
           <div class="of-avatar">${htmlEscape(initial)}</div>
           <div class="of-meta">
             <div class="of-name">${htmlEscape(name)}</div>
             <div class="of-sub">${sub}</div>
           </div>
-          <button class="btn-ghost of-detail" data-uid="${htmlEscape(u.id)}" title="Details">${iconHtml('external-link')}</button>
+          <button class="btn-ghost of-detail" data-uid="${uid}" title="Details">${iconHtml('external-link')}</button>
         </label>
       `
     }).join('')
@@ -320,7 +354,8 @@ function openDropoffDrawer(data, stageKey) {
     const det = e.target.closest && e.target.closest('.of-detail')
     if (det) {
       e.preventDefault(); e.stopPropagation()
-      showUserDetailModal(det.dataset.uid)
+      try { showUserDetailModal(det.dataset.uid) }
+      catch (err) { toast('User-Detail konnte nicht geöffnet werden', 'error') }
     }
   })
   sendBtn?.addEventListener('click', async () => {
@@ -344,7 +379,23 @@ function renderError(host, err, retry) {
       <button class="of-btn-primary" id="of-retry">${iconHtml('refresh-cw')}<span>Erneut versuchen</span></button>
     </div>
   `
-  host.querySelector('#of-retry').addEventListener('click', retry)
+  host.querySelector('#of-retry')?.addEventListener('click', retry)
+}
+
+function renderMountError(container, err, retry) {
+  container.innerHTML = `
+    <div class="panel-shell" style="padding:24px;">
+      <div style="border:1px solid #fecaca; background:#fef2f2; color:#991b1b; border-radius:12px; padding:20px;">
+        <div style="display:flex; align-items:center; gap:10px; font-weight:700; font-size:16px; margin-bottom:8px;">
+          ${iconHtml('alert-triangle')}
+          <span>Panel konnte nicht geladen werden</span>
+        </div>
+        <div style="font-family:ui-monospace,monospace; font-size:13px; margin-bottom:14px; white-space:pre-wrap;">${htmlEscape(err?.stack || err?.message || String(err))}</div>
+        <button class="of-btn-primary" id="of-mount-retry">${iconHtml('refresh-cw')}<span>Erneut versuchen</span></button>
+      </div>
+    </div>
+  `
+  container.querySelector('#of-mount-retry')?.addEventListener('click', retry)
 }
 
 export default {
@@ -353,111 +404,125 @@ export default {
   category: 'users',
 
   async mount(container) {
-    injectStyles()
-
-    container.innerHTML = `
-      <div class="panel-shell of-wrap">
-        <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
-          <div>
-            <h2 style="margin:0;">Onboarding-Funnel</h2>
-            <div style="font-size:13px; color:var(--text-secondary,#6b7280); margin-top:2px;">Signup → Profil → First Listen → Active · letzte 30 Tage</div>
-          </div>
-          <div class="toolbar" style="display:flex; gap:8px;">
-            <button class="btn-secondary" id="of-refresh" title="Aktualisieren">${iconHtml('refresh-cw')}<span>Aktualisieren</span></button>
-            <button class="btn-secondary" id="of-pdf" title="PDF exportieren">${iconHtml('file-text')}<span>PDF</span></button>
-            <button class="btn-secondary" id="of-csv" title="CSV exportieren">${iconHtml('download')}<span>CSV</span></button>
-          </div>
-        </div>
-
-        <div id="of-heroes" class="of-hero-row"></div>
-
-        <div class="glass-card" id="of-funnel-wrap" style="padding:8px;">
-          <div style="padding:16px 22px 0;">
-            <div class="of-section-title">Funnel</div>
-            <div style="font-size:12px; color:var(--text-secondary,#6b7280); margin-top:-6px;">Klicke auf eine Stufe, um die Drop-off-Nutzer zu sehen.</div>
-          </div>
-          <div id="of-funnel"></div>
-        </div>
-
-        <div id="of-charts" class="of-charts"></div>
-      </div>
-    `
-
-    const heroes = container.querySelector('#of-heroes')
-    const funnelHost = container.querySelector('#of-funnel')
-    const chartsHost = container.querySelector('#of-charts')
-
-    // Loading skeletons
-    heroes.innerHTML = ''
-    for (let i = 0; i < 4; i++) {
-      const sk = skeletonLoader({ height: 100, radius: 14 })
-      if (sk instanceof Node) heroes.appendChild(sk)
-    }
-    funnelHost.innerHTML = '<div style="padding:24px; display:flex; flex-direction:column; gap:10px;">' +
-      STAGES.map(() => '<div style="height:60px; border-radius:12px; background:linear-gradient(90deg,#eee,#f6f6f6,#eee); background-size:200% 100%; animation:of-shimmer 1.4s linear infinite;"></div>').join('') +
-      '</div><style>@keyframes of-shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}</style>'
-    chartsHost.innerHTML = `
-      <div class="glass-card" style="padding:18px; height:280px; background:linear-gradient(90deg,#eee,#f6f6f6,#eee); background-size:200% 100%; animation:of-shimmer 1.4s linear infinite; border-radius:14px;"></div>
-      <div class="glass-card" style="padding:18px; height:280px; background:linear-gradient(90deg,#eee,#f6f6f6,#eee); background-size:200% 100%; animation:of-shimmer 1.4s linear infinite; border-radius:14px;"></div>
-    `
-
-    let data = null
-
-    const load = async () => {
+    const doMount = async () => {
       try {
-        data = await fetchFunnel()
-        renderHeroes(heroes, data)
-        funnelHost.innerHTML = renderFunnelHTML(data)
-        renderCharts(chartsHost, data)
+        injectStyles()
 
-        funnelHost.querySelectorAll('.of-stage').forEach(el => {
-          el.addEventListener('click', () => openDropoffDrawer(data, el.dataset.stage))
-        })
+        container.innerHTML = `
+          <div class="panel-shell of-wrap">
+            <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+              <div>
+                <h2 style="margin:0;">Onboarding-Funnel</h2>
+                <div style="font-size:13px; color:var(--text-secondary,#6b7280); margin-top:2px;">Signup → Profil → First Listen → Active · letzte 30 Tage</div>
+              </div>
+              <div class="toolbar" style="display:flex; gap:8px;">
+                <button class="btn-secondary" id="of-refresh" title="Aktualisieren">${iconHtml('refresh-cw')}<span>Aktualisieren</span></button>
+                <button class="btn-secondary" id="of-pdf" title="PDF exportieren">${iconHtml('file-text')}<span>PDF</span></button>
+                <button class="btn-secondary" id="of-csv" title="CSV exportieren">${iconHtml('download')}<span>CSV</span></button>
+              </div>
+            </div>
 
-        funnelHost.querySelectorAll('.of-count').forEach(el => {
-          const v = parseInt(el.dataset.count, 10) || 0
-          try { countUp(el, { from: 0, to: v, duration: 800, format: fmtNumber }) } catch (_) { el.textContent = fmtNumber(v) }
-        })
+            <div id="of-heroes" class="of-hero-row"></div>
 
-        try { fadeIn(container) } catch (_) {}
-      } catch (err) {
-        renderError(funnelHost, err, load)
+            <div class="glass-card" id="of-funnel-wrap" style="padding:8px;">
+              <div style="padding:16px 22px 0;">
+                <div class="of-section-title">Funnel</div>
+                <div style="font-size:12px; color:var(--text-secondary,#6b7280); margin-top:-6px;">Klicke auf eine Stufe, um die Drop-off-Nutzer zu sehen.</div>
+              </div>
+              <div id="of-funnel"></div>
+            </div>
+
+            <div id="of-charts" class="of-charts"></div>
+          </div>
+        `
+
+        const heroes = container.querySelector('#of-heroes')
+        const funnelHost = container.querySelector('#of-funnel')
+        const chartsHost = container.querySelector('#of-charts')
+
+        // Skeleton — sofort sichtbar
         heroes.innerHTML = ''
-        chartsHost.innerHTML = ''
+        for (let i = 0; i < 4; i++) appendSkeleton(heroes, { height: 100, radius: 14 })
+
+        funnelHost.innerHTML = '<div style="padding:24px; display:flex; flex-direction:column; gap:10px;">' +
+          STAGES.map(() => '<div class="of-shimmer" style="height:60px; border-radius:12px;"></div>').join('') +
+          '</div>'
+
+        chartsHost.innerHTML = `
+          <div class="glass-card of-shimmer" style="padding:18px; height:280px; border-radius:14px;"></div>
+          <div class="glass-card of-shimmer" style="padding:18px; height:280px; border-radius:14px;"></div>
+        `
+
+        let data = null
+
+        const load = async () => {
+          try {
+            data = await fetchFunnel()
+            renderHeroes(heroes, data)
+            funnelHost.innerHTML = renderFunnelHTML(data)
+            renderCharts(chartsHost, data)
+
+            funnelHost.querySelectorAll('.of-stage').forEach(el => {
+              el.addEventListener('click', () => openDropoffDrawer(data, el.dataset.stage))
+            })
+
+            funnelHost.querySelectorAll('.of-count').forEach(el => {
+              const v = parseInt(el.dataset.count, 10) || 0
+              try { countUp(el, { from: 0, to: v, duration: 800, format: fmtNumber }) }
+              catch (_) { el.textContent = fmtNumber(v) }
+            })
+
+            try { fadeIn(container) } catch (_) {}
+          } catch (err) {
+            console.error('[onboarding-funnel] load failed:', err)
+            renderError(funnelHost, err, load)
+            heroes.innerHTML = `<div class="of-empty" style="grid-column:1/-1;">${iconHtml('alert-triangle')}<div>Fehler: ${htmlEscape(err?.message || 'Unbekannter Fehler')}</div></div>`
+            chartsHost.innerHTML = ''
+          }
+        }
+
+        container.querySelector('#of-refresh')?.addEventListener('click', async () => {
+          toast('Aktualisiere…', 'info')
+          await load()
+        })
+
+        container.querySelector('#of-pdf')?.addEventListener('click', () => {
+          try {
+            exportPanelAsPdf(container, { title: 'Onboarding-Funnel', filename: 'onboarding-funnel.pdf' })
+          } catch (e) {
+            toast('PDF-Export fehlgeschlagen: ' + (e.message || ''), 'error')
+          }
+        })
+
+        container.querySelector('#of-csv')?.addEventListener('click', () => {
+          if (!data) { toast('Keine Daten zum Export', 'info'); return }
+          try {
+            const rows = STAGES.map((s, i) => {
+              const c = data.counts[s.key] || 0
+              const prev = i === 0 ? c : (data.counts[STAGES[i - 1].key] || 0)
+              const conv = prev ? Math.round((c / prev) * 100) : 0
+              const overall = data.counts.signup ? Math.round((c / data.counts.signup) * 100) : 0
+              return {
+                Stufe: s.label,
+                Beschreibung: s.desc,
+                Nutzer: c,
+                'Conversion ab Vorstufe (%)': conv,
+                'Gesamt-Conversion ab Signup (%)': overall
+              }
+            })
+            exportCsv(rows, 'onboarding-funnel.csv')
+          } catch (e) {
+            toast('CSV-Export fehlgeschlagen: ' + (e.message || ''), 'error')
+          }
+        })
+
+        await load()
+      } catch (err) {
+        console.error('[onboarding-funnel] mount failed:', err)
+        renderMountError(container, err, doMount)
       }
     }
 
-    container.querySelector('#of-refresh').addEventListener('click', async () => {
-      toast('Aktualisiere…', 'info')
-      await load()
-    })
-
-    container.querySelector('#of-pdf').addEventListener('click', () => {
-      try {
-        exportPanelAsPdf(container, { title: 'Onboarding-Funnel', filename: 'onboarding-funnel.pdf' })
-      } catch (e) {
-        toast('PDF-Export fehlgeschlagen: ' + (e.message || ''), 'error')
-      }
-    })
-
-    container.querySelector('#of-csv').addEventListener('click', () => {
-      if (!data) { toast('Keine Daten zum Export', 'warn'); return }
-      const rows = STAGES.map((s, i) => {
-        const c = data.counts[s.key] || 0
-        const prev = i === 0 ? c : (data.counts[STAGES[i - 1].key] || 0)
-        const conv = prev ? Math.round((c / prev) * 100) : 0
-        const overall = data.counts.signup ? Math.round((c / data.counts.signup) * 100) : 0
-        return {
-          Stufe: s.label,
-          Beschreibung: s.desc,
-          Nutzer: c,
-          'Conversion ab Vorstufe (%)': conv,
-          'Gesamt-Conversion ab Signup (%)': overall
-        }
-      })
-      exportCsv(rows, 'onboarding-funnel.csv')
-    })
-
-    await load()
+    await doMount()
   }
 }

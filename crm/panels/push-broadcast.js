@@ -320,6 +320,7 @@ export default {
   title: 'Push-Broadcast senden',
   category: 'admin_actions',
   async mount(container) {
+   try {
     container.innerHTML = `${styles()}
       <div class="panel-shell">
         <div class="panel-head">
@@ -333,7 +334,7 @@ export default {
         <div id="body">${skeletonLoader({ rows: 4, height: 80 })}</div>
       </div>`
 
-    fadeIn(container)
+    try { fadeIn(container) } catch (_) {}
 
     const body = container.querySelector('#body')
 
@@ -544,5 +545,16 @@ export default {
     }
 
     await renderAll()
+   } catch (e) {
+    container.innerHTML = `<div style="padding:24px;">
+      <div class="glass-card" style="padding:20px; border:1px solid rgba(255,107,107,0.3);">
+        <h3 style="margin:0 0 8px; color:#ff6b6b;">Panel konnte nicht geladen werden</h3>
+        <div style="color:#c0c0c8; font-size:13px; margin-bottom:12px;">Fehler: ${(e && e.message) ? String(e.message).replace(/</g,'&lt;') : 'Unbekannter Fehler'}</div>
+        <button class="btn btn-ghost" id="mount-retry">Erneut versuchen</button>
+      </div>
+    </div>`
+    const r = container.querySelector('#mount-retry')
+    if (r) r.onclick = () => this.mount(container)
+   }
   }
 }

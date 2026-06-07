@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
 import { toast, modal, confirmDialog, fmtNumber, fmtRelativeTime, fmtDateTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js'
-import { makeAreaChart, makeDonutChart, makeBarChart } from '/lib/charts.js'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+import { drawer, statHero } from '/lib/layout-extras.js'
 import { showUserDetailModal, deletePost } from '/lib/panel-actions.js'
 
 const REFRESH_MS = 20000
@@ -63,6 +63,7 @@ function renderHeros(root) {
   const withImg = state.posts.filter(p => p.image_url || p.media_url).length
 
   const wrap = root.querySelector('#heros')
+  if (!wrap) return
   wrap.innerHTML = `
     ${statHero({ label: 'Posts (7 Tage)', value: 0, dataValue: total, icon: '📝', accent: 'primary' })}
     ${statHero({ label: 'Likes gesamt', value: 0, dataValue: totalLikes, icon: '❤️', accent: 'pink' })}
@@ -71,7 +72,7 @@ function renderHeros(root) {
   `
   wrap.querySelectorAll('[data-value]').forEach(el => {
     const v = parseInt(el.dataset.value, 10) || 0
-    countUp(el, v, { duration: 900 })
+    try { countUp(el, v, { duration: 900 }) } catch (_) { el.textContent = String(v) }
   })
 }
 
@@ -96,8 +97,16 @@ function renderCharts(root) {
 
   const ts = root.querySelector('#chart-timeseries')
   const dc = root.querySelector('#chart-donut')
-  if (ts) { ts.innerHTML = ''; makeAreaChart(ts, timeData, { height: 200, color: '#7c5cff', label: 'Posts/Tag' }) }
-  if (dc) { dc.innerHTML = ''; makeDonutChart(dc, catData, { height: 200 }) }
+  if (ts) {
+    ts.innerHTML = ''
+    try { makeAreaChart(ts, timeData, { height: 200, color: '#7c5cff', label: 'Posts/Tag' }) }
+    catch (e) { ts.innerHTML = `<div class="text-muted">Chart konnte nicht gerendert werden.</div>` }
+  }
+  if (dc) {
+    dc.innerHTML = ''
+    try { makeDonutChart(dc, catData, { height: 200 }) }
+    catch (e) { dc.innerHTML = `<div class="text-muted">Chart konnte nicht gerendert werden.</div>` }
+  }
 }
 
 function postCardHtml(p) {
@@ -150,6 +159,7 @@ function postCardHtml(p) {
 function renderFeed(root) {
   const grid = root.querySelector('#feed-grid')
   const empty = root.querySelector('#feed-empty')
+  if (!grid || !empty) return
   if (!state.filtered.length) {
     grid.innerHTML = ''
     empty.style.display = ''
@@ -284,36 +294,47 @@ async function reload() {
     renderCharts(panelRoot)
     renderFeed(panelRoot)
   } catch (e) {
-    body.innerHTML = `
-      <div class="error-state glass-card">
-        <div class="error-state__icon">⚠️</div>
-        <div class="error-state__title">Konnte Posts nicht laden</div>
-        <div class="error-state__text">${htmlEscape(e?.message || String(e))}</div>
-        <button class="btn btn--primary" id="retry">Erneut versuchen</button>
-      </div>`
-    body.querySelector('#retry')?.addEventListener('click', reload)
+    if (body) {
+      body.innerHTML = `
+        <div class="error-state glass-card">
+          <div class="error-state__icon">⚠️</div>
+          <div class="error-state__title">Konnte Posts nicht laden</div>
+          <div class="error-state__text">${htmlEscape(e?.message || String(e))}</div>
+          <button class="btn btn--primary" id="retry">Erneut versuchen</button>
+        </div>`
+      body.querySelector('#retry')?.addEventListener('click', reload)
+    } else {
+      toast({ kind: 'error', text: 'Fehler: ' + (e?.message || e) })
+    }
   } finally {
     state.loading = false
   }
 }
 
 function wireToolbar(root) {
-  root.querySelector('#btn-refresh').addEventListener('click', () => reload())
-  root.querySelector('#btn-pdf').addEventListener('click', () => exportPanelAsPdf({ title: 'Aktuelle Posts', element: root }))
-  root.querySelector('#btn-csv').addEventListener('click', () => {
-    const rows = state.filtered.map(p => ({
-      id: p.id,
-      user: p.profiles?.username || '',
-      content: snippet(p.content, 240),
-      type: classifyPost(p),
-      likes: p.likes_count || 0,
-      comments: p.comments_count || 0,
-      created_at: p.created_at
-    }))
-    exportCsv('aktuelle-posts.csv', rows)
+  root.querySelector('#btn-refresh')?.addEventListener('click', () => reload())
+  root.querySelector('#btn-pdf')?.addEventListener('click', () => {
+    try { exportPanelAsPdf({ title: 'Aktuelle Posts', element: root }) }
+    catch (e) { toast({ kind: 'error', text: 'PDF-Export fehlgeschlagen: ' + (e?.message || e) }) }
+  })
+  root.querySelector('#btn-csv')?.addEventListener('click', () => {
+    try {
+      const rows = state.filtered.map(p => ({
+        id: p.id,
+        user: p.profiles?.username || '',
+        content: snippet(p.content, 240),
+        type: classifyPost(p),
+        likes: p.likes_count || 0,
+        comments: p.comments_count || 0,
+        created_at: p.created_at
+      }))
+      exportCsv('aktuelle-posts.csv', rows)
+    } catch (e) {
+      toast({ kind: 'error', text: 'CSV-Export fehlgeschlagen: ' + (e?.message || e) })
+    }
   })
   const autoBtn = root.querySelector('#btn-auto')
-  autoBtn.addEventListener('click', () => {
+  autoBtn?.addEventListener('click', () => {
     state.autoRefresh = !state.autoRefresh
     autoBtn.classList.toggle('is-active', state.autoRefresh)
     autoBtn.innerHTML = state.autoRefresh ? '⏸ Auto-Refresh AN' : '▶️ Auto-Refresh'
@@ -325,7 +346,7 @@ function wireToolbar(root) {
   })
 
   const search = root.querySelector('#search')
-  search.addEventListener('input', debounce(() => {
+  search?.addEventListener('input', debounce(() => {
     state.search = search.value
     applyFilters(); renderFeed(root)
   }, 180))
@@ -338,7 +359,7 @@ function wireToolbar(root) {
     })
   })
 
-  root.querySelector('#feed-grid').addEventListener('click', (ev) => {
+  root.querySelector('#feed-grid')?.addEventListener('click', (ev) => {
     const userBtn = ev.target.closest('[data-action="open-user"]')
     if (userBtn) {
       ev.preventDefault()
@@ -365,62 +386,84 @@ export default {
   category: 'content',
 
   async mount(container) {
-    panelRoot = container
-    container.id = 'panel-recent-updates'
-    container.innerHTML = `
-      <div class="panel-shell">
-        <div class="panel-head glass-card">
-          <div class="panel-head__left">
-            <h2 class="panel-title">Aktuelle Posts</h2>
-            <p class="panel-sub">Live-Feed der letzten 7 Tage · Suche, Filter und schnelle Aktionen</p>
+    try {
+      panelRoot = container
+      container.id = 'panel-recent-updates'
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="panel-head glass-card">
+            <div class="panel-head__left">
+              <h2 class="panel-title">Aktuelle Posts</h2>
+              <p class="panel-sub">Live-Feed der letzten 7 Tage · Suche, Filter und schnelle Aktionen</p>
+            </div>
+            <div class="toolbar">
+              <button class="btn" id="btn-auto" title="Automatisch alle 20s aktualisieren">▶️ Auto-Refresh</button>
+              <button class="btn" id="btn-refresh" title="Aktualisieren">🔄 Aktualisieren</button>
+              <button class="btn" id="btn-pdf" title="PDF exportieren">📄 PDF</button>
+              <button class="btn" id="btn-csv" title="CSV exportieren">💾 CSV</button>
+            </div>
           </div>
-          <div class="toolbar">
-            <button class="btn" id="btn-auto" title="Automatisch alle 20s aktualisieren">▶️ Auto-Refresh</button>
-            <button class="btn" id="btn-refresh" title="Aktualisieren">🔄 Aktualisieren</button>
-            <button class="btn" id="btn-pdf" title="PDF exportieren">📄 PDF</button>
-            <button class="btn" id="btn-csv" title="CSV exportieren">💾 CSV</button>
+
+          <div class="hero-grid" id="heros">
+            ${skeletonLoader({ count: 4, height: 96, layout: 'grid' })}
+          </div>
+
+          <div class="chart-grid">
+            <div class="glass-card chart-card">
+              <div class="chart-card__head"><h3>Posts pro Tag</h3><span class="text-muted">letzte 7 Tage</span></div>
+              <div id="chart-timeseries" class="chart-card__body">${skeletonLoader({ height: 200 })}</div>
+            </div>
+            <div class="glass-card chart-card">
+              <div class="chart-card__head"><h3>Verteilung</h3><span class="text-muted">nach Typ</span></div>
+              <div id="chart-donut" class="chart-card__body">${skeletonLoader({ height: 200 })}</div>
+            </div>
+          </div>
+
+          <div class="filters glass-card">
+            <div class="filters__search">
+              <input id="search" type="search" placeholder="Suche nach Inhalt oder Nutzer…" class="input input--search" />
+            </div>
+            <div class="filters__pills">
+              <button class="filter-pill is-active" data-filter="all">Alle</button>
+              <button class="filter-pill" data-filter="longform">Longform</button>
+              <button class="filter-pill" data-filter="poll">Umfragen</button>
+              <button class="filter-pill" data-filter="with-image">Mit Bild</button>
+            </div>
+          </div>
+
+          <div class="panel-body" id="body">
+            <div id="feed-grid" class="feed-grid">
+              ${skeletonLoader({ count: 6, height: 180, layout: 'grid' })}
+            </div>
+            <div id="feed-empty" style="display:none"></div>
           </div>
         </div>
+      `
 
-        <div class="hero-grid" id="heros">
-          ${skeletonLoader({ count: 4, height: 96, layout: 'grid' })}
-        </div>
-
-        <div class="chart-grid">
-          <div class="glass-card chart-card">
-            <div class="chart-card__head"><h3>Posts pro Tag</h3><span class="text-muted">letzte 7 Tage</span></div>
-            <div id="chart-timeseries" class="chart-card__body">${skeletonLoader({ height: 200 })}</div>
-          </div>
-          <div class="glass-card chart-card">
-            <div class="chart-card__head"><h3>Verteilung</h3><span class="text-muted">nach Typ</span></div>
-            <div id="chart-donut" class="chart-card__body">${skeletonLoader({ height: 200 })}</div>
-          </div>
-        </div>
-
-        <div class="filters glass-card">
-          <div class="filters__search">
-            <input id="search" type="search" placeholder="Suche nach Inhalt oder Nutzer…" class="input input--search" />
-          </div>
-          <div class="filters__pills">
-            <button class="filter-pill is-active" data-filter="all">Alle</button>
-            <button class="filter-pill" data-filter="longform">Longform</button>
-            <button class="filter-pill" data-filter="poll">Umfragen</button>
-            <button class="filter-pill" data-filter="with-image">Mit Bild</button>
-          </div>
-        </div>
-
-        <div class="panel-body" id="body">
-          <div id="feed-grid" class="feed-grid">
-            ${skeletonLoader({ count: 6, height: 180, layout: 'grid' })}
-          </div>
-          <div id="feed-empty" style="display:none"></div>
-        </div>
-      </div>
-    `
-
-    wireToolbar(container)
-    fadeIn(container, { duration: 280 })
-    await reload()
+      wireToolbar(container)
+      try { fadeIn(container, { duration: 280 }) } catch (_) {}
+      // Fire fetch in background so initial skeleton stays visible immediately
+      reload().catch(e => {
+        const body = container.querySelector('#body')
+        if (body) {
+          body.innerHTML = `
+            <div class="error-state glass-card">
+              <div class="error-state__icon">⚠️</div>
+              <div class="error-state__title">Konnte Posts nicht laden</div>
+              <div class="error-state__text">${htmlEscape(e?.message || String(e))}</div>
+              <button class="btn btn--primary" id="retry">Erneut versuchen</button>
+            </div>`
+          body.querySelector('#retry')?.addEventListener('click', reload)
+        }
+      })
+    } catch (e) {
+      container.innerHTML = `
+        <div class="error-state glass-card" style="padding:24px;margin:16px;">
+          <div class="error-state__icon">⚠️</div>
+          <div class="error-state__title">Panel konnte nicht geladen werden</div>
+          <div class="error-state__text">${htmlEscape(e?.message || String(e))}</div>
+        </div>`
+    }
   },
 
   unmount() {

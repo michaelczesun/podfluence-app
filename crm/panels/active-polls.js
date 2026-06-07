@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js'
-import { makeBarChart, makeDonutChart, makeAreaChart } from '/lib/charts.js'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js'
+import { makeBarChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+import { drawer, statHero } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const PALETTE = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#ef4444', '#84cc16']
@@ -280,171 +280,193 @@ function errorState(container, msg, onRetry) {
   container.querySelector('#retry-btn')?.addEventListener('click', onRetry)
 }
 
+function mountErrorState(container, msg) {
+  try {
+    container.innerHTML = `
+      <div class="panel-shell">
+        <div class="error-state">
+          <div class="error-icon">⚠️</div>
+          <h3>Panel konnte nicht initialisiert werden</h3>
+          <p>${htmlEscape(msg || 'Unbekannter Fehler')}</p>
+        </div>
+      </div>
+    `
+  } catch (_) {}
+}
+
 export default {
   id: 'active-polls',
   title: 'Aktive Umfragen',
   category: 'content',
 
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell active-polls-panel">
-        <div class="panel-head">
-          <div class="panel-head-left">
-            <h2>Aktive Umfragen</h2>
-            <span class="panel-sub">Live-Verteilung & Voter-Insights</span>
-          </div>
-          <div class="toolbar">
-            <button class="btn btn-ghost" id="btn-refresh" title="Aktualisieren">${iconHtml('refresh')} Aktualisieren</button>
-            <button class="btn btn-ghost" id="btn-pdf" title="PDF Export">${iconHtml('file-text')} PDF</button>
-            <button class="btn btn-ghost" id="btn-csv" title="CSV Export">${iconHtml('download')} CSV</button>
-          </div>
-        </div>
-        <div class="hero-row" id="hero-row"></div>
-        <div class="panel-body" id="body"></div>
-      </div>
-    `
-
-    const body = container.querySelector('#body')
-    const heroRow = container.querySelector('#hero-row')
-    const state = { polls: [], pollsTable: null, votesTable: null }
-
-    const renderSkeleton = () => {
-      heroRow.innerHTML = `<div class="hero-skel"></div><div class="hero-skel"></div><div class="hero-skel"></div>`
-      body.innerHTML = `<div class="poll-grid">${Array.from({ length: 6 }).map(() => `
-        <div class="glass-card skel-card">
-          <div class="skel skel-line w-70"></div>
-          <div class="skel skel-line w-40"></div>
-          <div class="skel skel-block h-120"></div>
-          <div class="skel skel-line w-50"></div>
-        </div>
-      `).join('')}</div>`
-      try { skeletonLoader(body) } catch (_) {}
-    }
-
-    const render = () => {
-      const polls = state.polls
-      const totalVotes = polls.reduce((s, p) => s + (p.totalVotes || 0), 0)
-      const avgVotes = polls.length ? Math.round(totalVotes / polls.length) : 0
-      const closingSoon = polls.filter(p => p.closes_at && (new Date(p.closes_at) - Date.now() < 24 * 3600 * 1000)).length
-
-      heroRow.innerHTML = ''
-      try {
-        heroRow.appendChild(statHero({ label: 'Aktive Umfragen', value: polls.length, icon: 'poll', accent: 'indigo', countUpTo: polls.length }))
-        heroRow.appendChild(statHero({ label: 'Stimmen gesamt', value: totalVotes, icon: 'vote', accent: 'violet', countUpTo: totalVotes }))
-        heroRow.appendChild(statHero({ label: 'Schließen < 24h', value: closingSoon, icon: 'clock', accent: 'amber', countUpTo: closingSoon }))
-      } catch (_) {
-        heroRow.innerHTML = `
-          <div class="stat-hero"><div class="sh-label">Aktive Umfragen</div><div class="sh-value" data-cu="${polls.length}">0</div></div>
-          <div class="stat-hero"><div class="sh-label">Stimmen gesamt</div><div class="sh-value" data-cu="${totalVotes}">0</div></div>
-          <div class="stat-hero"><div class="sh-label">Schließen < 24h</div><div class="sh-value" data-cu="${closingSoon}">0</div></div>
-        `
-        heroRow.querySelectorAll('[data-cu]').forEach(el => { try { countUp(el, Number(el.dataset.cu)) } catch (_) {} })
-      }
-
-      if (!polls.length) {
-        emptyState(body)
-        try { fadeIn(container) } catch (_) {}
-        return
-      }
-
-      const top = [...polls].sort((a, b) => (b.totalVotes || 0) - (a.totalVotes || 0)).slice(0, 8)
-      body.innerHTML = `
-        <div class="glass-card overview-card">
-          <div class="overview-head">
-            <div>
-              <div class="overview-title">Top Umfragen nach Beteiligung</div>
-              <div class="overview-sub">${polls.length} aktiv · Ø ${fmtNumber(avgVotes)} Stimmen / Umfrage</div>
+    try {
+      container.innerHTML = `
+        <div class="panel-shell active-polls-panel">
+          <div class="panel-head">
+            <div class="panel-head-left">
+              <h2>Aktive Umfragen</h2>
+              <span class="panel-sub">Live-Verteilung & Voter-Insights</span>
+            </div>
+            <div class="toolbar">
+              <button class="btn btn-ghost" id="btn-refresh" title="Aktualisieren">${iconHtml('refresh')} Aktualisieren</button>
+              <button class="btn btn-ghost" id="btn-pdf" title="PDF Export">${iconHtml('file-text')} PDF</button>
+              <button class="btn btn-ghost" id="btn-csv" title="CSV Export">${iconHtml('download')} CSV</button>
             </div>
           </div>
-          <div id="overview-chart" style="height:260px"></div>
-        </div>
-        <div class="section-title-row">
-          <h3>Alle aktiven Umfragen</h3>
-          <span class="muted">${polls.length}</span>
-        </div>
-        <div class="poll-grid" id="poll-grid">
-          ${polls.map(pollCard).join('')}
+          <div class="hero-row" id="hero-row"></div>
+          <div class="panel-body" id="body"></div>
         </div>
       `
 
-      setTimeout(() => {
-        const host = document.getElementById('overview-chart')
-        if (host) {
-          try {
-            makeBarChart(host, {
-              categories: top.map(p => (p.question.length > 24 ? p.question.slice(0, 22) + '…' : p.question)),
-              series: [{ name: 'Stimmen', data: top.map(p => p.totalVotes || 0) }],
-              colors: PALETTE,
-              height: 260,
-              horizontal: true,
-              distributed: true,
-              showLegend: false
-            })
-          } catch (_) {}
-        }
-        polls.forEach(p => {
-          const card = body.querySelector(`.poll-card[data-poll-id="${CSS.escape(String(p.id))}"]`)
-          if (!card) return
-          const chartEl = card.querySelector('.poll-chart')
-          renderBars(chartEl, p)
-        })
-      }, 20)
+      const body = container.querySelector('#body')
+      const heroRow = container.querySelector('#hero-row')
+      const state = { polls: [], pollsTable: null, votesTable: null }
 
-      body.querySelectorAll('.poll-card').forEach(card => {
-        const id = card.dataset.pollId
-        const poll = polls.find(p => String(p.id) === id)
-        if (!poll) return
-        card.querySelector('[data-action="details"]')?.addEventListener('click', () => openVoterDrawer(poll))
-        card.querySelector('[data-action="close"]')?.addEventListener('click', async () => {
-          if (!state.pollsTable) return toast({ type: 'error', message: 'Tabelle unbekannt' })
-          const ok = await closePoll(state.pollsTable, poll.id)
-          if (ok) load()
+      const renderSkeleton = () => {
+        heroRow.innerHTML = `<div class="hero-skel"></div><div class="hero-skel"></div><div class="hero-skel"></div>`
+        body.innerHTML = `<div class="poll-grid">${Array.from({ length: 6 }).map(() => `
+          <div class="glass-card skel-card">
+            <div class="skel skel-line w-70"></div>
+            <div class="skel skel-line w-40"></div>
+            <div class="skel skel-block h-120"></div>
+            <div class="skel skel-line w-50"></div>
+          </div>
+        `).join('')}</div>`
+        try { skeletonLoader(body) } catch (_) {}
+      }
+
+      // Sofort Skeleton zeigen — kein weißer Screen
+      renderSkeleton()
+
+      const render = () => {
+        const polls = state.polls
+        const totalVotes = polls.reduce((s, p) => s + (p.totalVotes || 0), 0)
+        const avgVotes = polls.length ? Math.round(totalVotes / polls.length) : 0
+        const closingSoon = polls.filter(p => p.closes_at && (new Date(p.closes_at) - Date.now() < 24 * 3600 * 1000)).length
+
+        heroRow.innerHTML = ''
+        try {
+          heroRow.appendChild(statHero({ label: 'Aktive Umfragen', value: polls.length, icon: 'poll', accent: 'indigo', countUpTo: polls.length }))
+          heroRow.appendChild(statHero({ label: 'Stimmen gesamt', value: totalVotes, icon: 'vote', accent: 'violet', countUpTo: totalVotes }))
+          heroRow.appendChild(statHero({ label: 'Schließen < 24h', value: closingSoon, icon: 'clock', accent: 'amber', countUpTo: closingSoon }))
+        } catch (_) {
+          heroRow.innerHTML = `
+            <div class="stat-hero"><div class="sh-label">Aktive Umfragen</div><div class="sh-value" data-cu="${polls.length}">0</div></div>
+            <div class="stat-hero"><div class="sh-label">Stimmen gesamt</div><div class="sh-value" data-cu="${totalVotes}">0</div></div>
+            <div class="stat-hero"><div class="sh-label">Schließen < 24h</div><div class="sh-value" data-cu="${closingSoon}">0</div></div>
+          `
+          heroRow.querySelectorAll('[data-cu]').forEach(el => { try { countUp(el, Number(el.dataset.cu)) } catch (_) {} })
+        }
+
+        if (!polls.length) {
+          emptyState(body)
+          try { fadeIn(container) } catch (_) {}
+          return
+        }
+
+        const top = [...polls].sort((a, b) => (b.totalVotes || 0) - (a.totalVotes || 0)).slice(0, 8)
+        body.innerHTML = `
+          <div class="glass-card overview-card">
+            <div class="overview-head">
+              <div>
+                <div class="overview-title">Top Umfragen nach Beteiligung</div>
+                <div class="overview-sub">${polls.length} aktiv · Ø ${fmtNumber(avgVotes)} Stimmen / Umfrage</div>
+              </div>
+            </div>
+            <div id="overview-chart" style="height:260px"></div>
+          </div>
+          <div class="section-title-row">
+            <h3>Alle aktiven Umfragen</h3>
+            <span class="muted">${polls.length}</span>
+          </div>
+          <div class="poll-grid" id="poll-grid">
+            ${polls.map(pollCard).join('')}
+          </div>
+        `
+
+        setTimeout(() => {
+          const host = document.getElementById('overview-chart')
+          if (host) {
+            try {
+              makeBarChart(host, {
+                categories: top.map(p => (p.question.length > 24 ? p.question.slice(0, 22) + '…' : p.question)),
+                series: [{ name: 'Stimmen', data: top.map(p => p.totalVotes || 0) }],
+                colors: PALETTE,
+                height: 260,
+                horizontal: true,
+                distributed: true,
+                showLegend: false
+              })
+            } catch (_) {}
+          }
+          polls.forEach(p => {
+            const card = body.querySelector(`.poll-card[data-poll-id="${CSS.escape(String(p.id))}"]`)
+            if (!card) return
+            const chartEl = card.querySelector('.poll-chart')
+            renderBars(chartEl, p)
+          })
+        }, 20)
+
+        body.querySelectorAll('.poll-card').forEach(card => {
+          const id = card.dataset.pollId
+          const poll = polls.find(p => String(p.id) === id)
+          if (!poll) return
+          card.querySelector('[data-action="details"]')?.addEventListener('click', () => openVoterDrawer(poll))
+          card.querySelector('[data-action="close"]')?.addEventListener('click', async () => {
+            if (!state.pollsTable) return toast({ type: 'error', message: 'Tabelle unbekannt' })
+            const ok = await closePoll(state.pollsTable, poll.id)
+            if (ok) load()
+          })
         })
+
+        try { fadeIn(container) } catch (_) {}
+      }
+
+      const load = async () => {
+        renderSkeleton()
+        try {
+          const { rows, table } = await fetchPolls()
+          state.pollsTable = table
+          const normalized = rows.map(normalizePoll)
+          const active = normalized.filter(p => p.is_active)
+          const ids = active.map(p => p.id)
+          const { byPoll, table: vt } = await fetchVotes(table, ids)
+          state.votesTable = vt
+          state.polls = active.map(p => mergeVotes(p, byPoll[p.id] || []))
+          render()
+        } catch (e) {
+          errorState(body, e.message || String(e), load)
+        }
+      }
+
+      container.querySelector('#btn-refresh')?.addEventListener('click', () => {
+        toast({ type: 'info', message: 'Aktualisiere …' })
+        load()
+      })
+      container.querySelector('#btn-pdf')?.addEventListener('click', () => {
+        try { exportPanelAsPdf(container, { title: 'Aktive Umfragen', filename: 'aktive-umfragen.pdf' }) }
+        catch (e) { toast({ type: 'error', message: 'PDF-Export fehlgeschlagen' }) }
+      })
+      container.querySelector('#btn-csv')?.addEventListener('click', () => {
+        const rows = state.polls.flatMap(p => p.options.map(o => ({
+          poll_id: p.id,
+          frage: p.question,
+          option: o.label,
+          stimmen: o.votes,
+          gesamt_stimmen: p.totalVotes,
+          endet: p.closes_at || '',
+          erstellt: p.created_at || ''
+        })))
+        if (!rows.length) return toast({ type: 'info', message: 'Keine Daten zum Export' })
+        try { exportCsv(rows, 'aktive-umfragen.csv') }
+        catch (e) { toast({ type: 'error', message: 'CSV-Export fehlgeschlagen' }) }
       })
 
-      try { fadeIn(container) } catch (_) {}
-    }
-
-    const load = async () => {
-      renderSkeleton()
-      try {
-        const { rows, table } = await fetchPolls()
-        state.pollsTable = table
-        const normalized = rows.map(normalizePoll)
-        const active = normalized.filter(p => p.is_active)
-        const ids = active.map(p => p.id)
-        const { byPoll, table: vt } = await fetchVotes(table, ids)
-        state.votesTable = vt
-        state.polls = active.map(p => mergeVotes(p, byPoll[p.id] || []))
-        render()
-      } catch (e) {
-        errorState(body, e.message || String(e), load)
-      }
-    }
-
-    container.querySelector('#btn-refresh')?.addEventListener('click', () => {
-      toast({ type: 'info', message: 'Aktualisiere …' })
+      // Data-Fetch im Hintergrund — Skeleton ist schon sichtbar
       load()
-    })
-    container.querySelector('#btn-pdf')?.addEventListener('click', () => {
-      try { exportPanelAsPdf(container, { title: 'Aktive Umfragen', filename: 'aktive-umfragen.pdf' }) }
-      catch (e) { toast({ type: 'error', message: 'PDF-Export fehlgeschlagen' }) }
-    })
-    container.querySelector('#btn-csv')?.addEventListener('click', () => {
-      const rows = state.polls.flatMap(p => p.options.map(o => ({
-        poll_id: p.id,
-        frage: p.question,
-        option: o.label,
-        stimmen: o.votes,
-        gesamt_stimmen: p.totalVotes,
-        endet: p.closes_at || '',
-        erstellt: p.created_at || ''
-      })))
-      if (!rows.length) return toast({ type: 'info', message: 'Keine Daten zum Export' })
-      try { exportCsv(rows, 'aktive-umfragen.csv') }
-      catch (e) { toast({ type: 'error', message: 'CSV-Export fehlgeschlagen' }) }
-    })
-
-    await load()
+    } catch (e) {
+      mountErrorState(container, e?.message || String(e))
+    }
   }
 }

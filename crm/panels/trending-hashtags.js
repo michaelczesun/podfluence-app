@@ -1,5 +1,5 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js'
+import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js'
 import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
@@ -9,22 +9,28 @@ import { showUserDetailModal } from '/lib/panel-actions.js'
 const PALETTE = ['#7c5cff', '#22c1c3', '#fdbb2d', '#ff5e7e', '#3ee8a3', '#ffa057', '#5d9cff', '#c97bff']
 
 async function fetchHashtags() {
-  const { data, error } = await sb
-    .from('hashtags')
-    .select('tag, usage_count, posts_24h, posts_7d, last_used_at, trend')
-    .order('usage_count', { ascending: false })
-    .limit(80)
+  // Versuche zuerst eine evtl. existierende aggregierte hashtags-Tabelle
+  try {
+    const { data, error } = await sb
+      .from('hashtags')
+      .select('tag, usage_count, posts_24h, posts_7d, last_used_at, trend')
+      .order('usage_count', { ascending: false })
+      .limit(80)
+    if (!error && data && data.length) return data
+  } catch (_) {
+    // Tabelle existiert evtl. nicht — fallthrough zu Posts-Aggregation
+  }
 
-  if (!error && data && data.length) return data
-
-  const { data: posts } = await sb
+  const { data: posts, error: postsErr } = await sb
     .from('posts')
     .select('hashtags, created_at')
     .not('hashtags', 'is', null)
     .order('created_at', { ascending: false })
     .limit(2000)
 
+  if (postsErr) throw postsErr
   if (!posts) return []
+
   const now = Date.now()
   const map = new Map()
   for (const p of posts) {
@@ -52,14 +58,18 @@ async function fetchHashtags() {
 }
 
 async function fetchPostsForTag(tag) {
-  const { data, error } = await sb
-    .from('posts')
-    .select('id, content, user_id, created_at, like_count, comment_count, users(username, avatar_url)')
-    .contains('hashtags', [tag])
-    .order('created_at', { ascending: false })
-    .limit(30)
-  if (error) return []
-  return data || []
+  try {
+    const { data, error } = await sb
+      .from('posts')
+      .select('id, content, user_id, created_at, like_count, comment_count, users(username, avatar_url)')
+      .contains('hashtags', [tag])
+      .order('created_at', { ascending: false })
+      .limit(30)
+    if (error) return []
+    return data || []
+  } catch (_) {
+    return []
+  }
 }
 
 function bubbleCloud(items) {
@@ -118,7 +128,20 @@ async function openTagDrawer(tag) {
     width: 540,
     content: `<div id="tag-drawer-body">${skeletonLoader({ rows: 6 })}</div>`
   })
-  const posts = await fetchPostsForTag(tag)
+  let posts = []
+  try {
+    posts = await fetchPostsForTag(tag)
+  } catch (e) {
+    const body = document.getElementById('tag-drawer-body')
+    if (body) {
+      body.innerHTML = `<div class="error-state">
+        <div class="empty-icon">${iconHtml('alert-triangle')}</div>
+        <h3>Fehler</h3>
+        <p>${htmlEscape(e.message || 'Posts konnten nicht geladen werden')}</p>
+      </div>`
+    }
+    return
+  }
   const body = document.getElementById('tag-drawer-body')
   if (!body) return
   if (!posts.length) {
@@ -139,7 +162,7 @@ async function openTagDrawer(tag) {
       ${posts.map(p => `
         <div class="post-card glass-card-mini">
           <div class="post-head">
-            <button class="user-chip" data-user="${p.user_id}">
+            <button class="user-chip" data-user="${htmlEscape(p.user_id || '')}">
               ${p.users?.avatar_url ? `<img src="${htmlEscape(p.users.avatar_url)}" alt="">` : '<span class="avatar-fallback"></span>'}
               <span>@${htmlEscape(p.users?.username || 'unbekannt')}</span>
             </button>
@@ -167,168 +190,212 @@ export default {
   title: 'Trending Hashtags',
   category: 'content',
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell">
-        <div class="panel-head">
-          <div>
-            <h2>Trending Hashtags</h2>
-            <p class="panel-sub">Bubble-Cloud nach Nutzung · Klick öffnet Posts mit Tag</p>
+    try {
+      // Sofort-Render: Shell + Skeleton, damit kein weißer Screen entsteht
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="panel-head">
+            <div>
+              <h2>Trending Hashtags</h2>
+              <p class="panel-sub">Bubble-Cloud nach Nutzung · Klick öffnet Posts mit Tag</p>
+            </div>
+            <div class="toolbar">
+              <button class="btn-icon" id="btn-refresh" title="Aktualisieren">${iconHtml('refresh')}</button>
+              <button class="btn-icon" id="btn-pdf" title="Als PDF exportieren">${iconHtml('file-pdf')}</button>
+              <button class="btn-icon" id="btn-csv" title="Als CSV exportieren">${iconHtml('download')}</button>
+            </div>
           </div>
-          <div class="toolbar">
-            <button class="btn-icon" id="btn-refresh" title="Aktualisieren">${iconHtml('refresh')}</button>
-            <button class="btn-icon" id="btn-pdf" title="Als PDF exportieren">${iconHtml('file-pdf')}</button>
-            <button class="btn-icon" id="btn-csv" title="Als CSV exportieren">${iconHtml('download')}</button>
-          </div>
+          <div class="panel-body" id="body">${skeletonLoader({ rows: 8 })}</div>
         </div>
-        <div class="panel-body" id="body">${skeletonLoader({ rows: 8 })}</div>
-      </div>
-    `
-
-    fadeIn(container)
-
-    const body = container.querySelector('#body')
-
-    const render = async () => {
-      body.innerHTML = skeletonLoader({ rows: 8 })
-      let items = []
-      try {
-        items = await fetchHashtags()
-      } catch (e) {
-        body.innerHTML = `<div class="error-state">
-          <div class="empty-icon">${iconHtml('alert-triangle')}</div>
-          <h3>Fehler beim Laden</h3>
-          <p>${htmlEscape(e.message || 'Unbekannter Fehler')}</p>
-          <button class="btn primary" id="btn-retry">Erneut versuchen</button>
-        </div>`
-        body.querySelector('#btn-retry')?.addEventListener('click', render)
-        return
-      }
-
-      if (!items.length) {
-        body.innerHTML = `<div class="empty-state">
-          <div class="empty-icon">${iconHtml('hash')}</div>
-          <h3>Noch keine Hashtags</h3>
-          <p>Sobald User Posts mit Hashtags veröffentlichen, erscheinen sie hier als Cloud.</p>
-        </div>`
-        return
-      }
-
-      const total = items.reduce((s, t) => s + (t.usage_count || 0), 0)
-      const last24 = items.reduce((s, t) => s + (t.posts_24h || 0), 0)
-      const rising = items.filter(t => t.trend === 'up').length
-      const uniqueTags = items.length
-
-      body.innerHTML = `
-        <div class="hero-row">
-          ${statHero({ label: 'Hashtags gesamt', value: '<span id="hero-tags">0</span>', icon: 'hash', accent: '#7c5cff' })}
-          ${statHero({ label: 'Verwendungen', value: '<span id="hero-uses">0</span>', icon: 'activity', accent: '#22c1c3' })}
-          ${statHero({ label: 'Posts (24h)', value: '<span id="hero-24">0</span>', icon: 'clock', accent: '#fdbb2d' })}
-          ${statHero({ label: 'Steigend', value: '<span id="hero-up">0</span>', icon: 'trending-up', accent: '#3ee8a3' })}
-        </div>
-
-        <div class="grid-2">
-          ${glassCard({
-            title: 'Hashtag-Cloud',
-            subtitle: 'Größe = Nutzungsanzahl · Klick = Posts anzeigen',
-            content: `<div id="cloud">${bubbleCloud(items)}</div>`
-          })}
-          ${glassCard({
-            title: 'Top 10 Verteilung',
-            subtitle: 'Anteil an Top-Verwendungen',
-            content: `<div id="chart-donut" style="height:280px"></div>`
-          })}
-        </div>
-
-        <div class="grid-2">
-          ${glassCard({
-            title: 'Top 15 nach Anzahl',
-            subtitle: 'Posts insgesamt pro Tag',
-            content: `<div id="chart-bar" style="height:300px"></div>`
-          })}
-          ${glassCard({
-            title: 'Aktivität letzte 24h',
-            subtitle: 'Neue Posts mit Top-Tags',
-            content: `<div id="chart-area" style="height:300px"></div>`
-          })}
-        </div>
-
-        ${glassCard({
-          title: 'Ranking',
-          subtitle: 'Sortiert nach Verwendungsanzahl · Zeile klicken für Drilldown',
-          content: `<div id="rank-list">${rankList(items)}</div>`
-        })}
       `
 
-      countUp(body.querySelector('#hero-tags'), uniqueTags)
-      countUp(body.querySelector('#hero-uses'), total)
-      countUp(body.querySelector('#hero-24'), last24)
-      countUp(body.querySelector('#hero-up'), rising)
+      try { fadeIn(container) } catch (_) {}
 
-      const top10 = items.slice(0, 10)
-      const top15 = items.slice(0, 15)
+      const body = container.querySelector('#body')
+      let currentItems = []
 
-      try {
-        makeDonutChart(body.querySelector('#chart-donut'), {
-          labels: top10.map(t => '#' + t.tag),
-          values: top10.map(t => t.usage_count),
-          colors: PALETTE
+      const render = async () => {
+        body.innerHTML = skeletonLoader({ rows: 8 })
+        let items = []
+        try {
+          items = await fetchHashtags()
+        } catch (e) {
+          body.innerHTML = `<div class="error-state">
+            <div class="empty-icon">${iconHtml('alert-triangle')}</div>
+            <h3>Fehler beim Laden</h3>
+            <p>${htmlEscape(e.message || 'Unbekannter Fehler')}</p>
+            <button class="btn primary" id="btn-retry">Erneut versuchen</button>
+          </div>`
+          body.querySelector('#btn-retry')?.addEventListener('click', render)
+          return
+        }
+
+        currentItems = items
+
+        if (!items.length) {
+          body.innerHTML = `<div class="empty-state">
+            <div class="empty-icon">${iconHtml('hash')}</div>
+            <h3>Noch keine Hashtags</h3>
+            <p>Sobald User Posts mit Hashtags veröffentlichen, erscheinen sie hier als Cloud.</p>
+          </div>`
+          return
+        }
+
+        const total = items.reduce((s, t) => s + (t.usage_count || 0), 0)
+        const last24 = items.reduce((s, t) => s + (t.posts_24h || 0), 0)
+        const rising = items.filter(t => t.trend === 'up').length
+        const uniqueTags = items.length
+
+        body.innerHTML = `
+          <div class="hero-row">
+            ${statHero({ label: 'Hashtags gesamt', value: '<span id="hero-tags">0</span>', icon: 'hash', accent: '#7c5cff' })}
+            ${statHero({ label: 'Verwendungen', value: '<span id="hero-uses">0</span>', icon: 'activity', accent: '#22c1c3' })}
+            ${statHero({ label: 'Posts (24h)', value: '<span id="hero-24">0</span>', icon: 'clock', accent: '#fdbb2d' })}
+            ${statHero({ label: 'Steigend', value: '<span id="hero-up">0</span>', icon: 'trending-up', accent: '#3ee8a3' })}
+          </div>
+
+          <div class="grid-2">
+            ${glassCard({
+              title: 'Hashtag-Cloud',
+              subtitle: 'Größe = Nutzungsanzahl · Klick = Posts anzeigen',
+              content: `<div id="cloud">${bubbleCloud(items)}</div>`
+            })}
+            ${glassCard({
+              title: 'Top 10 Verteilung',
+              subtitle: 'Anteil an Top-Verwendungen',
+              content: `<div id="chart-donut" style="height:280px"></div>`
+            })}
+          </div>
+
+          <div class="grid-2">
+            ${glassCard({
+              title: 'Top 15 nach Anzahl',
+              subtitle: 'Posts insgesamt pro Tag',
+              content: `<div id="chart-bar" style="height:300px"></div>`
+            })}
+            ${glassCard({
+              title: 'Aktivität letzte 24h',
+              subtitle: 'Neue Posts mit Top-Tags',
+              content: `<div id="chart-area" style="height:300px"></div>`
+            })}
+          </div>
+
+          ${glassCard({
+            title: 'Ranking',
+            subtitle: 'Sortiert nach Verwendungsanzahl · Zeile klicken für Drilldown',
+            content: `<div id="rank-list">${rankList(items)}</div>`
+          })}
+        `
+
+        try { countUp(body.querySelector('#hero-tags'), uniqueTags) } catch (_) {}
+        try { countUp(body.querySelector('#hero-uses'), total) } catch (_) {}
+        try { countUp(body.querySelector('#hero-24'), last24) } catch (_) {}
+        try { countUp(body.querySelector('#hero-up'), rising) } catch (_) {}
+
+        const top10 = items.slice(0, 10)
+        const top15 = items.slice(0, 15)
+
+        try {
+          makeDonutChart(body.querySelector('#chart-donut'), {
+            labels: top10.map(t => '#' + t.tag),
+            values: top10.map(t => t.usage_count),
+            colors: PALETTE
+          })
+        } catch (_) {}
+
+        try {
+          makeBarChart(body.querySelector('#chart-bar'), {
+            categories: top15.map(t => '#' + t.tag),
+            series: [{ name: 'Verwendungen', data: top15.map(t => t.usage_count) }],
+            horizontal: true,
+            color: '#7c5cff'
+          })
+        } catch (_) {}
+
+        try {
+          makeAreaChart(body.querySelector('#chart-area'), {
+            categories: top10.map(t => '#' + t.tag),
+            series: [{ name: '24h Posts', data: top10.map(t => t.posts_24h || 0) }],
+            color: '#3ee8a3'
+          })
+        } catch (_) {}
+
+        body.querySelectorAll('.bubble').forEach(el => {
+          el.addEventListener('click', () => {
+            const tag = el.getAttribute('data-tag')
+            if (tag) openTagDrawer(tag)
+          })
         })
-      } catch {}
 
-      try {
-        makeBarChart(body.querySelector('#chart-bar'), {
-          categories: top15.map(t => '#' + t.tag),
-          series: [{ name: 'Verwendungen', data: top15.map(t => t.usage_count) }],
-          horizontal: true,
-          color: '#7c5cff'
+        body.querySelectorAll('.row-clickable').forEach(el => {
+          el.addEventListener('click', () => {
+            const tag = el.getAttribute('data-tag')
+            if (tag) openTagDrawer(tag)
+          })
         })
-      } catch {}
-
-      try {
-        makeAreaChart(body.querySelector('#chart-area'), {
-          categories: top10.map(t => '#' + t.tag),
-          series: [{ name: '24h Posts', data: top10.map(t => t.posts_24h || 0) }],
-          color: '#3ee8a3'
-        })
-      } catch {}
-
-      body.querySelectorAll('.bubble').forEach(el => {
-        el.addEventListener('click', () => {
-          const tag = el.getAttribute('data-tag')
-          if (tag) openTagDrawer(tag)
-        })
-      })
-
-      body.querySelectorAll('.row-clickable').forEach(el => {
-        el.addEventListener('click', () => {
-          const tag = el.getAttribute('data-tag')
-          if (tag) openTagDrawer(tag)
-        })
-      })
-
-      container.querySelector('#btn-csv').onclick = () => {
-        exportCsv('trending-hashtags', items.map((t, i) => ({
-          rang: i + 1,
-          tag: t.tag,
-          verwendungen: t.usage_count,
-          posts_24h: t.posts_24h || 0,
-          posts_7d: t.posts_7d || 0,
-          trend: t.trend || 'flat',
-          zuletzt: t.last_used_at ? fmtDateTime(t.last_used_at) : ''
-        })))
-        toast('CSV exportiert', 'success')
       }
-    }
 
-    container.querySelector('#btn-refresh').onclick = () => {
-      render()
-      toast('Aktualisiert', 'info')
-    }
-    container.querySelector('#btn-pdf').onclick = () => {
-      exportPanelAsPdf(container, 'trending-hashtags')
-      toast('PDF wird erzeugt …', 'info')
-    }
+      // Toolbar-Handler EINMAL binden — referenzieren currentItems
+      const btnRefresh = container.querySelector('#btn-refresh')
+      const btnPdf = container.querySelector('#btn-pdf')
+      const btnCsv = container.querySelector('#btn-csv')
 
-    await render()
+      if (btnRefresh) {
+        btnRefresh.onclick = () => {
+          render()
+          toast('Aktualisiert', 'info')
+        }
+      }
+      if (btnPdf) {
+        btnPdf.onclick = () => {
+          try {
+            exportPanelAsPdf(container, 'trending-hashtags')
+            toast('PDF wird erzeugt …', 'info')
+          } catch (e) {
+            toast('PDF-Export fehlgeschlagen: ' + (e.message || ''), 'error')
+          }
+        }
+      }
+      if (btnCsv) {
+        btnCsv.onclick = () => {
+          if (!currentItems.length) {
+            toast('Keine Daten zum Exportieren', 'warning')
+            return
+          }
+          try {
+            exportCsv('trending-hashtags', currentItems.map((t, i) => ({
+              rang: i + 1,
+              tag: t.tag,
+              verwendungen: t.usage_count,
+              posts_24h: t.posts_24h || 0,
+              posts_7d: t.posts_7d || 0,
+              trend: t.trend || 'flat',
+              zuletzt: t.last_used_at ? fmtDateTime(t.last_used_at) : ''
+            })))
+            toast('CSV exportiert', 'success')
+          } catch (e) {
+            toast('CSV-Export fehlgeschlagen: ' + (e.message || ''), 'error')
+          }
+        }
+      }
+
+      // Background-Loading: skeleton ist bereits sichtbar, jetzt Daten holen
+      await render()
+    } catch (e) {
+      // Mount-Fehler — sichtbare Fehler-Box statt weißer Bildschirm
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="error-state" style="padding:32px">
+            <div class="empty-icon">${iconHtml ? iconHtml('alert-triangle') : '⚠'}</div>
+            <h3>Panel konnte nicht geladen werden</h3>
+            <p>${htmlEscape ? htmlEscape(e.message || String(e)) : (e.message || String(e))}</p>
+            <button class="btn primary" id="btn-mount-retry">Erneut versuchen</button>
+          </div>
+        </div>
+      `
+      container.querySelector('#btn-mount-retry')?.addEventListener('click', () => {
+        this.mount(container)
+      })
+    }
   }
 }

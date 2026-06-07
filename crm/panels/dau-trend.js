@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
-import { makeAreaChart, makeBarChart, makeDonutChart, makeSparkline } from '/lib/charts.js'
+import { toast, fmtNumber, htmlEscape, iconHtml } from '/lib/ui.js'
+import { makeAreaChart, makeBarChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, tabs, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
+import { drawer, segmentedControl } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const RANGE_OPTIONS = [
@@ -28,7 +28,9 @@ function formatDateKey(d) {
 }
 
 function formatDateShort(key) {
+  if (!key) return ''
   const d = new Date(key)
+  if (isNaN(d.getTime())) return ''
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })
 }
 
@@ -71,11 +73,13 @@ async function fetchDau(days) {
       date,
       users: set.size
     }))
-  } catch (e) {
-    const { data } = await sb
+  } catch (_) {
+    // Last-resort fallback: posts table
+    const { data, error } = await sb
       .from('posts')
       .select('user_id, created_at')
       .gte('created_at', since.toISOString())
+    if (error) throw error
     const buckets = new Map()
     for (let i = 0; i < Number(days); i++) {
       const d = new Date(since)
@@ -156,7 +160,7 @@ function renderError(host, message, onRetry) {
     <div class="empty-state error-state glass-card">
       <div class="empty-icon">${iconHtml('alert-triangle')}</div>
       <h3>Daten konnten nicht geladen werden</h3>
-      <p>${htmlEscape(message || 'Unbekannter Fehler')}</p>
+      <p>Fehler: ${htmlEscape(message || 'Unbekannter Fehler')}</p>
       <button class="btn btn-primary" id="dau-retry">${iconHtml('refresh-cw')} Erneut versuchen</button>
     </div>
   `
@@ -241,25 +245,38 @@ async function renderBody(host, onPointClick) {
   })
 
   const chartHost = host.querySelector('#dau-chart')
-  makeAreaChart(chartHost, {
-    data: state.series.map(p => ({ x: p.date, y: p.users })),
-    xLabel: d => formatDateShort(d),
-    yLabel: v => fmtNumber(v),
-    color: '#7c5cff',
-    fade: true,
-    height: 280,
-    onPointClick: (point) => onPointClick(point.x)
-  })
+  if (chartHost) {
+    try {
+      makeAreaChart(chartHost, {
+        data: state.series.map(p => ({ x: p.date, y: p.users })),
+        xLabel: d => formatDateShort(d),
+        yLabel: v => fmtNumber(v),
+        color: '#7c5cff',
+        fade: true,
+        height: 280,
+        onPointClick: (point) => onPointClick(point.x)
+      })
+    } catch (e) {
+      chartHost.innerHTML = `<div class="muted">Chart konnte nicht gezeichnet werden: ${htmlEscape(e.message || '')}</div>`
+    }
+  }
 
   const barsHost = host.querySelector('#dau-bars')
-  makeBarChart(barsHost, {
-    data: state.series.map(p => ({ label: formatDateShort(p.date), value: p.users, key: p.date })),
-    color: '#7c5cff',
-    height: 200,
-    onBarClick: (bar) => onPointClick(bar.key)
-  })
+  if (barsHost) {
+    try {
+      makeBarChart(barsHost, {
+        data: state.series.map(p => ({ label: formatDateShort(p.date), value: p.users, key: p.date })),
+        color: '#7c5cff',
+        height: 200,
+        onBarClick: (bar) => onPointClick(bar.key)
+      })
+    } catch (e) {
+      barsHost.innerHTML = `<div class="muted">Balken konnten nicht gezeichnet werden: ${htmlEscape(e.message || '')}</div>`
+    }
+  }
 
-  fadeIn(host.querySelector('.dau-hero'))
+  const hero = host.querySelector('.dau-hero')
+  if (hero) fadeIn(hero)
 }
 
 async function openDayDrawer(dateKey) {
@@ -316,21 +333,25 @@ async function openDayDrawer(dateKey) {
     })
 
     dlg.root.querySelector('#day-export')?.addEventListener('click', () => {
-      exportCsv(`dau-${dateKey}.csv`, users.map(u => ({
-        id: u.id,
-        username: u.username,
-        display_name: u.display_name,
-        verified: u.is_verified ? 'ja' : 'nein',
-        last_seen: u.last_seen_at || ''
-      })))
-      toast('CSV exportiert', 'success')
+      try {
+        exportCsv(`dau-${dateKey}.csv`, users.map(u => ({
+          id: u.id,
+          username: u.username,
+          display_name: u.display_name,
+          verified: u.is_verified ? 'ja' : 'nein',
+          last_seen: u.last_seen_at || ''
+        })))
+        toast('CSV exportiert', 'success')
+      } catch (e) {
+        toast('CSV-Export fehlgeschlagen: ' + (e.message || ''), 'error')
+      }
     })
   } catch (e) {
     dlg.setContent(`
       <div class="empty-state error-state">
         <div class="empty-icon">${iconHtml('alert-triangle')}</div>
         <h4>Fehler beim Laden</h4>
-        <p>${htmlEscape(e.message || 'Unbekannter Fehler')}</p>
+        <p>Fehler: ${htmlEscape(e.message || 'Unbekannter Fehler')}</p>
       </div>
     `)
   }
@@ -344,9 +365,14 @@ async function loadAndRender(host, onPointClick) {
     state.series = await fetchDau(state.range)
   } catch (e) {
     state.error = e.message || 'Ladevorgang fehlgeschlagen'
+    state.series = []
   } finally {
     state.loading = false
-    await renderBody(host, onPointClick)
+    try {
+      await renderBody(host, onPointClick)
+    } catch (e) {
+      renderError(host, e.message || 'Render-Fehler', () => loadAndRender(host, onPointClick))
+    }
   }
 }
 
@@ -356,66 +382,98 @@ export default {
   category: 'overview',
 
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell dau-panel">
-        <div class="panel-head">
-          <div class="panel-head-left">
-            <h2>${iconHtml('activity')} Tägliche aktive Nutzer</h2>
-            <p class="panel-sub">DAU-Entwicklung im gewählten Zeitraum</p>
+    try {
+      container.innerHTML = `
+        <div class="panel-shell dau-panel">
+          <div class="panel-head">
+            <div class="panel-head-left">
+              <h2>${iconHtml('activity')} Tägliche aktive Nutzer</h2>
+              <p class="panel-sub">DAU-Entwicklung im gewählten Zeitraum</p>
+            </div>
+            <div class="toolbar">
+              <div id="dau-range"></div>
+              <button class="btn btn-ghost" id="dau-refresh" title="Aktualisieren">${iconHtml('refresh-cw')} Aktualisieren</button>
+              <button class="btn btn-ghost" id="dau-pdf" title="PDF-Export">${iconHtml('file-text')} PDF</button>
+              <button class="btn btn-ghost" id="dau-csv" title="CSV-Export">${iconHtml('download')} CSV</button>
+            </div>
           </div>
-          <div class="toolbar">
-            <div id="dau-range"></div>
-            <button class="btn btn-ghost" id="dau-refresh" title="Aktualisieren">${iconHtml('refresh-cw')} Aktualisieren</button>
-            <button class="btn btn-ghost" id="dau-pdf" title="PDF-Export">${iconHtml('file-text')} PDF</button>
-            <button class="btn btn-ghost" id="dau-csv" title="CSV-Export">${iconHtml('download')} CSV</button>
-          </div>
+          <div class="panel-body" id="dau-body"></div>
         </div>
-        <div class="panel-body" id="dau-body"></div>
-      </div>
-    `
+      `
 
-    const body = container.querySelector('#dau-body')
-    const rangeHost = container.querySelector('#dau-range')
+      const body = container.querySelector('#dau-body')
+      const rangeHost = container.querySelector('#dau-range')
 
-    segmentedControl(rangeHost, {
-      options: RANGE_OPTIONS,
-      value: state.range,
-      onChange: async (val) => {
-        state.range = val
+      // Skeleton sofort zeigen, bevor irgendwas async passiert
+      if (body) renderSkeleton(body)
+
+      if (rangeHost) {
+        try {
+          segmentedControl(rangeHost, {
+            options: RANGE_OPTIONS,
+            value: state.range,
+            onChange: async (val) => {
+              state.range = val
+              if (body) await loadAndRender(body, openDayDrawer)
+            }
+          })
+        } catch (e) {
+          rangeHost.innerHTML = `<span class="muted">Range-Picker fehlgeschlagen</span>`
+        }
+      }
+
+      container.querySelector('#dau-refresh')?.addEventListener('click', async () => {
+        if (!body) return
         await loadAndRender(body, openDayDrawer)
-      }
-    })
+        toast('Aktualisiert', 'success')
+      })
 
-    container.querySelector('#dau-refresh').addEventListener('click', async () => {
-      await loadAndRender(body, openDayDrawer)
-      toast('Aktualisiert', 'success')
-    })
+      container.querySelector('#dau-pdf')?.addEventListener('click', async () => {
+        try {
+          await exportPanelAsPdf(container, {
+            filename: `dau-trend-${state.range}t.pdf`,
+            title: `DAU · ${state.range} Tage`
+          })
+          toast('PDF erstellt', 'success')
+        } catch (e) {
+          toast('PDF-Export fehlgeschlagen: ' + (e.message || ''), 'error')
+        }
+      })
 
-    container.querySelector('#dau-pdf').addEventListener('click', async () => {
-      try {
-        await exportPanelAsPdf(container, {
-          filename: `dau-trend-${state.range}t.pdf`,
-          title: `DAU · ${state.range} Tage`
+      container.querySelector('#dau-csv')?.addEventListener('click', () => {
+        if (!state.series.length) {
+          toast('Keine Daten zum Exportieren', 'warning')
+          return
+        }
+        try {
+          exportCsv(`dau-trend-${state.range}t.csv`, state.series.map(p => ({
+            datum: p.date,
+            aktive_nutzer: p.users
+          })))
+          toast('CSV exportiert', 'success')
+        } catch (e) {
+          toast('CSV-Export fehlgeschlagen: ' + (e.message || ''), 'error')
+        }
+      })
+
+      const shell = container.querySelector('.panel-shell')
+      if (shell) fadeIn(shell)
+
+      // Background fetch — Skeleton ist schon sichtbar
+      if (body) {
+        loadAndRender(body, openDayDrawer).catch(e => {
+          renderError(body, e.message || 'Initialer Ladefehler', () => loadAndRender(body, openDayDrawer))
         })
-        toast('PDF erstellt', 'success')
-      } catch (e) {
-        toast('PDF-Export fehlgeschlagen', 'error')
       }
-    })
-
-    container.querySelector('#dau-csv').addEventListener('click', () => {
-      if (!state.series.length) {
-        toast('Keine Daten zum Exportieren', 'warning')
-        return
-      }
-      exportCsv(`dau-trend-${state.range}t.csv`, state.series.map(p => ({
-        datum: p.date,
-        aktive_nutzer: p.users
-      })))
-      toast('CSV exportiert', 'success')
-    })
-
-    fadeIn(container.querySelector('.panel-shell'))
-    await loadAndRender(body, openDayDrawer)
+    } catch (e) {
+      container.innerHTML = `
+        <div class="empty-state error-state glass-card" style="padding:32px;text-align:center">
+          <div class="empty-icon">${iconHtml ? iconHtml('alert-triangle') : '⚠️'}</div>
+          <h3>Panel konnte nicht initialisiert werden</h3>
+          <p>Fehler: ${htmlEscape ? htmlEscape(e.message || String(e)) : (e.message || String(e))}</p>
+          <button class="btn btn-primary" onclick="location.reload()">Neu laden</button>
+        </div>
+      `
+    }
   }
 }

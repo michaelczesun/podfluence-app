@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, exportCsv as uiExportCsv, spinnerHtml } from '/lib/ui.js'
-import { makeAreaChart, makeBarChart, makeSparkline, makeDonutChart } from '/lib/charts.js'
+import { toast, modal, confirmDialog, fmtNumber, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
+import { makeAreaChart, makeSparkline } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
-import { countUp, fadeIn, skeletonLoader, pulse } from '/lib/animations.js'
-import { drawer, tabs, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { drawer, segmentedControl } from '/lib/layout-extras.js'
 import { showUserDetailModal, grantPremium, sendBroadcastPush } from '/lib/panel-actions.js'
 
 const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 }
@@ -322,204 +322,228 @@ export default {
   category: 'listening',
 
   async mount(container) {
-    let currentRange = '30d'
-    let lastData = null
+    try {
+      let currentRange = '30d'
+      let lastData = null
 
-    container.innerHTML = `
-      <div class="panel-shell">
-        <div class="panel-head">
-          <div class="panel-title">
-            <h2>Aktivste Hörer</h2>
-            <p class="panel-sub">Leaderboard der Hörminuten · Top 100</p>
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="panel-head">
+            <div class="panel-title">
+              <h2>Aktivste Hörer</h2>
+              <p class="panel-sub">Leaderboard der Hörminuten · Top 100</p>
+            </div>
+            <div class="toolbar" id="tl-toolbar">
+              <div id="tl-range"></div>
+              <button class="btn btn-secondary" id="tl-refresh">${iconHtml('refresh') || '🔄'} Aktualisieren</button>
+              <button class="btn btn-secondary" id="tl-thank10">${iconHtml('heart') || '💌'} Top-10 Danke-Push</button>
+              <button class="btn btn-secondary" id="tl-pdf">${iconHtml('file') || '📄'} PDF</button>
+              <button class="btn btn-secondary" id="tl-csv">${iconHtml('download') || '💾'} CSV</button>
+            </div>
           </div>
-          <div class="toolbar" id="tl-toolbar">
-            <div id="tl-range"></div>
-            <button class="btn btn-secondary" id="tl-refresh">${iconHtml('refresh') || '🔄'} Aktualisieren</button>
-            <button class="btn btn-secondary" id="tl-thank10">${iconHtml('heart') || '💌'} Top-10 Danke-Push</button>
-            <button class="btn btn-secondary" id="tl-pdf">${iconHtml('file') || '📄'} PDF</button>
-            <button class="btn btn-secondary" id="tl-csv">${iconHtml('download') || '💾'} CSV</button>
+          <div class="panel-body" id="tl-body">
+            <div class="skeleton-stack" id="tl-initial-skel"></div>
           </div>
         </div>
-        <div class="panel-body" id="tl-body"></div>
-      </div>
-    `
+      `
 
-    const body = container.querySelector('#tl-body')
-
-    const rangeHost = container.querySelector('#tl-range')
-    segmentedControl(rangeHost, {
-      options: [
-        { value: '7d', label: '7T' },
-        { value: '30d', label: '30T' },
-        { value: '90d', label: '90T' },
-      ],
-      value: currentRange,
-      onChange: (v) => {
-        currentRange = v
-        load()
-      },
-    })
-
-    const ctx = { refresh: () => load() }
-
-    async function load() {
-      body.innerHTML = ''
-      const skel = document.createElement('div')
-      skel.className = 'skeleton-stack'
-      body.appendChild(skel)
-      skeletonLoader(skel, { rows: 8 })
-
-      try {
-        const data = await fetchListeners(RANGE_DAYS[currentRange])
-        lastData = data
-        render(data)
-      } catch (err) {
-        renderError(err)
+      const body = container.querySelector('#tl-body')
+      const initialSkel = container.querySelector('#tl-initial-skel')
+      if (initialSkel) {
+        try { skeletonLoader(initialSkel, { rows: 8 }) } catch {}
       }
-    }
 
-    function renderError(err) {
-      body.innerHTML = `
-        <div class="error-state glass-card">
+      const rangeHost = container.querySelector('#tl-range')
+      segmentedControl(rangeHost, {
+        options: [
+          { value: '7d', label: '7T' },
+          { value: '30d', label: '30T' },
+          { value: '90d', label: '90T' },
+        ],
+        value: currentRange,
+        onChange: (v) => {
+          currentRange = v
+          load()
+        },
+      })
+
+      const ctx = { refresh: () => load() }
+
+      async function load() {
+        body.innerHTML = ''
+        const skel = document.createElement('div')
+        skel.className = 'skeleton-stack'
+        body.appendChild(skel)
+        try { skeletonLoader(skel, { rows: 8 }) } catch {}
+
+        try {
+          const data = await fetchListeners(RANGE_DAYS[currentRange])
+          lastData = data
+          render(data)
+        } catch (err) {
+          renderError(err)
+        }
+      }
+
+      function renderError(err) {
+        body.innerHTML = `
+          <div class="error-state glass-card">
+            <div class="error-icon">⚠️</div>
+            <h3>Daten konnten nicht geladen werden</h3>
+            <p>Fehler: ${htmlEscape(err?.message || 'Unbekannter Fehler')}</p>
+            <button class="btn btn-primary" id="tl-retry">Erneut versuchen</button>
+          </div>
+        `
+        body.querySelector('#tl-retry')?.addEventListener('click', load)
+      }
+
+      function render(data) {
+        const { rows, totalsByDay, grandTotal, avgPerListener, top10Share } = data
+
+        body.innerHTML = `
+          <div class="hero-row">
+            <div class="glass-card hero-card">
+              <div class="hero-label">Gesamte Hörminuten</div>
+              <div class="hero-value" id="hero-total">0</div>
+              <div class="hero-sub">in den letzten ${data.days} Tagen</div>
+            </div>
+            <div class="glass-card hero-card">
+              <div class="hero-label">Ø pro Top-Hörer</div>
+              <div class="hero-value" id="hero-avg">0</div>
+              <div class="hero-sub">Minuten / Person</div>
+            </div>
+            <div class="glass-card hero-card">
+              <div class="hero-label">Top-10 Anteil</div>
+              <div class="hero-value" id="hero-share">0%</div>
+              <div class="hero-sub">der Top-100-Minuten</div>
+            </div>
+            <div class="glass-card hero-card hero-chart-card">
+              <div class="hero-label">Verlauf</div>
+              <div id="hero-chart" class="hero-chart"></div>
+            </div>
+          </div>
+
+          <div class="section-head">
+            <h3>Leaderboard</h3>
+            <div class="section-tools">
+              <input type="search" class="search-input" id="tl-search" placeholder="Hörer suchen..." />
+            </div>
+          </div>
+
+          <div class="glass-card table-card" id="table-host">
+            ${renderTable(rows)}
+          </div>
+        `
+
+        const totalEl = body.querySelector('#hero-total')
+        const avgEl = body.querySelector('#hero-avg')
+        const shareEl = body.querySelector('#hero-share')
+        countUp(totalEl, grandTotal, { duration: 900, format: fmtNumber })
+        countUp(avgEl, avgPerListener, { duration: 900, format: fmtNumber })
+        countUp(shareEl, top10Share, { duration: 900, format: (v) => `${v}%` })
+
+        const chartHost = body.querySelector('#hero-chart')
+        if (chartHost && totalsByDay.length) {
+          makeAreaChart(
+            chartHost,
+            totalsByDay.map((d) => ({ x: d.day, y: d.minutes })),
+            { height: 90, color: '#7c5cff', gradient: true, xKey: 'x', yKey: 'y' }
+          )
+        }
+
+        attachSparklines(body)
+
+        const search = body.querySelector('#tl-search')
+        if (search) {
+          search.addEventListener(
+            'input',
+            debounce((e) => {
+              const q = e.target.value.trim().toLowerCase()
+              const filtered = q
+                ? rows.filter(
+                    (r) =>
+                      r.name.toLowerCase().includes(q) ||
+                      r.username.toLowerCase().includes(q)
+                  )
+                : rows
+              const host = body.querySelector('#table-host')
+              host.innerHTML = renderTable(filtered)
+              attachSparklines(host)
+              wireRowEvents(host)
+            }, 200)
+          )
+        }
+
+        wireRowEvents(body)
+        fadeIn(body)
+      }
+
+      function wireRowEvents(scope) {
+        scope.querySelectorAll('[data-action="menu"]').forEach((btn) => {
+          btn.addEventListener('click', (e) => {
+            e.stopPropagation()
+            const uid = btn.dataset.userId
+            const row = (lastData?.rows || []).find((r) => r.user_id === uid)
+            if (row) openRowMenu(btn, row, ctx)
+          })
+        })
+        scope.querySelectorAll('.row-listener').forEach((tr) => {
+          tr.addEventListener('click', (e) => {
+            if (e.target.closest('[data-action="menu"]')) return
+            const uid = tr.dataset.userId
+            const row = (lastData?.rows || []).find((r) => r.user_id === uid)
+            if (row) openListenerDrawer(row)
+          })
+        })
+      }
+
+      container.querySelector('#tl-refresh').addEventListener('click', load)
+      container.querySelector('#tl-thank10').addEventListener('click', () => {
+        if (!lastData?.rows?.length) {
+          toast('Keine Hörer zum Bedanken', 'warning')
+          return
+        }
+        openThankYouModal(lastData.rows.slice(0, 10), ctx)
+      })
+      container.querySelector('#tl-pdf').addEventListener('click', () => {
+        try {
+          exportPanelAsPdf(container, { title: 'Aktivste Hörer', filename: `top-listeners-${currentRange}.pdf` })
+        } catch (err) {
+          toast('PDF-Export fehlgeschlagen: ' + (err?.message || ''), 'error')
+        }
+      })
+      container.querySelector('#tl-csv').addEventListener('click', () => {
+        if (!lastData?.rows?.length) {
+          toast('Nichts zu exportieren', 'warning')
+          return
+        }
+        try {
+          exportCsv(
+            lastData.rows.map((r) => ({
+              rank: r.rank,
+              user_id: r.user_id,
+              name: r.name,
+              username: r.username,
+              minutes: r.total,
+              premium: r.is_premium ? 'yes' : 'no',
+              verified: r.is_verified ? 'yes' : 'no',
+            })),
+            { filename: `top-listeners-${currentRange}.csv` }
+          )
+        } catch (err) {
+          toast('CSV-Export fehlgeschlagen: ' + (err?.message || ''), 'error')
+        }
+      })
+
+      await load()
+    } catch (err) {
+      container.innerHTML = `
+        <div class="error-state glass-card" style="margin:24px;padding:24px;">
           <div class="error-icon">⚠️</div>
-          <h3>Daten konnten nicht geladen werden</h3>
-          <p>${htmlEscape(err?.message || 'Unbekannter Fehler')}</p>
-          <button class="btn btn-primary" id="tl-retry">Erneut versuchen</button>
+          <h3>Panel konnte nicht initialisiert werden</h3>
+          <p>Fehler: ${htmlEscape(err?.message || String(err))}</p>
         </div>
       `
-      body.querySelector('#tl-retry')?.addEventListener('click', load)
     }
-
-    function render(data) {
-      const { rows, totalsByDay, grandTotal, avgPerListener, top10Share } = data
-
-      body.innerHTML = `
-        <div class="hero-row">
-          <div class="glass-card hero-card">
-            <div class="hero-label">Gesamte Hörminuten</div>
-            <div class="hero-value" id="hero-total">0</div>
-            <div class="hero-sub">in den letzten ${data.days} Tagen</div>
-          </div>
-          <div class="glass-card hero-card">
-            <div class="hero-label">Ø pro Top-Hörer</div>
-            <div class="hero-value" id="hero-avg">0</div>
-            <div class="hero-sub">Minuten / Person</div>
-          </div>
-          <div class="glass-card hero-card">
-            <div class="hero-label">Top-10 Anteil</div>
-            <div class="hero-value" id="hero-share">0%</div>
-            <div class="hero-sub">der Top-100-Minuten</div>
-          </div>
-          <div class="glass-card hero-card hero-chart-card">
-            <div class="hero-label">Verlauf</div>
-            <div id="hero-chart" class="hero-chart"></div>
-          </div>
-        </div>
-
-        <div class="section-head">
-          <h3>Leaderboard</h3>
-          <div class="section-tools">
-            <input type="search" class="search-input" id="tl-search" placeholder="Hörer suchen..." />
-          </div>
-        </div>
-
-        <div class="glass-card table-card" id="table-host">
-          ${renderTable(rows)}
-        </div>
-      `
-
-      const totalEl = body.querySelector('#hero-total')
-      const avgEl = body.querySelector('#hero-avg')
-      const shareEl = body.querySelector('#hero-share')
-      countUp(totalEl, grandTotal, { duration: 900, format: fmtNumber })
-      countUp(avgEl, avgPerListener, { duration: 900, format: fmtNumber })
-      countUp(shareEl, top10Share, { duration: 900, format: (v) => `${v}%` })
-
-      const chartHost = body.querySelector('#hero-chart')
-      if (chartHost && totalsByDay.length) {
-        makeAreaChart(
-          chartHost,
-          totalsByDay.map((d) => ({ x: d.day, y: d.minutes })),
-          { height: 90, color: '#7c5cff', gradient: true, xKey: 'x', yKey: 'y' }
-        )
-      }
-
-      attachSparklines(body)
-
-      const search = body.querySelector('#tl-search')
-      if (search) {
-        search.addEventListener(
-          'input',
-          debounce((e) => {
-            const q = e.target.value.trim().toLowerCase()
-            const filtered = q
-              ? rows.filter(
-                  (r) =>
-                    r.name.toLowerCase().includes(q) ||
-                    r.username.toLowerCase().includes(q)
-                )
-              : rows
-            const host = body.querySelector('#table-host')
-            host.innerHTML = renderTable(filtered)
-            attachSparklines(host)
-            wireRowEvents(host)
-          }, 200)
-        )
-      }
-
-      wireRowEvents(body)
-      fadeIn(body)
-    }
-
-    function wireRowEvents(scope) {
-      scope.querySelectorAll('[data-action="menu"]').forEach((btn) => {
-        btn.addEventListener('click', (e) => {
-          e.stopPropagation()
-          const uid = btn.dataset.userId
-          const row = (lastData?.rows || []).find((r) => r.user_id === uid)
-          if (row) openRowMenu(btn, row, ctx)
-        })
-      })
-      scope.querySelectorAll('.row-listener').forEach((tr) => {
-        tr.addEventListener('click', (e) => {
-          if (e.target.closest('[data-action="menu"]')) return
-          const uid = tr.dataset.userId
-          const row = (lastData?.rows || []).find((r) => r.user_id === uid)
-          if (row) openListenerDrawer(row)
-        })
-      })
-    }
-
-    container.querySelector('#tl-refresh').addEventListener('click', load)
-    container.querySelector('#tl-thank10').addEventListener('click', () => {
-      if (!lastData?.rows?.length) {
-        toast('Keine Hörer zum Bedanken', 'warning')
-        return
-      }
-      openThankYouModal(lastData.rows.slice(0, 10), ctx)
-    })
-    container.querySelector('#tl-pdf').addEventListener('click', () => {
-      exportPanelAsPdf(container, { title: 'Aktivste Hörer', filename: `top-listeners-${currentRange}.pdf` })
-    })
-    container.querySelector('#tl-csv').addEventListener('click', () => {
-      if (!lastData?.rows?.length) {
-        toast('Nichts zu exportieren', 'warning')
-        return
-      }
-      exportCsv(
-        lastData.rows.map((r) => ({
-          rank: r.rank,
-          user_id: r.user_id,
-          name: r.name,
-          username: r.username,
-          minutes: r.total,
-          premium: r.is_premium ? 'yes' : 'no',
-          verified: r.is_verified ? 'yes' : 'no',
-        })),
-        { filename: `top-listeners-${currentRange}.csv` }
-      )
-    })
-
-    await load()
   },
 }

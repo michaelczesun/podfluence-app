@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
-import { makeAreaChart, makeRadialBar, makeBarChart } from '/lib/charts.js'
+import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
+import { makeAreaChart, makeRadialBar } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, glassCard, statHero } from '/lib/layout-extras.js'
+import { drawer } from '/lib/layout-extras.js'
 
 const SENTRY_URL = 'https://sentry.io/organizations/podfluence/issues/'
 
@@ -29,12 +29,14 @@ async function fetchData() {
     .gte('created_at', since)
     .order('created_at', { ascending: false })
 
-  const { count: sessionsTotal } = await sb
+  if (crashErr) throw crashErr
+
+  const { count: sessionsTotal, error: sessErr } = await sb
     .from('app_sessions')
     .select('id', { count: 'exact', head: true })
     .gte('started_at', since)
 
-  if (crashErr) throw crashErr
+  if (sessErr) throw sessErr
 
   const list = crashes || []
   const totalCrashes = list.length
@@ -196,7 +198,7 @@ function renderContent(body, data) {
       color: heroColor,
       thickness: 14,
     })
-  } catch (e) {}
+  } catch (e) { console.warn('[crash-rate] radial chart failed', e) }
 
   try {
     makeAreaChart(body.querySelector('#area-chart'), {
@@ -206,20 +208,26 @@ function renderContent(body, data) {
       smooth: true,
       fill: true,
     })
-  } catch (e) {}
+  } catch (e) { console.warn('[crash-rate] area chart failed', e) }
 
-  countUp(body.querySelector('#hero-rate'), data.crashFreeRate, { suffix: '%', decimals: 2, duration: 900 })
-  countUp(body.querySelector('#stat-total'), data.totalCrashes, { duration: 700 })
-  countUp(body.querySelector('#stat-sessions'), data.crashSessions, { duration: 700 })
-  countUp(body.querySelector('#stat-total-sessions'), data.sessions, { duration: 700 })
+  try {
+    countUp(body.querySelector('#hero-rate'), data.crashFreeRate, { suffix: '%', decimals: 2, duration: 900 })
+    countUp(body.querySelector('#stat-total'), data.totalCrashes, { duration: 700 })
+    countUp(body.querySelector('#stat-sessions'), data.crashSessions, { duration: 700 })
+    countUp(body.querySelector('#stat-total-sessions'), data.sessions, { duration: 700 })
+  } catch (e) { console.warn('[crash-rate] countUp failed', e) }
 
   body.querySelector('#csv-locations-btn')?.addEventListener('click', () => {
-    exportCsv('crash-locations.csv', data.topLocations.map(l => ({
-      component: l.component,
-      count: l.count,
-      last_seen: l.last,
-    })))
-    toast('CSV exportiert', 'success')
+    try {
+      exportCsv('crash-locations.csv', data.topLocations.map(l => ({
+        component: l.component,
+        count: l.count,
+        last_seen: l.last,
+      })))
+      toast('CSV exportiert', 'success')
+    } catch (e) {
+      toast('CSV-Export fehlgeschlagen: ' + (e?.message || e), 'error')
+    }
   })
 
   const openDrill = (component) => {
@@ -264,69 +272,107 @@ function renderContent(body, data) {
   })
 }
 
-export default {
+function renderMountError(container, err) {
+  container.innerHTML = `
+    <div class="panel-shell">
+      <div class="glass-card error-state" style="text-align:center;padding:48px 24px;margin:20px">
+        <div style="font-size:48px;margin-bottom:12px;color:#ef4444">!</div>
+        <h3 style="margin:0 0 8px 0">Panel konnte nicht initialisiert werden</h3>
+        <p style="color:var(--text-muted);margin:0 0 16px 0;font-family:monospace;font-size:12px">${htmlEscape(err?.message || String(err))}</p>
+        <button class="btn btn-primary" id="mount-retry">Erneut versuchen</button>
+      </div>
+    </div>
+  `
+  container.querySelector('#mount-retry')?.addEventListener('click', () => {
+    exported.mount(container).catch(e => renderMountError(container, e))
+  })
+}
+
+const exported = {
   id: 'crash-rate',
   title: 'Stabilität / Crash-Rate',
   category: 'overview',
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell">
-        <div class="panel-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px">
-          <div>
-            <h2 style="margin:0">Stabilität / Crash-Rate</h2>
-            <div style="font-size:13px;color:var(--text-muted);margin-top:4px">App-Stabilität und Crash-Tracking der letzten 7 Tage</div>
+    try {
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="panel-head" style="display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px">
+            <div>
+              <h2 style="margin:0">Stabilität / Crash-Rate</h2>
+              <div style="font-size:13px;color:var(--text-muted);margin-top:4px">App-Stabilität und Crash-Tracking der letzten 7 Tage</div>
+            </div>
+            <div class="toolbar" style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-ghost" id="refresh-btn" title="Aktualisieren">${iconHtml('refresh-cw')} Aktualisieren</button>
+              <button class="btn btn-ghost" id="pdf-btn" title="Als PDF exportieren">${iconHtml('file-text')} PDF</button>
+              <button class="btn btn-ghost" id="csv-btn" title="Rohdaten als CSV">${iconHtml('download')} CSV</button>
+              <a class="btn btn-primary" href="${SENTRY_URL}" target="_blank" rel="noopener" title="In Sentry öffnen">
+                ${iconHtml('external-link')} Sentry
+              </a>
+            </div>
           </div>
-          <div class="toolbar" style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-ghost" id="refresh-btn" title="Aktualisieren">${iconHtml('refresh-cw')} Aktualisieren</button>
-            <button class="btn btn-ghost" id="pdf-btn" title="Als PDF exportieren">${iconHtml('file-text')} PDF</button>
-            <button class="btn btn-ghost" id="csv-btn" title="Rohdaten als CSV">${iconHtml('download')} CSV</button>
-            <a class="btn btn-primary" href="${SENTRY_URL}" target="_blank" rel="noopener" title="In Sentry öffnen">
-              ${iconHtml('external-link')} Sentry
-            </a>
-          </div>
+          <div class="panel-body" id="body"></div>
         </div>
-        <div class="panel-body" id="body"></div>
-      </div>
-    `
+      `
 
-    const body = container.querySelector('#body')
-    fadeIn(container)
+      const body = container.querySelector('#body')
 
-    let currentData = null
-
-    const load = async () => {
-      skeletonLoader(body, { rows: 4, layout: 'mixed' })
-      try {
-        const data = await fetchData()
-        currentData = data
-        if (data.totalCrashes === 0 && data.sessions === 0) {
-          renderEmpty(body)
-        } else {
-          renderContent(body, data)
-        }
-      } catch (err) {
-        renderError(body, err, load)
-        toast('Fehler beim Laden der Crash-Daten', 'error')
+      // Sofort Skeleton zeigen, damit kein weißer Screen während fetch
+      try { skeletonLoader(body, { rows: 4, layout: 'mixed' }) } catch (e) {
+        body.innerHTML = '<div style="padding:24px;text-align:center;color:var(--text-muted)">Lade…</div>'
       }
+      try { fadeIn(container) } catch (e) {}
+
+      let currentData = null
+
+      const load = async () => {
+        try { skeletonLoader(body, { rows: 4, layout: 'mixed' }) } catch (e) {}
+        try {
+          const data = await fetchData()
+          currentData = data
+          if (data.totalCrashes === 0 && data.sessions === 0) {
+            renderEmpty(body)
+          } else {
+            renderContent(body, data)
+          }
+        } catch (err) {
+          console.error('[crash-rate] load failed', err)
+          renderError(body, err, load)
+          try { toast('Fehler beim Laden der Crash-Daten', 'error') } catch (e) {}
+        }
+      }
+
+      container.querySelector('#refresh-btn')?.addEventListener('click', () => {
+        load().then(() => { try { toast('Aktualisiert', 'info') } catch (e) {} })
+      })
+      container.querySelector('#pdf-btn')?.addEventListener('click', () => {
+        try {
+          exportPanelAsPdf(container, { title: 'Stabilität / Crash-Rate', filename: 'crash-rate.pdf' })
+        } catch (e) {
+          toast('PDF-Export fehlgeschlagen: ' + (e?.message || e), 'error')
+        }
+      })
+      container.querySelector('#csv-btn')?.addEventListener('click', () => {
+        if (!currentData) return toast('Noch keine Daten geladen', 'warning')
+        try {
+          exportCsv('crashes-7d.csv', currentData.raw.map(c => ({
+            id: c.id,
+            component: c.component,
+            session_id: c.session_id,
+            created_at: c.created_at,
+          })))
+          toast('Crash-Daten als CSV exportiert', 'success')
+        } catch (e) {
+          toast('CSV-Export fehlgeschlagen: ' + (e?.message || e), 'error')
+        }
+      })
+
+      // Data-Fetch im Hintergrund — nicht awaiten, damit Skeleton sichtbar bleibt
+      load()
+    } catch (err) {
+      console.error('[crash-rate] mount failed', err)
+      renderMountError(container, err)
     }
-
-    container.querySelector('#refresh-btn').addEventListener('click', () => {
-      load().then(() => toast('Aktualisiert', 'info'))
-    })
-    container.querySelector('#pdf-btn').addEventListener('click', () => {
-      exportPanelAsPdf(container, { title: 'Stabilität / Crash-Rate', filename: 'crash-rate.pdf' })
-    })
-    container.querySelector('#csv-btn').addEventListener('click', () => {
-      if (!currentData) return toast('Noch keine Daten geladen', 'warning')
-      exportCsv('crashes-7d.csv', currentData.raw.map(c => ({
-        id: c.id,
-        component: c.component,
-        session_id: c.session_id,
-        created_at: c.created_at,
-      })))
-      toast('Crash-Daten als CSV exportiert', 'success')
-    })
-
-    await load()
   }
 }
+
+export default exported

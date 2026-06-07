@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, confirmDialog, fmtNumber, fmtRelativeTime, fmtDateTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js'
+import { toast, modal, confirmDialog, fmtNumber, htmlEscape, debounce } from '/lib/ui.js'
 import { makeAreaChart, makeBarChart, makeDonutChart, makeSparkline } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
-import { countUp, fadeIn, skeletonLoader, pulse } from '/lib/animations.js'
-import { drawer, tabs, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { drawer, segmentedControl } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const RANGES = [
@@ -138,6 +138,17 @@ function errorState(msg) {
       <h3>Konnte Daten nicht laden</h3>
       <p>${htmlEscape(msg || 'Unbekannter Fehler')}</p>
       <button class="btn btn-primary" data-act="retry">Erneut versuchen</button>
+    </div>
+  `
+}
+
+function mountErrorState(container, msg) {
+  container.innerHTML = `
+    <div class="error-state glass-card" style="padding:40px 24px;text-align:center;border-radius:16px;margin:20px">
+      <div style="font-size:42px;margin-bottom:12px">💥</div>
+      <h3 style="margin:0 0 6px">Panel konnte nicht geladen werden</h3>
+      <p style="margin:0 0 16px;opacity:.65;font-size:13px">${htmlEscape(msg || 'Unbekannter Fehler')}</p>
+      <button class="btn btn-primary" data-act="reload-panel">Erneut versuchen</button>
     </div>
   `
 }
@@ -379,7 +390,7 @@ function openProfileDrawer(row, onChange) {
   try {
     drawer({ title: 'Podcaster-Profil', content: body, width: 460 })
   } catch (e) {
-    modal({ title: 'Podcaster-Profil', content: body })
+    try { modal({ title: 'Podcaster-Profil', content: body }) } catch {}
   }
 
   const chartEl = body.querySelector('#tp-drawer-chart')
@@ -414,7 +425,8 @@ function openProfileDrawer(row, onChange) {
     try { showUserDetailModal(row.id) } catch (e) { toast({ message: 'Profil nicht verfügbar', type: 'error' }) }
   })
   body.querySelector('[data-act="copy-id"]')?.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(row.id); toast({ message: 'ID kopiert', type: 'success' }) } catch {}
+    try { await navigator.clipboard.writeText(row.id); toast({ message: 'ID kopiert', type: 'success' }) }
+    catch { toast({ message: 'Konnte ID nicht kopieren', type: 'error' }) }
   })
 }
 
@@ -428,7 +440,7 @@ function renderSkeletonGrid(el) {
     c.className = 'tp-card glass-card'
     c.style.minHeight = '210px'
     grid.appendChild(c)
-    try { skeletonLoader(c, { lines: 5 }) } catch { c.innerHTML = '<div style="opacity:.4">…</div>' }
+    try { skeletonLoader(c, { lines: 5 }) } catch { c.innerHTML = '<div style="opacity:.4;padding:12px">Lade…</div>' }
   }
 }
 
@@ -438,171 +450,185 @@ export default {
   category: 'engagement',
 
   async mount(container) {
-    injectStyles()
+    try {
+      injectStyles()
 
-    container.innerHTML = `
-      <div class="panel-shell" id="tp-shell">
-        <div class="panel-head">
-          <div>
-            <h2 style="margin:0">Trending Podcaster</h2>
-            <div style="font-size:12px;opacity:.6;margin-top:2px">Wachstum, Velocity & Discover-Featuring</div>
+      container.innerHTML = `
+        <div class="panel-shell" id="tp-shell">
+          <div class="panel-head">
+            <div>
+              <h2 style="margin:0">Trending Podcaster</h2>
+              <div style="font-size:12px;opacity:.6;margin-top:2px">Wachstum, Velocity & Discover-Featuring</div>
+            </div>
+          </div>
+          <div class="panel-body">
+            ${buildToolbar()}
+            <div class="tp-hero-row" id="tp-hero"></div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px" id="tp-charts">
+              <div class="glass-card" style="padding:14px;border-radius:14px;height:240px" id="tp-chart-velo"></div>
+              <div class="glass-card" style="padding:14px;border-radius:14px;height:240px" id="tp-chart-top"></div>
+            </div>
+            <div id="tp-body"></div>
           </div>
         </div>
-        <div class="panel-body">
-          ${buildToolbar()}
-          <div class="tp-hero-row" id="tp-hero"></div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:18px" id="tp-charts">
-            <div class="glass-card" style="padding:14px;border-radius:14px;height:240px" id="tp-chart-velo"></div>
-            <div class="glass-card" style="padding:14px;border-radius:14px;height:240px" id="tp-chart-top"></div>
-          </div>
-          <div id="tp-body"></div>
-        </div>
-      </div>
-    `
+      `
 
-    try { fadeIn(container.querySelector('#tp-shell')) } catch {}
+      try { fadeIn(container.querySelector('#tp-shell')) } catch {}
 
-    const body = container.querySelector('#tp-body')
-    const heroEl = container.querySelector('#tp-hero')
-    const veloChartEl = container.querySelector('#tp-chart-velo')
-    const topChartEl = container.querySelector('#tp-chart-top')
-    const rangeMount = container.querySelector('#tp-range')
-    const sortMount = container.querySelector('#tp-sort')
-    const searchEl = container.querySelector('#tp-search')
+      const body = container.querySelector('#tp-body')
+      const heroEl = container.querySelector('#tp-hero')
+      const veloChartEl = container.querySelector('#tp-chart-velo')
+      const topChartEl = container.querySelector('#tp-chart-top')
+      const rangeMount = container.querySelector('#tp-range')
+      const sortMount = container.querySelector('#tp-sort')
+      const searchEl = container.querySelector('#tp-search')
 
-    try {
-      segmentedControl(rangeMount, {
-        options: RANGES.map(r => ({ id: r.id, label: r.label })),
-        value: state.range,
-        onChange: v => { state.range = v; load() },
-      })
-    } catch {
-      rangeMount.innerHTML = RANGES.map(r => `<button class="btn btn-ghost btn-sm" data-range="${r.id}">${r.label}</button>`).join('')
-      rangeMount.addEventListener('click', e => {
-        const b = e.target.closest('[data-range]'); if (!b) return
-        state.range = b.dataset.range; load()
-      })
-    }
-    try {
-      segmentedControl(sortMount, {
-        options: SORTS.map(s => ({ id: s.id, label: s.label })),
-        value: state.sort,
-        onChange: v => { state.sort = v; renderGrid() },
-      })
-    } catch {
-      sortMount.innerHTML = SORTS.map(s => `<button class="btn btn-ghost btn-sm" data-sort="${s.id}">${s.label}</button>`).join('')
-      sortMount.addEventListener('click', e => {
-        const b = e.target.closest('[data-sort]'); if (!b) return
-        state.sort = b.dataset.sort; renderGrid()
-      })
-    }
-
-    searchEl.addEventListener('input', debounce(() => {
-      state.search = searchEl.value
-      renderGrid()
-    }, 180))
-
-    container.querySelector('.tp-toolbar').addEventListener('click', async e => {
-      const btn = e.target.closest('[data-act]'); if (!btn) return
-      const act = btn.dataset.act
-      if (act === 'refresh') return load()
-      if (act === 'pdf') {
-        try { await exportPanelAsPdf(container, { title: 'Trending Podcaster' }); toast({ message: 'PDF erstellt', type: 'success' }) }
-        catch (err) { toast({ message: 'PDF-Export fehlgeschlagen', type: 'error' }) }
-        return
-      }
-      if (act === 'csv') {
-        const cols = ['display_name', 'podcast_title', 'followers', 'followers_prev', 'growth_abs', 'velocity', 'plays', 'is_featured']
-        const data = sortRows(filterRows(state.rows, state.search), state.sort).map(r => ({
-          display_name: r.display_name || '',
-          podcast_title: r.podcast_title || '',
-          followers: r.followers || 0,
-          followers_prev: r.followers_prev || 0,
-          growth_abs: r.growth_abs || 0,
-          velocity: Number((r.velocity || 0).toFixed(2)),
-          plays: r.plays || 0,
-          is_featured: !!r.is_featured,
-        }))
-        try { exportCsv(data, { columns: cols, filename: `trending-podcasters-${state.range}.csv` }); toast({ message: 'CSV exportiert', type: 'success' }) }
-        catch { toast({ message: 'CSV-Export fehlgeschlagen', type: 'error' }) }
-      }
-    })
-
-    body.addEventListener('click', async e => {
-      const retryBtn = e.target.closest('[data-act="retry"], [data-act="refresh"]')
-      if (retryBtn) return load()
-
-      if (e.target.closest('.tp-feat-cb') || e.target.closest('.tp-feature-toggle')) {
-        e.stopPropagation()
-        return
-      }
-      const card = e.target.closest('.tp-card')
-      if (card) {
-        const id = card.dataset.id
-        const row = state.rows.find(r => String(r.id) === String(id))
-        if (row) openProfileDrawer(row, () => { renderGrid(); renderHero(heroEl, computeHero(state.rows)) })
-      }
-    })
-
-    body.addEventListener('change', async e => {
-      const cb = e.target.closest('.tp-feat-cb'); if (!cb) return
-      const id = cb.dataset.id
-      const row = state.rows.find(r => String(r.id) === String(id))
-      const desired = cb.checked
-      cb.disabled = true
-      const ok = await toggleFeature(id, desired, row)
-      cb.disabled = false
-      if (ok && row) {
-        row.is_featured = desired
-        renderHero(heroEl, computeHero(state.rows))
-      } else {
-        cb.checked = !desired
-      }
-    })
-
-    function renderGrid() {
-      const filtered = filterRows(state.rows, state.search)
-      const sorted = sortRows(filtered, state.sort)
-
-      if (!sorted.length) {
-        body.innerHTML = emptyState()
-        return
-      }
-      const grid = document.createElement('div')
-      grid.className = 'tp-grid'
-      grid.innerHTML = sorted.map(podcasterCard).join('')
-      body.innerHTML = ''
-      body.appendChild(grid)
-      paintSparklines(grid)
-      try { fadeIn(grid, { duration: 220 }) } catch {}
-    }
-
-    async function load() {
-      state.loading = true
-      state.error = null
+      // Sofortiges Skeleton -> kein weißer Screen
       renderSkeletonGrid(body)
-      heroEl.innerHTML = ''
       veloChartEl.innerHTML = '<div style="opacity:.4;font-size:12px;padding:12px">Lade…</div>'
       topChartEl.innerHTML = '<div style="opacity:.4;font-size:12px;padding:12px">Lade…</div>'
-      try {
-        const days = (RANGES.find(r => r.id === state.range) || RANGES[0]).days
-        const rows = await fetchTrending(days)
-        state.rows = rows
-        state.loading = false
-        renderHero(heroEl, computeHero(rows))
-        renderVelocityChart(veloChartEl, rows)
-        renderTopChart(topChartEl, rows)
-        renderGrid()
-      } catch (err) {
-        state.loading = false
-        state.error = err.message || String(err)
-        body.innerHTML = errorState(state.error)
-        heroEl.innerHTML = ''
-        veloChartEl.innerHTML = ''
-        topChartEl.innerHTML = ''
-      }
-    }
 
-    await load()
+      try {
+        segmentedControl(rangeMount, {
+          options: RANGES.map(r => ({ id: r.id, label: r.label })),
+          value: state.range,
+          onChange: v => { state.range = v; load() },
+        })
+      } catch {
+        rangeMount.innerHTML = RANGES.map(r => `<button class="btn btn-ghost btn-sm" data-range="${r.id}">${r.label}</button>`).join('')
+        rangeMount.addEventListener('click', e => {
+          const b = e.target.closest('[data-range]'); if (!b) return
+          state.range = b.dataset.range; load()
+        })
+      }
+      try {
+        segmentedControl(sortMount, {
+          options: SORTS.map(s => ({ id: s.id, label: s.label })),
+          value: state.sort,
+          onChange: v => { state.sort = v; renderGrid() },
+        })
+      } catch {
+        sortMount.innerHTML = SORTS.map(s => `<button class="btn btn-ghost btn-sm" data-sort="${s.id}">${s.label}</button>`).join('')
+        sortMount.addEventListener('click', e => {
+          const b = e.target.closest('[data-sort]'); if (!b) return
+          state.sort = b.dataset.sort; renderGrid()
+        })
+      }
+
+      searchEl.addEventListener('input', debounce(() => {
+        state.search = searchEl.value
+        renderGrid()
+      }, 180))
+
+      container.querySelector('.tp-toolbar').addEventListener('click', async e => {
+        const btn = e.target.closest('[data-act]'); if (!btn) return
+        const act = btn.dataset.act
+        if (act === 'refresh') return load()
+        if (act === 'pdf') {
+          try { await exportPanelAsPdf(container, { title: 'Trending Podcaster' }); toast({ message: 'PDF erstellt', type: 'success' }) }
+          catch (err) { toast({ message: 'PDF-Export fehlgeschlagen: ' + (err.message || err), type: 'error' }) }
+          return
+        }
+        if (act === 'csv') {
+          const cols = ['display_name', 'podcast_title', 'followers', 'followers_prev', 'growth_abs', 'velocity', 'plays', 'is_featured']
+          const data = sortRows(filterRows(state.rows, state.search), state.sort).map(r => ({
+            display_name: r.display_name || '',
+            podcast_title: r.podcast_title || '',
+            followers: r.followers || 0,
+            followers_prev: r.followers_prev || 0,
+            growth_abs: r.growth_abs || 0,
+            velocity: Number((r.velocity || 0).toFixed(2)),
+            plays: r.plays || 0,
+            is_featured: !!r.is_featured,
+          }))
+          try { exportCsv(data, { columns: cols, filename: `trending-podcasters-${state.range}.csv` }); toast({ message: 'CSV exportiert', type: 'success' }) }
+          catch (err) { toast({ message: 'CSV-Export fehlgeschlagen: ' + (err.message || err), type: 'error' }) }
+        }
+      })
+
+      body.addEventListener('click', async e => {
+        const retryBtn = e.target.closest('[data-act="retry"], [data-act="refresh"]')
+        if (retryBtn) return load()
+
+        if (e.target.closest('.tp-feat-cb') || e.target.closest('.tp-feature-toggle')) {
+          e.stopPropagation()
+          return
+        }
+        const card = e.target.closest('.tp-card')
+        if (card) {
+          const id = card.dataset.id
+          const row = state.rows.find(r => String(r.id) === String(id))
+          if (row) openProfileDrawer(row, () => { renderGrid(); renderHero(heroEl, computeHero(state.rows)) })
+        }
+      })
+
+      body.addEventListener('change', async e => {
+        const cb = e.target.closest('.tp-feat-cb'); if (!cb) return
+        const id = cb.dataset.id
+        const row = state.rows.find(r => String(r.id) === String(id))
+        const desired = cb.checked
+        cb.disabled = true
+        const ok = await toggleFeature(id, desired, row)
+        cb.disabled = false
+        if (ok && row) {
+          row.is_featured = desired
+          renderHero(heroEl, computeHero(state.rows))
+        } else {
+          cb.checked = !desired
+        }
+      })
+
+      function renderGrid() {
+        const filtered = filterRows(state.rows, state.search)
+        const sorted = sortRows(filtered, state.sort)
+
+        if (!sorted.length) {
+          body.innerHTML = emptyState()
+          return
+        }
+        const grid = document.createElement('div')
+        grid.className = 'tp-grid'
+        grid.innerHTML = sorted.map(podcasterCard).join('')
+        body.innerHTML = ''
+        body.appendChild(grid)
+        paintSparklines(grid)
+        try { fadeIn(grid, { duration: 220 }) } catch {}
+      }
+
+      async function load() {
+        state.loading = true
+        state.error = null
+        renderSkeletonGrid(body)
+        heroEl.innerHTML = ''
+        veloChartEl.innerHTML = '<div style="opacity:.4;font-size:12px;padding:12px">Lade…</div>'
+        topChartEl.innerHTML = '<div style="opacity:.4;font-size:12px;padding:12px">Lade…</div>'
+        try {
+          const days = (RANGES.find(r => r.id === state.range) || RANGES[0]).days
+          const rows = await fetchTrending(days)
+          state.rows = rows
+          state.loading = false
+          renderHero(heroEl, computeHero(rows))
+          renderVelocityChart(veloChartEl, rows)
+          renderTopChart(topChartEl, rows)
+          renderGrid()
+        } catch (err) {
+          state.loading = false
+          state.error = err.message || String(err)
+          body.innerHTML = errorState(state.error)
+          heroEl.innerHTML = ''
+          veloChartEl.innerHTML = '<div style="opacity:.4;font-size:12px;padding:12px">—</div>'
+          topChartEl.innerHTML = '<div style="opacity:.4;font-size:12px;padding:12px">—</div>'
+        }
+      }
+
+      await load()
+    } catch (mountErr) {
+      console.error('[trending-podcasters] mount failed:', mountErr)
+      mountErrorState(container, mountErr?.message || String(mountErr))
+      const retry = container.querySelector('[data-act="reload-panel"]')
+      retry?.addEventListener('click', () => {
+        try { this.mount(container) } catch {}
+      })
+    }
   }
 }

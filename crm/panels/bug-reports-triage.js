@@ -401,6 +401,7 @@ export default {
   category: 'admin_actions',
 
   async mount(container) {
+   try {
     injectStyles()
 
     container.innerHTML = `
@@ -553,5 +554,15 @@ export default {
     })
 
     await refresh()
+   } catch (mountErr) {
+    try {
+      container.innerHTML = `
+        <div style="padding:40px;text-align:center;border-radius:14px;background:rgba(239,68,68,0.08);border:1px solid rgba(239,68,68,0.25);margin:20px">
+          <div style="font-size:38px;margin-bottom:10px">⚠️</div>
+          <h3 style="margin:0 0 6px">Panel konnte nicht geladen werden</h3>
+          <p style="opacity:.75;margin:8px 0 0;font-family:ui-monospace,monospace;font-size:12px">${(mountErr && mountErr.message) ? String(mountErr.message).replace(/[<>&]/g, c => ({'<':'&lt;','>':'&gt;','&':'&amp;'}[c])) : String(mountErr)}</p>
+        </div>`
+    } catch(_) {}
+   }
   }
 }

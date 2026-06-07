@@ -1,9 +1,9 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js'
-import { makeAreaChart, makeDonutChart, makeSparkline } from '/lib/charts.js'
+import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+import { drawer, statHero } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 export default {
@@ -12,47 +12,60 @@ export default {
   category: 'users',
 
   async mount(container) {
-    container.innerHTML = `
-      <div class="panel-shell">
-        <div class="panel-head">
-          <div>
-            <h2>Listener vs. Podcaster</h2>
-            <p class="panel-sub">Verteilung der User-Typen und Conversion-Trend</p>
+    try {
+      container.innerHTML = `
+        <div class="panel-shell">
+          <div class="panel-head">
+            <div>
+              <h2>Listener vs. Podcaster</h2>
+              <p class="panel-sub">Verteilung der User-Typen und Conversion-Trend</p>
+            </div>
+            <div class="toolbar" id="utsToolbar">
+              <button class="btn btn-ghost" data-act="refresh" title="Aktualisieren">${iconHtml('refresh')} Aktualisieren</button>
+              <button class="btn btn-ghost" data-act="pdf" title="Als PDF exportieren">${iconHtml('file-text')} PDF</button>
+              <button class="btn btn-ghost" data-act="csv" title="Als CSV exportieren">${iconHtml('download')} CSV</button>
+            </div>
           </div>
-          <div class="toolbar" id="utsToolbar">
-            <button class="btn btn-ghost" data-act="refresh" title="Aktualisieren">${iconHtml('refresh')} Aktualisieren</button>
-            <button class="btn btn-ghost" data-act="pdf" title="Als PDF exportieren">${iconHtml('file-text')} PDF</button>
-            <button class="btn btn-ghost" data-act="csv" title="Als CSV exportieren">${iconHtml('download')} CSV</button>
-          </div>
+          <div class="panel-body" id="utsBody"></div>
         </div>
-        <div class="panel-body" id="utsBody"></div>
-      </div>
-    `
+      `
 
-    const body = container.querySelector('#utsBody')
-    body.innerHTML = skeletonLoader({ rows: 4, height: 140 })
+      const body = container.querySelector('#utsBody')
+      body.innerHTML = skeletonLoader({ rows: 4, height: 140 })
 
-    container.querySelector('[data-act="refresh"]').addEventListener('click', () => {
-      toast('Daten werden aktualisiert…')
+      container.querySelector('[data-act="refresh"]').addEventListener('click', () => {
+        toast('Daten werden aktualisiert…')
+        this._load(container)
+      })
+      container.querySelector('[data-act="pdf"]').addEventListener('click', () => {
+        exportPanelAsPdf(container, { title: 'Listener vs. Podcaster' })
+      })
+      container.querySelector('[data-act="csv"]').addEventListener('click', () => {
+        if (this._lastTrend?.length) {
+          exportCsv(this._lastTrend, { filename: 'listener-podcaster-trend.csv' })
+        } else {
+          toast('Keine Daten zum Exportieren')
+        }
+      })
+
+      // Hintergrund-Fetch — Skeleton steht schon, fadeIn parallel
       this._load(container)
-    })
-    container.querySelector('[data-act="pdf"]').addEventListener('click', () => {
-      exportPanelAsPdf(container, { title: 'Listener vs. Podcaster' })
-    })
-    container.querySelector('[data-act="csv"]').addEventListener('click', () => {
-      if (this._lastTrend?.length) {
-        exportCsv(this._lastTrend, { filename: 'listener-podcaster-trend.csv' })
-      } else {
-        toast('Keine Daten zum Exportieren')
-      }
-    })
-
-    await this._load(container)
-    fadeIn(container)
+      fadeIn(container)
+    } catch (err) {
+      console.error('[user-type-split] mount error', err)
+      container.innerHTML = `
+        <div class="error-state">
+          <div class="error-icon">${iconHtml ? iconHtml('alert-triangle') : '⚠'}</div>
+          <h3>Panel konnte nicht initialisiert werden</h3>
+          <p>${(err && err.message) ? String(err.message).replace(/[<>&]/g, '') : 'Unbekannter Fehler'}</p>
+        </div>
+      `
+    }
   },
 
   async _load(container) {
     const body = container.querySelector('#utsBody')
+    if (!body) return
     body.innerHTML = skeletonLoader({ rows: 4, height: 140 })
 
     try {
@@ -195,7 +208,7 @@ export default {
         <div class="error-state">
           <div class="error-icon">${iconHtml('alert-triangle')}</div>
           <h3>Daten konnten nicht geladen werden</h3>
-          <p>${htmlEscape(err?.message || 'Unbekannter Fehler')}</p>
+          <p>Fehler: ${htmlEscape(err?.message || 'Unbekannter Fehler')}</p>
           <button class="btn btn-primary" data-act="retry">${iconHtml('refresh')} Erneut versuchen</button>
         </div>
       `
