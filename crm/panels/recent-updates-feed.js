@@ -116,13 +116,34 @@ function renderCharts(root) {
   const dc = root.querySelector('#chart-donut')
   if (ts) {
     ts.innerHTML = ''
-    try { makeAreaChart(ts, timeData, { height: 200, color: '#7c5cff', label: 'Posts/Tag' }) }
-    catch (e) { ts.innerHTML = `<div class="text-muted">Chart konnte nicht gerendert werden.</div>` }
+    if (!days.length) {
+      ts.innerHTML = `<div class="empty-state" style="padding:24px;text-align:center;color:var(--text-muted);">📭 Noch keine Posts im Zeitraum</div>`
+    } else {
+      try {
+        makeAreaChart(ts, {
+          categories: days.map(([k]) => k),
+          series: [{ name: 'Posts/Tag', data: days.map(([, v]) => v) }],
+          colors: ['#7c5cff'],
+          height: 200
+        })
+      } catch (e) { ts.innerHTML = `<div class="text-muted">Chart konnte nicht gerendert werden.</div>` }
+    }
   }
   if (dc) {
     dc.innerHTML = ''
-    try { makeDonutChart(dc, catData, { height: 200 }) }
-    catch (e) { dc.innerHTML = `<div class="text-muted">Chart konnte nicht gerendert werden.</div>` }
+    const totalCat = catData.reduce((s, c) => s + c.value, 0)
+    if (!totalCat) {
+      dc.innerHTML = `<div class="empty-state" style="padding:24px;text-align:center;color:var(--text-muted);">📊 Keine Daten für Verteilung</div>`
+    } else {
+      try {
+        makeDonutChart(dc, {
+          labels: catData.map(c => c.label),
+          values: catData.map(c => c.value),
+          colors: ['#7c5cff', '#f5b301', '#3b82f6', '#64748b'],
+          height: 200
+        })
+      } catch (e) { dc.innerHTML = `<div class="text-muted">Chart konnte nicht gerendert werden.</div>` }
+    }
   }
 }
 
@@ -323,7 +344,7 @@ async function reload() {
 function wireToolbar(root) {
   root.querySelector('#btn-refresh')?.addEventListener('click', () => reload())
   root.querySelector('#btn-pdf')?.addEventListener('click', () => {
-    try { exportPanelAsPdf({ title: 'Aktuelle Posts', element: root }) }
+    try { exportPanelAsPdf(root, { title: 'Aktuelle Posts', filename: 'aktuelle-posts.pdf' }) }
     catch (e) { toast({ kind: 'error', text: 'PDF-Export fehlgeschlagen: ' + (e?.message || e) }) }
   })
   root.querySelector('#btn-csv')?.addEventListener('click', () => {
@@ -337,7 +358,7 @@ function wireToolbar(root) {
         comments: p.comments_count || 0,
         created_at: p.created_at
       }))
-      exportCsv('aktuelle-posts.csv', rows)
+      exportCsv(rows, 'aktuelle-posts.csv')
     } catch (e) {
       toast({ kind: 'error', text: 'CSV-Export fehlgeschlagen: ' + (e?.message || e) })
     }

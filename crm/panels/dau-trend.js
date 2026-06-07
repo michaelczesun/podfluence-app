@@ -220,28 +220,40 @@ async function renderBody(host, onPointClick) {
 
   const heroEl = host.querySelector('#dau-hero-value')
   if (heroEl) {
-    countUp(heroEl, today, { duration: 900 })
+    countUp(heroEl, today, 900)
     // Ensure formatted value is displayed after animation completes
     setTimeout(() => { if (heroEl) heroEl.textContent = fmtNumber(today) }, 950)
   }
 
   host.querySelectorAll('.kpi-value[data-count]').forEach(el => {
     const target = Number(el.dataset.count)
-    countUp(el, target, { duration: 800 })
+    countUp(el, target, 800)
     setTimeout(() => { if (el) el.textContent = fmtNumber(target) }, 850)
   })
+
+  const categories = state.series.map(p => formatDateShort(p.date))
+  const dateKeys = state.series.map(p => p.date)
+  const values = state.series.map(p => p.users)
 
   const chartHost = host.querySelector('#dau-chart')
   if (chartHost) {
     try {
       makeAreaChart(chartHost, {
-        data: state.series.map(p => ({ x: p.date, y: p.users })),
-        xLabel: d => formatDateShort(d),
-        yLabel: v => fmtNumber(v),
-        color: '#7c5cff',
-        fade: true,
-        height: 280,
-        onPointClick: (point) => onPointClick(point.x)
+        categories,
+        series: [{ name: 'DAU', data: values }],
+        colors: ['#7c5cff'],
+        height: 280
+      })
+      // Wire click on chart category labels / svg points if chart exposes hooks; fallback: click on area opens latest day.
+      chartHost.style.cursor = 'pointer'
+      chartHost.addEventListener('click', (ev) => {
+        // best-effort: derive index from clicked x position
+        const rect = chartHost.getBoundingClientRect()
+        if (!rect.width || !categories.length) return
+        const ratio = Math.min(Math.max((ev.clientX - rect.left) / rect.width, 0), 1)
+        const idx = Math.min(categories.length - 1, Math.floor(ratio * categories.length))
+        const key = dateKeys[idx]
+        if (key) onPointClick(key)
       })
     } catch (e) {
       chartHost.innerHTML = `<div class="muted">Chart konnte nicht gezeichnet werden: ${htmlEscape(e.message || '')}</div>`
@@ -252,10 +264,19 @@ async function renderBody(host, onPointClick) {
   if (barsHost) {
     try {
       makeBarChart(barsHost, {
-        data: state.series.map(p => ({ label: formatDateShort(p.date), value: p.users, key: p.date })),
-        color: '#7c5cff',
-        height: 200,
-        onBarClick: (bar) => onPointClick(bar.key)
+        categories,
+        series: [{ name: 'DAU', data: values }],
+        colors: ['#7c5cff'],
+        height: 200
+      })
+      barsHost.style.cursor = 'pointer'
+      barsHost.addEventListener('click', (ev) => {
+        const rect = barsHost.getBoundingClientRect()
+        if (!rect.width || !categories.length) return
+        const ratio = Math.min(Math.max((ev.clientX - rect.left) / rect.width, 0), 1)
+        const idx = Math.min(categories.length - 1, Math.floor(ratio * categories.length))
+        const key = dateKeys[idx]
+        if (key) onPointClick(key)
       })
     } catch (e) {
       barsHost.innerHTML = `<div class="muted">Balken konnten nicht gezeichnet werden: ${htmlEscape(e.message || '')}</div>`
@@ -270,17 +291,24 @@ async function openDayDrawer(dateKey) {
   const dlg = drawer({
     title: `Aktive Nutzer · ${formatDateShort(dateKey)}`,
     width: '480px',
-    content: `<div class="drawer-loading">${skeletonLoader({ height: '64px', radius: '12px' })}${skeletonLoader({ height: '64px', radius: '12px' })}${skeletonLoader({ height: '64px', radius: '12px' })}</div>`
+    contentHtml: `<div class="drawer-loading">${skeletonLoader({ height: '64px', radius: '12px' })}${skeletonLoader({ height: '64px', radius: '12px' })}${skeletonLoader({ height: '64px', radius: '12px' })}</div>`
   })
+
+  const setDrawerHtml = (html) => {
+    if (dlg?.setContent) return dlg.setContent(html)
+    const root = dlg?.root || dlg?.el || dlg?.body
+    const target = root?.querySelector?.('.drawer-body, .drawer-content, .drawer-loading')?.parentElement || root
+    if (target) target.innerHTML = html
+  }
 
   try {
     const users = await fetchUsersForDay(dateKey)
     if (!users.length) {
-      dlg?.setContent?.(`
+      setDrawerHtml(`
         <div class="empty-state">
           <div class="empty-icon">${iconHtml('users')}</div>
           <h4>Keine aktiven Nutzer</h4>
-          <p>An diesem Tag wurde keine Aktivität erfasst.</p>
+          <p>An diesem Tag wurde keine erfasste Login-Aktivität (last_seen_at) registriert. Hinweis: Roh-app_opens werden über device_fp gezählt und können von last_seen_at abweichen.</p>
         </div>
       `)
       return

@@ -78,27 +78,11 @@ async function fetchData(range) {
 }
 
 // FIX (high): podcasts.id is the podcast UUID, NOT the episode_guid. There is no
-// episodes table. Episode titles are only available via listening_activity.episode_title.
-// Returns a map of episode_guid -> { title, user_id }
+// episodes table. Episode titles aren't keyed by guid in listening_activity either
+// (only episode_title strings). Use updates.embedded_episode_guid for author lookup;
+// leave title null and let the renderer fall back to the guid string.
 async function fetchEpisodeDetails(episodeIds) {
   if (!episodeIds || episodeIds.length === 0) return {}
-  try {
-    const { data, error } = await sb
-      .from('listening_activity')
-      .select('embedded_episode_guid:episode_title, episode_title, podcast_title, podcaster_id, created_at')
-      .limit(1)
-    // The select above is a guard; we re-issue the real query below if column shape ok.
-    if (error) { /* fall through */ }
-  } catch {}
-  try {
-    const { data, error } = await sb
-      .from('listening_activity')
-      .select('episode_title, podcast_title, podcaster_id, created_at')
-      .in('episode_title', []) // dummy — we cannot query by episode_guid here
-    if (error) throw error
-  } catch {}
-  // Real lookup: try listening_activity first (has episode_title but no episode_guid column),
-  // then fall back to updates.embedded_episode_guid for guid->author mapping.
   const map = {}
   try {
     const { data, error } = await sb
@@ -330,18 +314,25 @@ function renderBody(body, data) {
   } catch {}
 
   const donutHost = body.querySelector('#donut-host')
-  const donutData = VIBES.map(v => ({
-    label: `${v.emoji} ${v.label}`,
-    value: data.counts[v.key] || 0,
-    color: v.color,
-    key: v.key,
-  })).filter(d => d.value > 0)
+  // FIX (high): makeDonutChart expects {labels, values, colors, height}, not {data:[…]}
+  const donutSlices = VIBES
+    .map(v => ({ label: `${v.emoji} ${v.label}`, value: data.counts[v.key] || 0, color: v.color, key: v.key }))
+    .filter(d => d.value > 0)
   try {
-    makeDonutChart(donutHost, {
-      data: donutData,
-      centerLabel: `${fmtNumber(data.total)}`,
-      centerSublabel: 'Reaktionen',
-      onSliceClick: (d) => d?.key && openVibeDrawer(d.key, data),
+    const chart = makeDonutChart(donutHost, {
+      labels: donutSlices.map(d => d.label),
+      values: donutSlices.map(d => d.value),
+      colors: donutSlices.map(d => d.color),
+      height: 380,
+    })
+    // Attach click delegation manually since lib signature doesn't accept onSliceClick
+    donutHost.style.cursor = 'pointer'
+    donutHost.addEventListener('click', (e) => {
+      const path = e.target.closest('path, [data-index]')
+      if (!path) return
+      const idx = parseInt(path.getAttribute('data-index') || '-1', 10)
+      const slice = donutSlices[idx]
+      if (slice?.key) openVibeDrawer(slice.key, data)
     })
   } catch {}
 
@@ -365,11 +356,22 @@ function renderBody(body, data) {
 
   const barHost = body.querySelector('#bar-host')
   const sorted = [...VIBES].sort((a, b) => (data.counts[b.key] || 0) - (data.counts[a.key] || 0))
+  // FIX (high): makeBarChart expects {categories, series:[{name,data}], colors, height}
   try {
     makeBarChart(barHost, {
-      data: sorted.map(v => ({ label: `${v.emoji}`, value: data.counts[v.key] || 0, color: v.color, key: v.key })),
-      horizontal: true,
-      onBarClick: (d) => d?.key && openVibeDrawer(d.key, data),
+      categories: sorted.map(v => `${v.emoji} ${v.label}`),
+      series: [{ name: 'Reaktionen', data: sorted.map(v => data.counts[v.key] || 0) }],
+      colors: sorted.map(v => v.color),
+      height: 260,
+    })
+    // Delegate clicks to bars (best-effort; chart lib may render <rect> elements)
+    barHost.style.cursor = 'pointer'
+    barHost.addEventListener('click', (e) => {
+      const bar = e.target.closest('[data-index], rect')
+      if (!bar) return
+      const idx = parseInt(bar.getAttribute('data-index') || '-1', 10)
+      const v = sorted[idx]
+      if (v?.key) openVibeDrawer(v.key, data)
     })
   } catch {}
 

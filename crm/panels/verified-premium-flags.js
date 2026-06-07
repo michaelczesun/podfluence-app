@@ -123,9 +123,9 @@ function injectExpiryStyles() {
   s.textContent = `
     .user-row.row-expiring-soon { border-left: 3px solid #f59e0b; background: linear-gradient(90deg, rgba(245,158,11,.08), transparent 40%); }
     .user-row.row-expired { border-left: 3px solid #ef4444; background: linear-gradient(90deg, rgba(239,68,68,.10), transparent 40%); }
-    .badge-warn-yellow { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; font-size: 11px; padding: 2px 6px; border-radius: 6px; margin-left: 4px; }
-    .badge-warn-red    { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; font-size: 11px; padding: 2px 6px; border-radius: 6px; margin-left: 4px; }
-    .premium-filter-bar { display:flex; align-items:center; gap:10px; padding: 8px 12px; border-bottom: 1px solid var(--border-light, #f3f4f6); }
+    .badge-warn-yellow { background: rgba(245,158,11,.15); color: var(--text, #fcd34d); border: 1px solid rgba(245,158,11,.45); font-size: 11px; padding: 2px 6px; border-radius: 6px; margin-left: 4px; }
+    .badge-warn-red    { background: rgba(239,68,68,.15); color: var(--text, #fca5a5); border: 1px solid rgba(239,68,68,.45); font-size: 11px; padding: 2px 6px; border-radius: 6px; margin-left: 4px; }
+    .premium-filter-bar { display:flex; align-items:center; gap:10px; padding: 8px 12px; border-bottom: 1px solid var(--border, rgba(255,255,255,.08)); }
     .premium-filter-bar .muted { font-size: 12px; }
   `
   document.head.appendChild(s)
@@ -418,7 +418,7 @@ export default {
               ${statHero({
                 label: 'Verifizierte Nutzer',
                 value: 0,
-                icon: 'badge-check',
+                icon: iconHtml('badge-check'),
                 accent: 'blue',
               })}
             </div>
@@ -426,7 +426,7 @@ export default {
               ${statHero({
                 label: 'Premium-Nutzer',
                 value: 0,
-                icon: 'star',
+                icon: iconHtml('star'),
                 accent: 'gold',
               })}
             </div>
