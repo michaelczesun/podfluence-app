@@ -37,7 +37,7 @@ async function fetchData() {
   const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
   const { data: posts, error } = await sb
     .from('updates')
-    .select('id, user_id, content, image_url, type, kind, poll_id, likes_count, comments_count, created_at, users:user_id(id, username, full_name, is_verified, avatar_url)')
+    .select('id, user_id, content, image_url, is_longform, is_bubble, embedded_episode_guid, embedded_newsletter_id, likes_count, comments_count, created_at, users:user_id(id, username, full_name, is_verified, avatar_url)')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(200)

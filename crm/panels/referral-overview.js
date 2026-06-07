@@ -23,7 +23,7 @@ let state = {
 }
 
 // FIX(high): replace hardcoded stub with real DB query against the `referrals` table.
-// Schema: referrals(id, inviter_id, referred_id, created_at)
+// Schema: referrals(id, inviter_id, invitee_id, created_at)
 // We derive funnel-like metrics from this table:
 //   generated  = users who have ever referred someone (distinct inviter_id count)
 //   used       = total referral rows (codes used)
@@ -43,7 +43,7 @@ async function loadData(range) {
   // Fetch referral rows in the time window
   const { data: rows, error } = await sb
     .from('referrals')
-    .select('id, inviter_id, referred_id, created_at')
+    .select('id, inviter_id, invitee_id, created_at')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
 
@@ -51,7 +51,7 @@ async function loadData(range) {
 
   const total = rows.length
   const uniqueReferrers = new Set(rows.map(r => r.inviter_id)).size
-  const uniqueReferred  = new Set(rows.map(r => r.referred_id)).size
+  const uniqueReferred  = new Set(rows.map(r => r.invitee_id)).size
 
   const funnel = {
     generated: uniqueReferrers, // users who referred at least once
@@ -99,7 +99,7 @@ async function loadData(range) {
   const recent50 = rows.slice(0, 50)
   let recentSignups = []
   if (recent50.length) {
-    const allIds = [...new Set(recent50.flatMap(r => [r.inviter_id, r.referred_id]).filter(Boolean))]
+    const allIds = [...new Set(recent50.flatMap(r => [r.inviter_id, r.invitee_id]).filter(Boolean))]
     const { data: profiles2 } = await sb
       .from('users')
       .select('id, full_name, username, avatar_url')
@@ -108,9 +108,9 @@ async function loadData(range) {
     ;(profiles2 || []).forEach(p => { pmap[p.id] = p })
     recentSignups = recent50.map(r => ({
       ...r,
-      new_user_id: r.referred_id,
+      new_user_id: r.invitee_id,
       referrer: pmap[r.inviter_id] || null,
-      newUser:  pmap[r.referred_id] || null
+      newUser:  pmap[r.invitee_id] || null
     }))
   }
 

@@ -22,7 +22,7 @@ const STATUS_COLORS = {
 async function fetchAllPodcasts() {
   const { data, error } = await sb
     .from('podcasts')
-    .select('id, title, rss_url, cover_image, verification_status, owner_email, rejection_reason, verify_token_sent_at, created_at')
+    .select('id, title, rss_url, cover_image, is_owner_verified, is_rss_verified, owner_email, owner_verified_at, owner_email_extracted_at, created_at')
     .order('created_at', { ascending: false })
   if (error) throw error
   return data || []
@@ -51,7 +51,7 @@ function cardHtml(p) {
           <h3 style="margin:0;font-size:15px;font-weight:600;color:#fff;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${htmlEscape(p.title || 'Ohne Titel')}</h3>
         </div>
         <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
-          ${statusBadge(p.verification_status)}
+          ${statusBadge((p.is_owner_verified ? 'verified' : (p.is_rss_verified ? 'rss_only' : 'pending')))}
           <span style="font-size:11px;color:#888;">${created}</span>
         </div>
         <div style="font-size:12px;color:#aaa;display:flex;align-items:center;gap:6px;margin-bottom:4px;">
@@ -222,9 +222,9 @@ export default {
       }
 
       function renderHero() {
-        const totalPending = allPodcasts.filter(s => s.verification_status === 'pending').length
-        const totalRejected = allPodcasts.filter(s => s.verification_status === 'rejected').length
-        const totalVerified = allPodcasts.filter(s => s.verification_status === 'verified').length
+        const totalPending = allPodcasts.filter(s => (s.is_owner_verified !== true && s.is_rss_verified !== true)).length
+        const totalRejected = allPodcasts.filter(s => false).length
+        const totalVerified = allPodcasts.filter(s => s.is_owner_verified === true).length
         const last7 = allPodcasts.filter(s => s.created_at && (Date.now() - new Date(s.created_at).getTime()) < 7 * 86400000).length
 
         heroRow.innerHTML = `
@@ -268,9 +268,9 @@ export default {
         const series = Object.entries(buckets).sort((a, b) => a[0].localeCompare(b[0]))
 
         const counts = {
-          pending: allPodcasts.filter(s => s.verification_status === 'pending').length,
-          verified: allPodcasts.filter(s => s.verification_status === 'verified').length,
-          rejected: allPodcasts.filter(s => s.verification_status === 'rejected').length
+          pending: allPodcasts.filter(s => (s.is_owner_verified !== true && s.is_rss_verified !== true)).length,
+          verified: allPodcasts.filter(s => s.is_owner_verified === true).length,
+          rejected: allPodcasts.filter(s => false).length
         }
 
         chartRow.innerHTML = `
@@ -308,7 +308,7 @@ export default {
       function renderGrid() {
         const pods = currentFilter === 'all'
           ? allPodcasts
-          : allPodcasts.filter(p => p.verification_status === currentFilter)
+          : allPodcasts.filter(p => (p.is_owner_verified ? 'verified' : (p.is_rss_verified ? 'rss_only' : 'pending')) === currentFilter)
 
         countLabel.textContent = `${fmtNumber(pods.length)} Einträge`
 
@@ -441,7 +441,7 @@ export default {
                 ${p.cover_image ? `<img src="${htmlEscape(p.cover_image)}" style="width:80px;height:80px;border-radius:12px;object-fit:cover;">` : `<div style="width:80px;height:80px;border-radius:12px;background:#1a1a1a;display:flex;align-items:center;justify-content:center;font-size:28px;">${iconHtml('mic')}</div>`}
                 <div>
                   <h3 style="margin:0 0 6px;color:#fff;">${htmlEscape(p.title || '')}</h3>
-                  ${statusBadge(p.verification_status)}
+                  ${statusBadge((p.is_owner_verified ? 'verified' : (p.is_rss_verified ? 'rss_only' : 'pending')))}
                 </div>
               </div>
               <div class="kv-list" style="display:flex;flex-direction:column;gap:10px;">
@@ -491,7 +491,7 @@ export default {
               title: p.title,
               rss_url: p.rss_url,
               owner_email: p.owner_email,
-              status: p.verification_status,
+              status: (p.is_owner_verified ? 'verified' : (p.is_rss_verified ? 'rss_only' : 'pending')),
               created_at: p.created_at,
               rejection_reason: p.rejection_reason || ''
             })),
