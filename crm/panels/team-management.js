@@ -258,11 +258,16 @@ export default {
         const isOwner = currentUserRole === 'owner'
 
         if (!teamRows.length) {
-          tableWrap.innerHTML = `<table class="data-table">
-            <thead><tr><th>User</th><th>Email</th><th>Rolle</th><th>Aktion</th><th>Letzte Aktivität</th></tr></thead>
-            <tbody><tr class="empty-row"><td colspan="5">
-              Noch keine Team-Mitglieder. Lade die ersten Mitarbeiter ein.
-            </td></tr></tbody></table>`
+          tableWrap.innerHTML = `<div style="text-align:center;padding:40px 20px;color:var(--text-muted)">
+            <div style="font-size:36px;opacity:.45;margin-bottom:10px">${iconHtml('users')}</div>
+            <div style="font-weight:600;color:var(--text);margin-bottom:4px;font-size:15px">Noch keine Team-Mitglieder</div>
+            <div style="font-size:13px;line-height:1.4;max-width:380px;margin:0 auto 16px">Außer dir hat noch niemand Admin- oder Mitarbeiter-Zugang. Lade die ersten Kollegen ein, damit ihr gemeinsam moderieren könnt.</div>
+            ${isOwner ? `<button class="btn btn-primary" id="empty-invite-btn">${iconHtml('user-plus')} Mitarbeiter einladen</button>` : ''}
+          </div>`
+          if (isOwner) {
+            const eb = tableWrap.querySelector('#empty-invite-btn')
+            if (eb) eb.onclick = () => document.getElementById('tm-invite')?.click()
+          }
           return
         }
 
