@@ -16,7 +16,7 @@ const STAGES = [
 async function fetchFunnel() {
   // Try dedicated RPC first
   try {
-    const { data, error } = await sb.rpc('onboarding_funnel_stats', { days: 30 })
+    const { data, error } = await sb.rpc('onboarding_funnel_stats', { p_days: 30 })
     if (!error && data) return normalizeRpc(data)
     // RPC not available — fall through to manual build
     console.warn('[onboarding-funnel] onboarding_funnel_stats nicht verfügbar, nutze Fallback')

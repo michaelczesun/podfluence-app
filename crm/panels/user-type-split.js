@@ -187,17 +187,15 @@ export default {
         onSegmentClick: (seg) => this._openSegmentDrawer(seg.key, all)
       })
 
-      // FIX #2: Remove 'conversions' series — never populated, misleading
+      // Schema-Truth: makeAreaChart erwartet { series, categories } (ApexCharts-Shape).
       makeAreaChart(body.querySelector('#utsTrend'), {
-        data: trend,
-        x: 'month',
+        categories: (trend || []).map(t => t.month),
         series: [
-          { key: 'listeners', label: 'Neue Listener', color: '#6366f1' },
-          { key: 'podcasters', label: 'Neue Podcaster', color: '#ec4899' }
+          { name: 'Neue Listener',   data: (trend || []).map(t => Number(t.listeners) || 0) },
+          { name: 'Neue Podcaster', data: (trend || []).map(t => Number(t.podcasters) || 0) }
         ],
+        colors: ['#6366f1', '#ec4899'],
         height: 260,
-        smooth: true,
-        gradient: true
       })
 
       body.querySelectorAll('.legend-item').forEach(btn => {

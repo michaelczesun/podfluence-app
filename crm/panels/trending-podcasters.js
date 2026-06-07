@@ -30,7 +30,7 @@ const state = {
 
 // FIX #1: Echter Supabase-Aufruf via RPC crm_trending_podcasters
 async function fetchTrending(days) {
-  const { data, error } = await sb.rpc('crm_trending_podcasters', { days })
+  const { data, error } = await sb.rpc('crm_trending_podcasters', { p_days: days })
   if (error) throw new Error(error.message || String(error))
   return data || []
 }
@@ -344,10 +344,9 @@ async function toggleFeature(id, on, rowRef) {
       !on,
     )
     if (!ok) return false
-    // Schema-Truth: podcasts hat author_id (kein user_id) und keine is_featured-Spalte → no-op
-    toast('Featuring noch nicht backend-gepflegt — Spalte fehlt', 'info')
-    return false
-    // const { error } = await sb.from('podcasts').update({ is_featured: on }).eq('author_id', id)
+    // Über RPC mit Audit-Log (id ist hier der podcast_id aus crm_trending_podcasters)
+    const podcastId = rowRef?.podcast_id || id
+    const { error } = await sb.rpc('admin_set_podcast_featured', { p_podcast_id: podcastId, p_featured: on })
     if (error) throw new Error(error.message || String(error))
     toast(on ? 'Podcaster wird jetzt gefeatured' : 'Feature entfernt', 'success')
     return true
