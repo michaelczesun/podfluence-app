@@ -455,95 +455,69 @@ document.getElementById('logout').addEventListener('click', async () => {
   location.href = '/login/'
 })
 
-// ---- Panel-Registry ----
-const PANELS = [
-  {"id":"admin-home","title":"Admin-Home","category":"overview"},
-  {"id":"kpi-live-totals","title":"Live-Kennzahlen","category":"overview"},
-  {"id":"dau-trend","title":"Tägliche aktive Nutzer (30 Tage)","category":"overview"},
-  {"id":"new-signups-7d","title":"Neue Anmeldungen (7 Tage)","category":"overview"},
-  {"id":"crash-rate","title":"Stabilität / Crash-Rate","category":"overview"},
-  {"id":"open-bug-reports","title":"Offene Bug-Reports","category":"overview"},
-  {"id":"users-list","title":"Nutzer-Liste","category":"users"},
-  {"id":"user-type-split","title":"Listener vs. Podcaster","category":"users"},
-  {"id":"verified-premium-flags","title":"Verifiziert & Premium","category":"users"},
-  {"id":"onboarding-funnel","title":"Onboarding-Funnel","category":"users"},
-  {"id":"client-build-versions","title":"App-Versionen im Feld","category":"users"},
-  {"id":"recent-updates-feed","title":"Aktuelle Posts","category":"content"},
-  {"id":"posts-per-day","title":"Posts pro Tag","category":"content"},
-  {"id":"trending-hashtags","title":"Trending Hashtags (30 Tage)","category":"content"},
-  {"id":"active-polls","title":"Aktive Umfragen","category":"content"},
-  {"id":"episodes-per-day","title":"Neue Episoden pro Tag","category":"content"},
-  {"id":"listens-per-day","title":"Listens pro Tag","category":"listening"},
-  {"id":"top-listened-podcasts","title":"Top gehörte Podcasts","category":"listening"},
-  {"id":"vibe-distribution","title":"Vibe-Verteilung","category":"listening"},
-  {"id":"top-listeners","title":"Aktivste Hörer","category":"listening"},
-  {"id":"users-by-country","title":"User-Weltkarte","category":"growth"},
-  {"id":"referral-leaderboard","title":"Top Inviter","category":"growth"},
-  {"id":"referral-overview","title":"Referral-Conversion","category":"growth"},
-  {"id":"invite-codes-usage","title":"Invite-Codes Nutzung","category":"growth"},
-  {"id":"podcaster-engagement-7d","title":"Podcaster-Engagement (7 Tage)","category":"engagement"},
-  {"id":"trending-podcasters","title":"Trending Podcaster","category":"engagement"},
-  {"id":"achievements-unlocks","title":"Achievement-Unlocks","category":"engagement"},
-  {"id":"insta-approval-queue","title":"Instagram-Posts Freigabe","category":"marketing"},
-  {"id":"insta-post-type-scores","title":"IG-Post-Typ Scoring","category":"marketing"},
-  {"id":"newsletter-audience-sync","title":"Newsletter-Audience","category":"marketing"},
-  {"id":"audit-log","title":"Audit-Log","category":"admin_actions"},
-  {"id":"leads-pipeline","title":"Lead-Pipeline","category":"admin_actions"},
-  {"id":"bug-reports-triage","title":"Bug-Reports Triage","category":"admin_actions"},
-  {"id":"push-broadcast","title":"Push-Broadcast senden","category":"admin_actions"},
-  {"id":"storage-ops","title":"Storage & Cleanup","category":"admin_actions"},
-  {"id":"podcast-verification-queue","title":"Podcast-Verifizierung","category":"admin_actions"},
-  {"id":"tasks-inbox","title":"Team-Aufgaben","category":"admin_actions"},
-  {"id":"team-management","title":"Team-Verwaltung","category":"admin_actions"},
-  {"id":"app-settings","title":"App-Settings","category":"admin_actions"},
-  {"id":"settings","title":"Einstellungen","category":"admin_actions"}
-]
+// ---- Top-Tab-Registry (5 primary entries) ----
+// Sub-Module: panels/_tab-<id>.js — laden ihrerseits die existierenden 35 Panel-Dateien.
+const TAB_ICONS = {
+  pulse:   '📊',
+  people:  '👥',
+  growth:  '📈',
+  content: '📝',
+  system:  '⚙️'
+}
 
-const CATEGORIES = [
-  { key: 'overview',      label: 'Überblick',       icon: '📊' },
-  { key: 'users',         label: 'Nutzer',          icon: '👥' },
-  { key: 'content',       label: 'Content',         icon: '📝' },
-  { key: 'listening',     label: 'Hören',           icon: '🎧' },
-  { key: 'growth',        label: 'Wachstum',        icon: '📈' },
-  { key: 'engagement',    label: 'Engagement',      icon: '❤️' },
-  { key: 'marketing',     label: 'Marketing',       icon: '📣' },
-  { key: 'admin_actions', label: 'Admin-Aktionen',  icon: '⚙️' }
-]
-
-// ---- Role-Based Panel Visibility ----
-const ROLE_PANEL_VISIBILITY = {
-  owner: '*',
-  admin: '*',
-  manager: panels => panels.filter(p => !['team-management','app-settings'].includes(p.id)),
-  support: panels => panels.filter(p => ['users-list','user-type-split','verified-premium-flags','bug-reports-triage','open-bug-reports','tasks-inbox','audit-log'].includes(p.id)),
-  mod: panels => panels.filter(p => ['recent-updates-feed','posts-per-day','bug-reports-triage','open-bug-reports','active-polls'].includes(p.id)),
-  marketing: panels => panels.filter(p => ['insta-approval-queue','insta-post-type-scores','newsletter-audience-sync','push-broadcast','kpi-live-totals','dau-trend'].includes(p.id)),
+// Permissions-Layer: aus lib/permissions.json
+let PERMISSIONS = null
+try {
+  const permRes = await fetch('/crm/lib/permissions.json?v=20260607', { cache: 'no-store' })
+  PERMISSIONS = await permRes.json()
+} catch (e) {
+  console.error('[crm] permissions.json load error', e)
+  PERMISSIONS = { tabs: {}, nullRoleAccess: false }
 }
 
 const role = window.__CRM_ROLE__ || 'admin'
-const roleFilter = ROLE_PANEL_VISIBILITY[role]
-const VISIBLE_PANELS = (roleFilter === '*' || !roleFilter)
-  ? PANELS
-  : roleFilter(PANELS)
+
+// Top-Tabs gefiltert nach Rolle (deny → ausgeblendet)
+const PANELS = Object.entries(PERMISSIONS.tabs || {}).map(([key, def]) => ({
+  id: 'tab-' + key,
+  tabKey: key,
+  title: def.label || key,
+  icon: TAB_ICONS[key] || '•',
+  access: def.access?.[role] || (PERMISSIONS.nullRoleAccess ? 'rw' : 'deny')
+}))
+
+const VISIBLE_PANELS = PANELS.filter(p => p.access && p.access !== 'deny')
 const VISIBLE_IDS = new Set(VISIBLE_PANELS.map(p => p.id))
 
-// ---- Sidebar rendern ----
+// ---- Sidebar rendern (flach, 5 Top-Tabs) ----
 const sidebar = document.getElementById('sidebar')
-const sidebarHtml = CATEGORIES.map(cat => {
-  const items = VISIBLE_PANELS.filter(p => p.category === cat.key)
-  if (!items.length) return ''
-  return `<div class="cat" data-cat="${cat.key}">
-    <div class="cat-head"><span class="ic">${cat.icon}</span><span class="lbl">${cat.label}</span><span class="caret">▼</span></div>
-    <div class="cat-items">
-      ${items.map(p => `<a href="#${p.id}" data-pid="${p.id}">${p.title}</a>`).join('')}
+sidebar.innerHTML = `
+  <div class="cat" data-cat="top">
+    <div class="cat-items" style="gap:2px">
+      ${VISIBLE_PANELS.map(p => `
+        <a href="#${p.id}" data-pid="${p.id}" class="top-tab-link">
+          <span class="ic" style="font-size:15px;margin-right:10px">${p.icon}</span>
+          <span class="lbl">${p.title}</span>
+        </a>
+      `).join('')}
     </div>
-  </div>`
-}).join('')
-sidebar.innerHTML = sidebarHtml
+  </div>
+`
 
-sidebar.querySelectorAll('.cat-head').forEach(head => {
-  head.addEventListener('click', () => head.parentElement.classList.toggle('collapsed'))
-})
+// Top-Tab-Links: etwas mehr Padding, kein left-indent
+const topTabStyle = document.createElement('style')
+topTabStyle.textContent = `
+  .top-tab-link {
+    padding: 11px 14px !important;
+    display: flex !important; align-items: center;
+    font-size: 14px !important;
+    font-weight: 500;
+  }
+  .top-tab-link.active {
+    background: linear-gradient(90deg, rgba(139,92,246,0.28), rgba(139,92,246,0.08));
+  }
+`
+document.head.appendChild(topTabStyle)
 
 // ---- Toast ----
 window.toast = function(msg) {
@@ -608,14 +582,13 @@ let qsUserResults = []
 function buildQuickSearchItems(query) {
   const q = (query || '').trim().toLowerCase()
   const panels = VISIBLE_PANELS.map(p => {
-    const cat = CATEGORIES.find(c => c.key === p.category)
     return {
       type: 'panel',
       id: p.id,
       title: p.title,
-      cat: cat?.label || '',
-      icon: cat?.icon || '•',
-      match: scoreMatch(p.title.toLowerCase() + ' ' + (cat?.label || '').toLowerCase(), q)
+      cat: 'Tab',
+      icon: p.icon || '•',
+      match: scoreMatch(p.title.toLowerCase(), q)
     }
   })
   let items = panels.filter(i => !q || i.match > 0)
@@ -805,7 +778,8 @@ const mount = document.getElementById('panel-mount')
 async function loadPanel() {
   const hashRaw = location.hash.replace(/^#/, '').trim()
   const [hash] = hashRaw.split('?')
-  const fallback = (VISIBLE_PANELS.find(p => p.category === 'overview') || VISIBLE_PANELS[0])?.id
+  // Default-Load: 'tab-pulse' falls verfügbar, sonst erster sichtbarer Tab
+  const fallback = (VISIBLE_PANELS.find(p => p.id === 'tab-pulse') || VISIBLE_PANELS[0])?.id
   let id = hash || fallback
   // Role-Guard: nicht erlaubte Panel-IDs auf Fallback zurückbiegen
   if (id && !VISIBLE_IDS.has(id)) {
@@ -816,11 +790,6 @@ async function loadPanel() {
   // Set active state
   sidebar.querySelectorAll('a[data-pid]').forEach(a => {
     a.classList.toggle('active', a.dataset.pid === id)
-  })
-  // Expand parent category for active item
-  sidebar.querySelectorAll('.cat').forEach(c => {
-    const hasActive = c.querySelector('a.active')
-    if (hasActive) c.classList.remove('collapsed')
   })
 
   const meta = PANELS.find(p => p.id === id)
@@ -841,16 +810,23 @@ async function loadPanel() {
     if (cache.has(id)) {
       mod = cache.get(id)
     } else {
-      // Cache-Bust pro Tag — sonst hängen User in alter JS-Version fest nach Push.
+      // Cache-Bust pro Stunde — sonst hängen User in alter JS-Version fest nach Push.
       const v = new Date().toISOString().slice(0, 13)  // YYYY-MM-DDTHH
-      mod = await import(`./panels/${id}.js?v=${v}`)
+      // Top-Tabs werden als _tab-<key>.js geladen (Unterstrich-Prefix = Sub-Module-Loader).
+      // Diese Loader importieren ihrerseits die existierenden Panel-Dateien.
+      const modulePath = id.startsWith('tab-')
+        ? `./panels/_tab-${id.slice(4)}.js?v=${v}`
+        : `./panels/${id}.js?v=${v}`
+      mod = await import(modulePath)
       cache.set(id, mod)
     }
     const panel = mod.default || mod
     if (!panel || typeof panel.mount !== 'function') {
       throw new Error('Panel-Modul exportiert kein mount()')
     }
-    await panel.mount(mount)
+    // Sub-Tab nach '?' an mount() weitergeben (z.B. #tab-pulse?sub=live)
+    const subParams = hashRaw.includes('?') ? hashRaw.split('?')[1] : ''
+    await panel.mount(mount, { role, access: meta.access, sub: subParams, permissions: PERMISSIONS })
   } catch (e) {
     console.error('[crm] panel load error', id, e)
     mount.innerHTML = `<div class="panel-shell"><div class="panel-head"><h2>${meta.title}</h2></div><div class="empty" style="color:#F87171">Panel-Fehler: ${e?.message || e}</div></div>`
