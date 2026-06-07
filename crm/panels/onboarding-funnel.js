@@ -65,15 +65,16 @@ async function fetchFunnel(range = '90d') {
     ? all
     : all.filter(u => u.created_at && u.created_at >= sinceRange)
 
-  // Profile filled = has avatar_url OR bio (best proxy available) — gefiltert auf Range
-  // FIX (med): columns depend on what admin_users_list_full returns — if missing, profileMembers = []
+  // FIX (math): cascade stages so each next stage is a subset of the previous.
+  // Verhindert >100% Conversion und negative Drop-offs.
+  // Profile filled = has avatar_url OR bio (best proxy available)
   const profileMembers = signupMembers.filter(u => u.avatar_url || u.bio)
 
-  // First listen = aus dem Signup-Set, die im Listening-Fenster auftauchen
-  const listenMembers = signupMembers.filter(u => listenSet.has(u.id))
+  // First listen — Teilmenge aus profileMembers
+  const listenMembers = profileMembers.filter(u => listenSet.has(u.id))
 
-  // Active = logged in within last 7 days (last_seen_at proxy) — Schnittmenge mit Signup-Set
-  const activeMembers = signupMembers.filter(u => u.last_seen_at && u.last_seen_at >= since7)
+  // Active — Teilmenge aus listenMembers (last_seen_at innerhalb 7d)
+  const activeMembers = listenMembers.filter(u => u.last_seen_at && u.last_seen_at >= since7)
 
   const members = {
     signup: signupMembers,
@@ -246,15 +247,16 @@ function renderHeroes(host, data, rangeLabel) {
   }
 
   host.innerHTML = ''
-  host.appendChild(statHero({ label: `Signups (${rangeLabel || '90d'})`, value: c.signup,  icon: 'user-plus',  color: '#6366f1', countUp: true }))
-  host.appendChild(statHero({ label: 'Aktive Nutzer',     value: c.active,  icon: 'zap',        color: '#10b981', countUp: true }))
-  host.appendChild(statHero({ label: 'Gesamt-Conversion', value: overallConv, suffix: '%', icon: 'trending-up', color: '#8b5cf6', countUp: true }))
+  // FIX (rendering): statHero akzeptiert nur {label, value, change, icon}.
+  // icon MUSS via iconHtml() SVG-string sein, sonst wird "user-plus" als Text gerendert.
+  // suffix/sublabel/color/countUp werden vom Helper nicht unterstützt → in label/value einbetten.
+  host.appendChild(statHero({ label: `Signups (${rangeLabel || '90d'})`, value: fmtNumber(c.signup),  icon: iconHtml('user-plus') }))
+  host.appendChild(statHero({ label: 'Aktive Nutzer',     value: fmtNumber(c.active),  icon: iconHtml('zap') }))
+  host.appendChild(statHero({ label: 'Gesamt-Conversion', value: `${overallConv}%`, icon: iconHtml('trending-up') }))
   host.appendChild(statHero({
-    label: 'Größter Drop-off',
-    value: 100 - worst.rate,
-    suffix: '%',
-    sublabel: `${STAGES[worst.idx - 1]?.label || ''} → ${STAGES[worst.idx]?.label || ''}`,
-    icon: 'alert-triangle', color: '#ef4444', countUp: true
+    label: `Größter Drop-off (${STAGES[worst.idx - 1]?.label || ''} → ${STAGES[worst.idx]?.label || ''})`,
+    value: `${100 - worst.rate}%`,
+    icon: iconHtml('alert-triangle')
   }))
 }
 

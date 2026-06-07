@@ -2,7 +2,7 @@ import { sb } from '/lib/supabase.js?v=20260608e'
 import { toast, modal, confirmDialog, fmtNumber, fmtRelativeTime, fmtDateTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js?v=20260608e'
 import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608e'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608e'
-import { countUp, fadeIn, skeletonLoader, slideInRight } from '/lib/animations.js?v=20260608e'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608e'
 import { drawer, tabs, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js?v=20260608e'
 import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608e'
 
@@ -43,7 +43,7 @@ async function fetchLeaderboard() {
       const um = new Map((users || []).map(u => [u.id, u]))
       list.forEach(l => {
         const u = um.get(l.inviter_id) || {}
-        l.display_name = u.display_name || u.username || 'Unbekannt'
+        l.display_name = u.full_name || u.username || 'Unbekannt'
         l.username = u.username || ''
         l.avatar_url = u.avatar_url || null
         l.is_verified = !!u.is_verified
@@ -194,7 +194,7 @@ async function openInviterDrawer(row) {
   const d = drawer({
     title: `Einladungen von ${row.display_name || 'User'}`,
     width: 560,
-    body: `
+    contentHtml: `
       <div class="drawer-inviter">
         <div class="drawer-head glass-card">
           <div class="user-cell">
@@ -234,7 +234,7 @@ async function openInviterDrawer(row) {
         const u = r.user || {}
         const av = u.avatar_url
           ? `<img src="${htmlEscape(u.avatar_url)}" class="row-avatar sm">`
-          : `<div class="row-avatar sm avatar-fallback">${htmlEscape((u.display_name || '?').slice(0, 1).toUpperCase())}</div>`
+          : `<div class="row-avatar sm avatar-fallback">${htmlEscape((u.full_name || u.username || '?').slice(0, 1).toUpperCase())}</div>`
         // status und bonus_granted kommen jetzt sicher aus dem expliziten SELECT
         const statusText = r.status ? htmlEscape(r.status) : 'aktiv'
         const bonusText = r.bonus_granted ? ' · 🎁 Bonus' : ''
@@ -242,7 +242,7 @@ async function openInviterDrawer(row) {
           <div class="referred-row" data-uid="${htmlEscape(r.invitee_id || '')}">
             ${av}
             <div class="referred-meta">
-              <div>${htmlEscape(u.display_name || u.username || 'Gelöscht')} ${u.is_verified ? '<span class="verified-badge">✓</span>' : ''}</div>
+              <div>${htmlEscape(u.full_name || u.username || 'Gelöscht')} ${u.is_verified ? '<span class="verified-badge">✓</span>' : ''}</div>
               <div class="muted small">${fmtDateTime(r.created_at)} · ${statusText}${bonusText}</div>
             </div>
             <button class="btn-ghost btn-sm" data-act="open-user">↗</button>
@@ -451,21 +451,30 @@ export default {
           try {
             const areaEl = bodyEl.querySelector('#chart-area')
             if (areaEl && ts.length && typeof makeAreaChart === 'function') {
-              makeAreaChart(areaEl, {
-                data: ts,
-                x: 'date',
-                y: 'count',
-                color: '#8b5cf6',
-                label: 'Einladungen',
+              const chart = makeAreaChart({
+                categories: ts.map(t => t.date),
+                series: [{ name: 'Einladungen', data: ts.map(t => t.count) }],
+                colors: ['#8b5cf6'],
+                height: 220,
               })
+              if (chart instanceof Element) { areaEl.innerHTML = ''; areaEl.appendChild(chart) }
+              else if (typeof chart === 'string') { areaEl.innerHTML = chart }
             }
             const donutEl = bodyEl.querySelector('#chart-donut')
             if (donutEl && typeof makeDonutChart === 'function') {
               const top5 = board.slice(0, 5)
               const others = board.slice(5).reduce((s, r) => s + r.total, 0)
-              const data = top5.map(r => ({ label: r.display_name || ('@' + (r.username || '—')), value: r.total }))
-              if (others > 0) data.push({ label: 'Übrige', value: others })
-              makeDonutChart(donutEl, { data, label: 'Verteilung' })
+              const labels = top5.map(r => r.display_name || ('@' + (r.username || '—')))
+              const values = top5.map(r => r.total)
+              if (others > 0) { labels.push('Übrige'); values.push(others) }
+              const chart = makeDonutChart({
+                labels,
+                values,
+                colors: ['#8b5cf6', '#6366f1', '#a855f7', '#ec4899', '#f59e0b', '#64748b'],
+                height: 220,
+              })
+              if (chart instanceof Element) { donutEl.innerHTML = ''; donutEl.appendChild(chart) }
+              else if (typeof chart === 'string') { donutEl.innerHTML = chart }
             }
           } catch (chartErr) {
             console.warn('[referral-leaderboard] Chart render failed', chartErr)

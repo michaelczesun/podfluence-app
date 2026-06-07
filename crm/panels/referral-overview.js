@@ -53,11 +53,16 @@ async function loadData(range) {
   const uniqueReferrers = new Set(rows.map(r => r.inviter_id)).size
   const uniqueReferred  = new Set(rows.map(r => r.invitee_id)).size
 
+  // FIX(critical/math): Funnel-Schritte müssen monoton fallend sein.
+  // generated = total referrals (eine Row = ein generierter Code-Einsatz)
+  // used      = referrals mit invitee_id (Code wurde eingelöst) — hier == total da invitee_id Pflichtfeld
+  // signedUp  = distinct invitees (echte neue User)
+  // 'shared' aus der DB nicht messbar → ganz aus dem Funnel entfernt.
+  const usedCount = rows.filter(r => r.invitee_id).length
   const funnel = {
-    generated: uniqueReferrers, // users who referred at least once
-    shared:    uniqueReferrers, // no separate share-tracking; same as generated
-    used:      total,           // each row = a referral code used
-    signedUp:  uniqueReferred   // distinct users who joined via referral
+    generated: total,
+    used:      usedCount,
+    signedUp:  uniqueReferred
   }
 
   // Daily trend: group by date → { date, generated, signups, rate }
@@ -82,6 +87,7 @@ async function loadData(range) {
   let topReferrers = []
   if (sortedReferrers.length) {
     const ids = sortedReferrers.map(([id]) => id)
+    // FIX(high/data): users hat keine display_name-Spalte → nur full_name + username
     const { data: profiles } = await sb
       .from('users')
       .select('id, full_name, username, avatar_url')
@@ -124,8 +130,7 @@ function pct(num, denom) {
 
 function renderFunnel(funnel) {
   const steps = [
-    { key: 'generated', label: 'Code generiert', value: funnel.generated, icon: 'zap', color: '#6366f1' },
-    { key: 'shared', label: 'Code geteilt', value: funnel.shared, icon: 'share-2', color: '#8b5cf6' },
+    { key: 'generated', label: 'Referrals erstellt', value: funnel.generated, icon: 'zap', color: '#6366f1' },
     { key: 'used', label: 'Code verwendet', value: funnel.used, icon: 'mouse-pointer-click', color: '#ec4899' },
     { key: 'signedUp', label: 'User registriert', value: funnel.signedUp, icon: 'user-check', color: '#10b981' }
   ]
@@ -165,7 +170,7 @@ function renderTopReferrers(list) {
   }
   const max = list[0]?.count || 1
   return `<div class="referrer-list">${list.map((r, i) => {
-    const name = r.profile?.display_name || r.profile?.username || 'Unbekannt'
+    const name = r.profile?.full_name || r.profile?.username || 'Unbekannt'
     const w = (r.count / max) * 100
     return `
       <div class="referrer-row" data-user="${htmlEscape(r.id)}">
@@ -200,8 +205,8 @@ function renderRecentTable(rows) {
       </thead>
       <tbody>
         ${rows.map(r => {
-          const newName = r.newUser?.display_name || r.newUser?.username || '—'
-          const refName = r.referrer?.display_name || r.referrer?.username || '—'
+          const newName = r.newUser?.full_name || r.newUser?.username || '—'
+          const refName = r.referrer?.full_name || r.referrer?.username || '—'
           return `
             <tr>
               <td><strong>${htmlEscape(newName)}</strong></td>
@@ -456,7 +461,7 @@ export default {
 
       const openReferrerDrawer = (userId) => {
         const ref = state.topReferrers.find(r => r.id === userId)
-        const name = ref?.profile?.display_name || ref?.profile?.username || 'Referrer'
+        const name = ref?.profile?.full_name || ref?.profile?.username || 'Referrer'
         try {
           drawer({
             title: name,

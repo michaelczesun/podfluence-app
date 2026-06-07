@@ -116,7 +116,7 @@ async function mountPanel(container) {
     })
     container.querySelector('[data-act="pdf"]').addEventListener('click', () => {
       try {
-        exportPanelAsPdf({ container, title: 'App-Versionen im Feld' })
+        exportPanelAsPdf(container, { filename: `app-versions-${new Date().toISOString().slice(0,10)}.pdf`, title: 'App-Versionen im Feld' })
       } catch (err) {
         console.error(err)
         toast(`PDF-Export fehlgeschlagen: ${err?.message || 'Fehler'}`, 'error')
@@ -126,14 +126,14 @@ async function mountPanel(container) {
     container.querySelector('[data-act="csv"]').addEventListener('click', () => {
       if (!state.rows.length) return toast('Keine Daten')
       try {
-        exportCsv({
-          filename: `app-versions-${new Date().toISOString().slice(0, 10)}.csv`,
-          rows: state.rows.map(r => ({
+        exportCsv(
+          state.rows.map(r => ({
             Version: r.version,
             Nutzer: r.user_count,
             Status: colorFor(r.rank).label
-          }))
-        })
+          })),
+          `app-versions-${new Date().toISOString().slice(0, 10)}.csv`
+        )
       } catch (err) {
         console.error(err)
         toast(`CSV-Export fehlgeschlagen: ${err?.message || 'Fehler'}`, 'error')
@@ -219,10 +219,10 @@ function renderContent(body, state, refresh) {
     <div class="cbv-grid">
       ${bannerHtml}
       <div class="cbv-heros">
-        ${statHero({ label: 'Nutzer gesamt', value: '<span data-cu="' + totalUsers + '">0</span>', icon: 'users', tone: 'neutral' })}
-        ${statHero({ label: 'Auf aktueller Version', value: '<span data-cu="' + latestUsers + '">0</span>', sub: adoption + '% Adoption', icon: 'check-circle', tone: 'violet' })}
-        ${statHero({ label: 'Eine Version alt', value: '<span data-cu="' + oneOld + '">0</span>', icon: 'clock', tone: 'amber' })}
-        ${statHero({ label: 'Mehrere Versionen zurück', value: '<span data-cu="' + stale + '">0</span>', icon: 'alert-triangle', tone: 'red' })}
+        ${statHero({ label: 'Nutzer gesamt', value: totalUsers, icon: 'users' })}
+        ${statHero({ label: 'Auf aktueller Version', value: latestUsers, change: adoption + '% Adoption', icon: 'check-circle' })}
+        ${statHero({ label: 'Eine Version alt', value: oneOld, icon: 'clock' })}
+        ${statHero({ label: 'Mehrere Versionen zurück', value: stale, icon: 'alert-triangle' })}
       </div>
 
       <div class="cbv-row">
@@ -280,11 +280,6 @@ function renderContent(body, state, refresh) {
     </div>
   `
 
-  body.querySelectorAll('[data-cu]').forEach(el => {
-    const target = parseInt(el.dataset.cu, 10) || 0
-    countUp(el, target, { duration: 900 })
-  })
-
   const sortedAsc = [...rows].sort((a, b) => a.user_count - b.user_count)
   try {
     makeBarChart(body.querySelector('#cbv-bar'), {
@@ -292,12 +287,9 @@ function renderContent(body, state, refresh) {
       categories: sortedAsc.map(r => r.version),
       series: [{
         name: 'Nutzer',
-        data: sortedAsc.map(r => ({
-          x: r.version,
-          y: r.user_count,
-          fillColor: colorFor(r.rank).fill
-        }))
+        data: sortedAsc.map(r => r.user_count)
       }],
+      colors: sortedAsc.map(r => colorFor(r.rank).fill),
       onBarClick: (i) => {
         const r = sortedAsc[i]
         if (r) openVersionDrawer(r, state, refresh)
@@ -310,7 +302,7 @@ function renderContent(body, state, refresh) {
   try {
     makeDonutChart(body.querySelector('#cbv-donut'), {
       labels: ['Aktuell', 'Eine alt', 'Mehrere alt'],
-      series: [latestUsers, oneOld, stale],
+      values: [latestUsers, oneOld, stale],
       colors: ['#8b5cf6', '#eab308', '#ef4444']
     })
   } catch (err) {

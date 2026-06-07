@@ -22,7 +22,7 @@ const STATUS_COLORS = {
 async function fetchAllPodcasts() {
   const { data, error } = await sb
     .from('podcasts')
-    .select('id, title, rss_url, cover_image, is_owner_verified, is_rss_verified, owner_email, owner_verified_at, owner_email_extracted_at, created_at')
+    .select('id, title, rss_url, cover_image, is_owner_verified, is_rss_verified, owner_email, owner_verified_at, owner_email_extracted_at, created_at, rejection_reason, verify_token_sent_at')
     .order('created_at', { ascending: false })
   if (error) throw error
   return data || []
@@ -222,8 +222,8 @@ export default {
       }
 
       function renderHero() {
-        const totalPending = allPodcasts.filter(s => (s.is_owner_verified !== true && s.is_rss_verified !== true)).length
-        const totalRejected = allPodcasts.filter(s => false).length
+        const totalRejected = allPodcasts.filter(s => !!s.rejection_reason).length
+        const totalPending = allPodcasts.filter(s => !s.rejection_reason && s.is_owner_verified !== true && s.is_rss_verified !== true).length
         const totalVerified = allPodcasts.filter(s => s.is_owner_verified === true).length
         const last7 = allPodcasts.filter(s => s.created_at && (Date.now() - new Date(s.created_at).getTime()) < 7 * 86400000).length
 
@@ -268,9 +268,9 @@ export default {
         const series = Object.entries(buckets).sort((a, b) => a[0].localeCompare(b[0]))
 
         const counts = {
-          pending: allPodcasts.filter(s => (s.is_owner_verified !== true && s.is_rss_verified !== true)).length,
+          pending: allPodcasts.filter(s => !s.rejection_reason && s.is_owner_verified !== true && s.is_rss_verified !== true).length,
           verified: allPodcasts.filter(s => s.is_owner_verified === true).length,
-          rejected: allPodcasts.filter(s => false).length
+          rejected: allPodcasts.filter(s => !!s.rejection_reason).length
         }
 
         chartRow.innerHTML = `
@@ -289,17 +289,19 @@ export default {
 
         try {
           makeAreaChart(chartRow.querySelector('#area-chart'), {
-            labels: series.map(s => s[0].slice(5)),
-            data: series.map(s => s[1]),
-            color: '#60a5fa'
+            categories: series.map(s => s[0].slice(5)),
+            series: [{ name: 'Anmeldungen', data: series.map(s => s[1]) }],
+            colors: ['#60a5fa'],
+            height: 200
           })
         } catch (e) { console.warn('chart', e) }
 
         try {
           makeDonutChart(chartRow.querySelector('#donut-chart'), {
             labels: ['Ausstehend', 'Verifiziert', 'Abgelehnt'],
-            data: [counts.pending, counts.verified, counts.rejected],
-            colors: ['#f59e0b', '#10b981', '#ef4444']
+            values: [counts.pending, counts.verified, counts.rejected],
+            colors: ['#f59e0b', '#10b981', '#ef4444'],
+            height: 200
           })
         } catch (e) { console.warn('chart', e) }
       }
