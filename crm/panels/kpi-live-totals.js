@@ -45,10 +45,28 @@ async function fetchTotals() {
   const totalListenSec = sumSec(listenRows?.data)
   const ydayListenSec  = sumSec(listenRowsYday?.data)
 
+  // Fetch user/post counts via admin_daily_series as fallback
+  let totalUsers = 0, ydayUsers = 0, totalPosts = 0, ydayPosts = 0
+  try {
+    const [usersRes, postsRes] = await Promise.all([
+      sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: 60 }),
+      sb.rpc('admin_daily_series', { p_metric: 'posts', p_days: 2 })
+    ])
+    if (!usersRes.error && usersRes.data) {
+      const vals = usersRes.data.map(d => Number(d.value) || 0)
+      totalUsers = vals.reduce((a, b) => a + b, 0)
+      ydayUsers = totalUsers - (vals[vals.length - 1] || 0)
+    }
+    if (!postsRes.error && postsRes.data && postsRes.data.length >= 2) {
+      totalPosts = Number(postsRes.data[postsRes.data.length - 1]?.value) || 0
+      ydayPosts = Number(postsRes.data[postsRes.data.length - 2]?.value) || 0
+    }
+  } catch (_) {}
+
   return {
-    total_users:      { value: 0, prev: 0 },
+    total_users:      { value: totalUsers, prev: ydayUsers },
     active_24h:       { value: active24.count ?? 0, prev: active48.count ?? 0 },
-    total_posts:      { value: 0, prev: 0 },
+    total_posts:      { value: totalPosts, prev: ydayPosts },
     listening_hours:  { value: Math.round(totalListenSec / 3600), prev: Math.round(ydayListenSec / 3600) }
   }
 }

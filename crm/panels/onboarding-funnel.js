@@ -14,69 +14,59 @@ const STAGES = [
 ]
 
 async function fetchFunnel() {
+  // Try dedicated RPC first
   try {
     const { data, error } = await sb.rpc('onboarding_funnel_stats', { days: 30 })
     if (!error && data) return normalizeRpc(data)
-  } catch (_) { /* fall through to manual aggregation */ }
+  } catch (_) { /* fall through */ }
 
-  const since = new Date(Date.now() - 30 * 86400000).toISOString()
+  // Build from available RPCs: admin_users_list_full + admin_daily_series + episode_listening_pulses
+  const since30 = new Date(Date.now() - 30 * 86400000).toISOString()
+  const since7  = new Date(Date.now() - 7  * 86400000).toISOString()
 
-  // users-Tabelle existiert nicht im Schema — leere Aggregation zurückgeben
-  const usersRes = await sb.from('app_opens')
-    .select('user_id, created_at')
-    .gte('created_at', since)
-    .limit(5000)
+  const [usersRes, signupSeriesRes, listensRes] = await Promise.all([
+    sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' }),
+    sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: 30 }),
+    sb.from('episode_listening_pulses')
+      .select('user_id')
+      .gte('created_at', since30)
+      .limit(20000)
+  ])
 
-  if (usersRes.error) {
-    // Keine Daten verfügbar — leeres Ergebnis
-    return {
-      counts: { signup: 0, profile: 0, listen: 0, active: 0 },
-      members: { signup: [], profile: [], listen: [], active: [] },
-      series: [],
-      _missingTables: true
-    }
-  }
-
-  const safeFetch = async (q) => {
-    try {
-      const r = await q
-      if (r.error) return { data: [] }
-      return r
-    } catch (_) { return { data: [] } }
-  }
-
-  // listening_history → listening_activity (existiert im Schema)
-  const listensRes = await safeFetch(sb.from('listening_activity').select('user_id').gte('created_at', since).limit(20000))
-  // user_actions existiert nicht im Schema — safeFetch gibt leeres Array zurück
-  const actionsRes = await safeFetch(sb.from('user_actions').select('user_id, created_at').gte('created_at', since).limit(50000))
+  if (usersRes.error) throw usersRes.error
 
   const all = usersRes.data || []
-  const listenSet  = new Set((listensRes.data || []).map(l => l.user_id))
-  const actionCount = new Map()
-  for (const a of (actionsRes.data || [])) actionCount.set(a.user_id, (actionCount.get(a.user_id) || 0) + 1)
+  const listenSet = new Set((listensRes.data || []).map(l => l.user_id))
 
-  const members = { signup: [], profile: [], listen: [], active: [] }
-  for (const u of all) {
-    members.signup.push(u)
-    if (u.avatar_url && u.bio) members.profile.push(u)
-    if (listenSet.has(u.user_id)) members.listen.push(u)
-    if ((actionCount.get(u.user_id) || 0) >= 3) members.active.push(u)
+  // Signup = all users (total registered)
+  const signupMembers = all
+
+  // Profile filled = has avatar_url OR bio (best proxy available)
+  const profileMembers = all.filter(u => u.avatar_url || u.bio)
+
+  // First listen = appeared in listening_pulses in last 30d
+  const listenMembers = all.filter(u => listenSet.has(u.id))
+
+  // Active = logged in within last 7 days
+  const activeMembers = all.filter(u => u.last_login_at && u.last_login_at >= since7)
+
+  const members = {
+    signup: signupMembers,
+    profile: profileMembers,
+    listen: listenMembers,
+    active: activeMembers
   }
 
-  const byDay = new Map()
-  for (const u of all) {
-    const d = (u.created_at || '').slice(0, 10)
-    if (!d) continue
-    byDay.set(d, (byDay.get(d) || 0) + 1)
-  }
-  const series = [...byDay.entries()].sort().map(([d, v]) => ({ x: d, y: v }))
+  // Use admin_daily_series for the sparkline (more accurate than counting created_at from RPC)
+  const rawSeries = (signupSeriesRes.data || [])
+  const series = rawSeries.map(p => ({ x: p.date, y: p.value }))
 
   return {
     counts: {
-      signup:  members.signup.length,
-      profile: members.profile.length,
-      listen:  members.listen.length,
-      active:  members.active.length
+      signup:  signupMembers.length,
+      profile: profileMembers.length,
+      listen:  listenMembers.length,
+      active:  activeMembers.length
     },
     members,
     series

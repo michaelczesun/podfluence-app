@@ -20,23 +20,48 @@ async function fetchSeries() {
   since.setDate(since.getDate() - (DAYS - 1))
   since.setHours(0, 0, 0, 0)
 
-  const { data, error } = await sb.rpc('admin_episodes_per_day', { days: DAYS })
-
-  if (error) throw error
-
+  // Build day-axis first
   const buckets = new Map()
   for (let i = 0; i < DAYS; i++) {
     const d = new Date(since)
     d.setDate(d.getDate() + i)
     buckets.set(isoDay(d), { day: isoDay(d), count: 0, episodes: [] })
   }
-  for (const row of (data || [])) {
-    const k = row.day ? isoDay(row.day) : null
+
+  // admin_daily_series returns [{date, value}]
+  const { data: series, error: seriesErr } = await sb.rpc('admin_daily_series', { p_metric: 'episodes', p_days: DAYS })
+  if (seriesErr) throw seriesErr
+  for (const row of (series || [])) {
+    const k = row.date ? isoDay(row.date) : null
     if (k && buckets.has(k)) {
-      buckets.get(k).count = row.count ?? 0
-      buckets.get(k).episodes = row.episodes ?? []
+      buckets.get(k).count = row.value ?? 0
     }
   }
+
+  // Optionally enrich with actual episode rows for the drawer (best-effort)
+  try {
+    const sinceIso = since.toISOString()
+    const { data: eps } = await sb
+      .from('podcasts')
+      .select('id, title, cover_url')
+      .limit(1)
+    // Only fetch episode details if podcasts table accessible
+    if (eps !== null) {
+      const { data: epRows } = await sb
+        .from('episodes')
+        .select('id, title, published_at, audio_url, podcast_id, podcasts:podcast_id(title, cover_url)')
+        .gte('published_at', sinceIso)
+        .order('published_at', { ascending: true })
+        .limit(500)
+      for (const ep of (epRows || [])) {
+        const k = ep.published_at ? isoDay(ep.published_at) : null
+        if (k && buckets.has(k)) {
+          buckets.get(k).episodes.push(ep)
+        }
+      }
+    }
+  } catch (_) {}
+
   return Array.from(buckets.values())
 }
 

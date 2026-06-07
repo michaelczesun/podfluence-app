@@ -39,8 +39,18 @@ function buildDayAxis(rangeDays) {
 }
 
 async function fetchData(rangeDays) {
-  // Tabelle 'posts' existiert nicht im Schema — Empty-State
-  return null
+  const { data, error } = await sb.rpc('admin_daily_series', { p_metric: 'posts', p_days: rangeDays })
+  if (error) throw error
+  // RPC returns [{date, value}] — expand into flat rows for aggregate()
+  const rows = []
+  for (const r of (data || [])) {
+    const day = (r.date || '').slice(0, 10)
+    const count = r.value || 0
+    for (let i = 0; i < count; i++) {
+      rows.push({ created_at: day, type: 'announcement' })
+    }
+  }
+  return rows
 }
 
 function aggregate(rows, rangeDays) {
@@ -84,8 +94,21 @@ function aggregate(rows, rangeDays) {
 }
 
 async function fetchPostsForDay(day) {
-  // Tabelle 'posts' existiert nicht im Schema — Empty-State
-  return null
+  const start = day + 'T00:00:00.000Z'
+  const end   = day + 'T23:59:59.999Z'
+  const { data, error } = await sb
+    .from('updates')
+    .select('id, user_id, content, type, created_at, users:user_id(id, username, full_name, avatar_url)')
+    .gte('created_at', start)
+    .lte('created_at', end)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  // Remap joined user into profiles key expected by drawer
+  return (data || []).map(p => ({
+    ...p,
+    profiles: p.users || {},
+  }))
 }
 
 function typeBadge(type) {
@@ -103,14 +126,6 @@ async function openDayDrawer(day) {
     const posts = await fetchPostsForDay(day)
     const body = document.getElementById('day-drawer-body')
     if (!body) return
-    if (posts === null) {
-      body.innerHTML = `
-        <div class="empty-state glass-card">
-          <div class="empty-icon">${iconHtml('alert')}</div>
-          <h3>Daten kommen sobald die Tabelle posts angelegt ist</h3>
-        </div>`
-      return
-    }
     if (!posts.length) {
       body.innerHTML = `
         <div class="empty-state">
@@ -302,14 +317,6 @@ async function loadAndRender(container) {
     </div>`
   try {
     const rawResult = await fetchData(parseInt(state.range, 10))
-    if (rawResult === null) {
-      body.innerHTML = `
-        <div class="empty-state glass-card" style="text-align:center;padding:48px 24px">
-          <div class="empty-icon">${iconHtml('alert')}</div>
-          <h3>Daten kommen sobald die Tabelle posts angelegt ist</h3>
-        </div>`
-      return
-    }
     const agg = aggregate(rawResult, parseInt(state.range, 10))
     Object.assign(state, agg)
     body.innerHTML = `

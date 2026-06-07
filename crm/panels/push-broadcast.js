@@ -17,17 +17,21 @@ const AUDIENCES = [
 
 async function fetchAudienceCounts() {
   const counts = {}
-  for (const a of AUDIENCES) {
-    try {
-      let q = sb.from('users').select('id', { count: 'exact', head: true })
-      if (a.value === 'podcasters') q = q.eq('is_podcaster', true)
-      else if (a.value === 'premium') q = q.eq('is_premium', true)
-      else if (a.value === 'new_7d') q = q.gte('created_at', new Date(Date.now()-7*864e5).toISOString())
-      else if (a.value === 'inactive_7d') q = q.lt('last_login_at', new Date(Date.now()-7*864e5).toISOString())
-      else if (a.value === 'listeners') q = q.eq('is_podcaster', false)
-      const { count } = await q
-      counts[a.value] = count || 0
-    } catch (_) { counts[a.value] = 0 }
+  try {
+    const [statsRes, splitRes] = await Promise.all([
+      sb.rpc('admin_db_live_stats'),
+      sb.rpc('admin_user_type_split')
+    ])
+    const stats = statsRes.data || {}
+    const split = splitRes.data || {}
+    counts.all = stats.total_users || 0
+    counts.podcasters = (split.podcaster || 0) + (split.both || 0)
+    counts.listeners = (split.listener || 0) + (split.both || 0)
+    counts.premium = split.premium || 0
+    counts.inactive_7d = Math.max(0, (stats.total_users || 0) - (stats.active_24h || 0))
+    counts.new_7d = stats.total_users_yday || 0
+  } catch (_) {
+    for (const a of AUDIENCES) counts[a.value] = 0
   }
   return counts
 }

@@ -69,14 +69,19 @@ export default {
     body.innerHTML = skeletonLoader({ rows: 4, height: 140 })
 
     try {
-      const { data: users, error } = await sb.rpc('admin_list_users_full')
+      // Use admin_user_type_split for fast counts, admin_users_list_full for drawer details
+      const [splitRes, usersRes] = await Promise.all([
+        sb.rpc('admin_user_type_split'),
+        sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' })
+      ])
+      if (splitRes.error) throw splitRes.error
+      if (usersRes.error) throw usersRes.error
 
-      if (error) throw error
-
-      const all = users || []
-      const total = all.length
-      const podcasters = all.filter(u => u.is_podcaster)
-      const listeners = all.filter(u => !u.is_podcaster)
+      const split = splitRes.data || {}
+      const all = usersRes.data || []
+      const total = (split.listener || 0) + (split.podcaster || 0) + (split.both || 0)
+      const podcasters = all.filter(u => u.type === 'podcaster' || u.type === 'both')
+      const listeners = all.filter(u => u.type === 'listener' || !u.type)
       const verifiedPodcasters = podcasters.filter(u => u.is_verified)
 
       const months = {}
@@ -91,21 +96,17 @@ export default {
           const d = new Date(u.created_at)
           const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
           if (months[key]) {
-            if (u.is_podcaster) months[key].podcasters++
+            if (u.type === 'podcaster' || u.type === 'both') months[key].podcasters++
             else months[key].listeners++
           }
-        }
-        if (u.converted_at) {
-          const cd = new Date(u.converted_at)
-          const ckey = `${cd.getFullYear()}-${String(cd.getMonth() + 1).padStart(2, '0')}`
-          if (months[ckey]) months[ckey].conversions++
         }
       }
       const trend = Object.values(months)
       this._lastTrend = trend
       this._lastUsers = all
 
-      const convRate = total ? ((podcasters.length / total) * 100).toFixed(1) : '0.0'
+      const effectiveTotal = total || all.length || 1
+      const convRate = effectiveTotal ? ((podcasters.length / effectiveTotal) * 100).toFixed(1) : '0.0'
 
       body.innerHTML = `
         <div class="uts-hero-grid">
@@ -127,14 +128,14 @@ export default {
                 <span class="dot" style="background:#6366f1"></span>
                 <div class="legend-meta">
                   <strong>Listener</strong>
-                  <span>${fmtNumber(listeners.length)} · ${total ? ((listeners.length/total)*100).toFixed(1) : 0}%</span>
+                  <span>${fmtNumber(listeners.length)} · ${effectiveTotal ? ((listeners.length/effectiveTotal)*100).toFixed(1) : 0}%</span>
                 </div>
               </button>
               <button class="legend-item" data-seg="podcasters">
                 <span class="dot" style="background:#ec4899"></span>
                 <div class="legend-meta">
                   <strong>Podcaster</strong>
-                  <span>${fmtNumber(podcasters.length)} · ${total ? ((podcasters.length/total)*100).toFixed(1) : 0}%</span>
+                  <span>${fmtNumber(podcasters.length)} · ${effectiveTotal ? ((podcasters.length/effectiveTotal)*100).toFixed(1) : 0}%</span>
                 </div>
               </button>
               <button class="legend-item" data-seg="verified">
@@ -157,7 +158,7 @@ export default {
         </div>
       `
 
-      statHero(body.querySelector('#heroTotal'), { label: 'Gesamt-User', value: total, icon: 'users' })
+      statHero(body.querySelector('#heroTotal'), { label: 'Gesamt-User', value: effectiveTotal, icon: 'users' })
       statHero(body.querySelector('#heroListeners'), { label: 'Listener', value: listeners.length, icon: 'headphones', accent: '#6366f1' })
       statHero(body.querySelector('#heroPodcasters'), { label: 'Podcaster', value: podcasters.length, icon: 'mic', accent: '#ec4899' })
       statHero(body.querySelector('#heroConv'), { label: 'Podcaster-Anteil', value: convRate, suffix: '%', icon: 'trending-up', accent: '#10b981' })
@@ -168,12 +169,11 @@ export default {
         if (!isNaN(num)) countUp(el, num, { duration: 900 })
       })
 
-      const donut = makeDonutChart(body.querySelector('#utsDonut'), {
-        data: [
-          { label: 'Listener', value: listeners.length, color: '#6366f1', key: 'listeners' },
-          { label: 'Podcaster (unverif.)', value: podcasters.length - verifiedPodcasters.length, color: '#ec4899', key: 'podcasters' },
-          { label: 'Podcaster (verif.)', value: verifiedPodcasters.length, color: '#10b981', key: 'verified' }
-        ],
+      const donut = makeDonutChart(body.querySelector('#utsDonut'), [
+        { label: 'Listener', value: listeners.length, color: '#6366f1', key: 'listeners' },
+        { label: 'Podcaster (unverif.)', value: podcasters.length - verifiedPodcasters.length, color: '#ec4899', key: 'podcasters' },
+        { label: 'Podcaster (verif.)', value: verifiedPodcasters.length, color: '#10b981', key: 'verified' }
+      ], {
         size: 280,
         thickness: 36,
         centerLabel: `${convRate}%`,
@@ -217,13 +217,13 @@ export default {
     let filtered = []
     let title = ''
     if (segment === 'listeners') {
-      filtered = allUsers.filter(u => !u.is_podcaster)
+      filtered = allUsers.filter(u => u.type === 'listener' || !u.type)
       title = 'Listener'
     } else if (segment === 'podcasters') {
-      filtered = allUsers.filter(u => u.is_podcaster && !u.is_verified)
+      filtered = allUsers.filter(u => (u.type === 'podcaster' || u.type === 'both') && !u.is_verified)
       title = 'Podcaster (unverifiziert)'
     } else if (segment === 'verified') {
-      filtered = allUsers.filter(u => u.is_podcaster && u.is_verified)
+      filtered = allUsers.filter(u => (u.type === 'podcaster' || u.type === 'both') && u.is_verified)
       title = 'Verifizierte Podcaster'
     } else {
       filtered = allUsers
@@ -255,7 +255,7 @@ export default {
             </div>
           </div>
         </td>
-        <td>${u.is_podcaster ? '<span class="badge badge-pink">Podcaster</span>' : '<span class="badge badge-indigo">Listener</span>'}</td>
+        <td>${(u.type === 'podcaster' || u.type === 'both') ? '<span class="badge badge-pink">Podcaster</span>' : '<span class="badge badge-indigo">Listener</span>'}</td>
         <td>${u.is_verified ? '<span class="badge badge-green">✓ Verifiziert</span>' : '<span class="muted">—</span>'}</td>
         <td>${u.created_at ? fmtDateTime(u.created_at) : '—'}</td>
       </tr>

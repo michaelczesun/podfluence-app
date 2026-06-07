@@ -42,7 +42,7 @@ async function fetchData() {
     .order('created_at', { ascending: false })
     .limit(200)
   if (error) throw error
-  return posts || []
+  return (posts || []).map(p => ({ ...p, profiles: p.users || {} }))
 }
 
 function applyFilters() {
@@ -163,18 +163,6 @@ function renderFeed(root) {
   const empty = root.querySelector('#feed-empty')
   if (!grid || !empty) return
 
-  if (POSTS_TABLE_MISSING) {
-    grid.innerHTML = ''
-    empty.style.display = ''
-    empty.innerHTML = `
-      <div class="empty-state glass-card">
-        <div class="empty-state__icon">${iconHtml('alert')}</div>
-        <div class="empty-state__title">Tabelle nicht verfügbar</div>
-        <div class="empty-state__text">Daten kommen sobald die Tabelle <code>posts</code> angelegt ist.</div>
-      </div>`
-    return
-  }
-
   if (!state.filtered.length) {
     grid.innerHTML = ''
     empty.style.display = ''
@@ -230,10 +218,6 @@ function viewPost(post) {
 }
 
 function editPost(post) {
-  if (POSTS_TABLE_MISSING) {
-    toast({ kind: 'error', text: 'Tabelle posts ist noch nicht angelegt.' })
-    return
-  }
   const m = modal({ title: 'Post bearbeiten', width: 560 })
   m.body.innerHTML = `
     <div class="form">
@@ -260,10 +244,6 @@ function editPost(post) {
 }
 
 async function deletePostFlow(post) {
-  if (POSTS_TABLE_MISSING) {
-    toast({ kind: 'error', text: 'Tabelle posts ist noch nicht angelegt.' })
-    return
-  }
   const ok = await confirmDialog({
     title: 'Post löschen?',
     text: 'Diese Aktion kann nicht rückgängig gemacht werden.',

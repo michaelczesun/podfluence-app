@@ -35,11 +35,19 @@ function formatDateShort(key) {
 }
 
 async function fetchDau(days) {
+  // Try admin_daily_series RPC first (SECURITY DEFINER, bypasses RLS)
+  try {
+    const { data, error } = await sb.rpc('admin_daily_series', { p_metric: 'dau', p_days: Number(days) })
+    if (!error && data && data.length > 0) {
+      return data.map(d => ({ date: d.date, users: Number(d.value) || 0 }))
+    }
+  } catch (_) {}
+
+  // Fallback: direct app_opens query (RLS-friendly)
   const since = new Date()
   since.setDate(since.getDate() - (Number(days) - 1))
   since.setHours(0, 0, 0, 0)
 
-  // Aggregate from app_opens (user_id + created_at)
   const { data, error } = await sb
     .from('app_opens')
     .select('user_id, created_at')
@@ -75,12 +83,18 @@ async function fetchUsersForDay(dateKey) {
 
   const ids = Array.from(new Set((opens || []).map(p => p.user_id))).filter(Boolean)
   if (!ids.length) return []
-  const { data: users } = await sb
-    .from('users')
-    .select('id, username, display_name, avatar_url, is_verified, last_login_at')
-    .in('id', ids)
-    .limit(500)
-  return users || []
+
+  // Use admin RPC (SECURITY DEFINER) to bypass RLS on user table
+  const { data: users } = await sb.rpc('admin_users_list_full', { p_limit: 500, p_offset: 0, p_search: '' })
+  if (!users) return []
+  return users.filter(u => ids.includes(u.id)).map(u => ({
+    id: u.id,
+    username: u.username,
+    display_name: u.full_name || u.username,
+    avatar_url: u.avatar_url || null,
+    is_verified: u.is_verified,
+    last_login_at: u.last_login_at
+  }))
 }
 
 function computeKpis(series) {

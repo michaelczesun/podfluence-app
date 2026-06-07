@@ -9,45 +9,89 @@ import { showUserDetailModal } from '/lib/panel-actions.js'
 const PALETTE = ['#7c5cff', '#22c1c3', '#fdbb2d', '#ff5e7e', '#3ee8a3', '#ffa057', '#5d9cff', '#c97bff']
 
 async function fetchHashtags() {
-  // Versuche RPC get_trending_hashtags
-  try {
-    const { data, error } = await sb.rpc('get_trending_hashtags')
-    if (!error && data && data.length) {
-      return data.map(t => ({
-        tag: t.tag || t.hashtag || t.name || '',
-        usage_count: t.usage_count || t.count || 0,
-        posts_24h: t.posts_24h || 0,
-        posts_7d: t.posts_7d || 0,
-        last_used_at: t.last_used_at || null,
-        trend: t.trend || 'flat'
-      }))
-    }
-  } catch (_) {}
+  // Try materialized view first (may exist as hashtag_trends or trending_hashtags)
+  for (const viewName of ['hashtag_trends', 'trending_hashtags', 'trending_hashtags_view']) {
+    try {
+      const { data, error } = await sb.from(viewName).select('*').limit(100)
+      if (!error && data && data.length) {
+        return data.map(t => ({
+          tag: t.tag || t.hashtag || t.name || '',
+          usage_count: t.usage_count || t.count || t.total_count || 0,
+          posts_24h: t.posts_24h || t.count_24h || 0,
+          posts_7d: t.posts_7d || t.count_7d || 0,
+          last_used_at: t.last_used_at || t.last_seen_at || null,
+          trend: t.trend || 'flat'
+        }))
+      }
+    } catch (_) {}
+  }
 
-  // Fallback: View trending_hashtags_
-  try {
-    const { data, error } = await sb
-      .from('trending_hashtags_')
-      .select('*')
-      .limit(80)
-    if (!error && data && data.length) {
-      return data.map(t => ({
-        tag: t.tag || t.hashtag || t.name || '',
-        usage_count: t.usage_count || t.count || 0,
-        posts_24h: t.posts_24h || 0,
-        posts_7d: t.posts_7d || 0,
-        last_used_at: t.last_used_at || null,
-        trend: t.trend || 'flat'
-      }))
-    }
-  } catch (_) {}
+  // Fallback: parse hashtags directly from updates table (last 30 days)
+  const since30 = new Date(Date.now() - 30 * 86400000).toISOString()
+  const since24 = new Date(Date.now() - 86400000).toISOString()
+  const since7  = new Date(Date.now() - 7 * 86400000).toISOString()
 
-  return []
+  const { data: posts, error } = await sb
+    .from('updates')
+    .select('content, created_at')
+    .gte('created_at', since30)
+    .limit(5000)
+  if (error) throw error
+
+  const TAG_RE = /#([a-zA-ZäöüÄÖÜß0-9_]+)/g
+  const counts30 = new Map()
+  const counts7  = new Map()
+  const counts24 = new Map()
+  const lastSeen = new Map()
+
+  for (const p of (posts || [])) {
+    const content = p.content || ''
+    const ts = p.created_at || ''
+    const matches = [...content.matchAll(TAG_RE)]
+    for (const m of matches) {
+      const tag = m[1].toLowerCase()
+      counts30.set(tag, (counts30.get(tag) || 0) + 1)
+      if (ts >= since7)  counts7.set(tag,  (counts7.get(tag)  || 0) + 1)
+      if (ts >= since24) counts24.set(tag, (counts24.get(tag) || 0) + 1)
+      if (!lastSeen.has(tag) || ts > lastSeen.get(tag)) lastSeen.set(tag, ts)
+    }
+  }
+
+  return Array.from(counts30.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 80)
+    .map(([tag, usage_count]) => {
+      const c7  = counts7.get(tag)  || 0
+      const c24 = counts24.get(tag) || 0
+      // trend: compare 24h-rate vs 7d-average-daily-rate
+      const daily7 = c7 / 7
+      const trend = c24 > daily7 * 1.3 ? 'up' : c24 < daily7 * 0.5 ? 'down' : 'flat'
+      return {
+        tag,
+        usage_count,
+        posts_24h: c24,
+        posts_7d: c7,
+        last_used_at: lastSeen.get(tag) || null,
+        trend,
+      }
+    })
 }
 
-async function fetchPostsForTag(_tag) {
-  // posts-Tabelle existiert nicht im Schema — Empty-State zurückgeben
-  return []
+async function fetchPostsForTag(tag) {
+  const since = new Date(Date.now() - 30 * 86400000).toISOString()
+  const { data, error } = await sb
+    .from('updates')
+    .select('id, user_id, content, created_at, likes_count, comments_count, users:user_id(id, username, avatar_url)')
+    .gte('created_at', since)
+    .ilike('content', `%#${tag}%`)
+    .order('created_at', { ascending: false })
+    .limit(50)
+  if (error) throw error
+  return (data || []).map(p => ({
+    ...p,
+    like_count: p.likes_count || 0,
+    comment_count: p.comments_count || 0,
+  }))
 }
 
 function bubbleCloud(items) {
@@ -125,8 +169,8 @@ async function openTagDrawer(tag) {
   if (!posts.length) {
     body.innerHTML = glassCard({
       content: `<div class="empty-state" style="padding:24px;text-align:center">
-        <div class="empty-icon">${iconHtml('alert')}</div>
-        <p>Daten kommen sobald die Tabelle <strong>posts</strong> angelegt ist</p>
+        <div class="empty-icon">${iconHtml('hash')}</div>
+        <p>Keine Posts mit <strong>#${htmlEscape(tag)}</strong> in den letzten 30 Tagen gefunden.</p>
       </div>`
     })
     return

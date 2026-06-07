@@ -429,8 +429,33 @@ export default {
             <div><div style="font-size:.72rem;color:#9aa0a6;text-transform:uppercase;letter-spacing:.05em">Neu 30T</div><div style="font-weight:700;font-size:1.2rem;color:#10b981">+${fmtNumber(meta?.recent || 0)}</div></div>
             <div><div style="font-size:.72rem;color:#9aa0a6;text-transform:uppercase;letter-spacing:.05em">Region</div><div style="font-weight:700;font-size:.95rem;padding-top:4px">${htmlEscape(regionOf(code))}</div></div>
           </div>
-          ${renderUsersFromCountryEmptyState()}
+          <div id="country-users-list"><div class="muted" style="padding:20px;text-align:center">Lade User…</div></div>
         `
+        try {
+          const { data: users } = await sb.rpc('admin_users_list_full', { p_limit: 50, p_offset: 0, p_search: '' })
+          const filtered = (users || []).filter(u => (u.country || '').toUpperCase() === code)
+          const listEl = body.querySelector('#country-users-list')
+          if (!listEl) return
+          if (!filtered.length) {
+            listEl.innerHTML = '<div class="muted" style="padding:20px;text-align:center">Keine User für dieses Land gefunden.</div>'
+          } else {
+            listEl.innerHTML = filtered.map(u => `
+              <div class="drawer-user-row" data-uid="${htmlEscape(u.id)}">
+                <div class="drawer-avatar">${htmlEscape((u.username || u.full_name || '?')[0].toUpperCase())}</div>
+                <div class="drawer-user-meta">
+                  <div class="drawer-user-name">${htmlEscape(u.full_name || u.username || 'Unbekannt')}${u.is_verified ? '<span class="badge-mini verified">✓</span>' : ''}${u.is_premium ? '<span class="badge-mini premium">PRO</span>' : ''}</div>
+                  <div style="font-size:.75rem;color:#9aa0a6">@${htmlEscape(u.username || '')} · ${htmlEscape(u.type || '')}</div>
+                </div>
+              </div>
+            `).join('')
+            listEl.querySelectorAll('[data-uid]').forEach(row => {
+              row.addEventListener('click', () => { try { showUserDetailModal(row.dataset.uid) } catch(_){} })
+            })
+          }
+        } catch (e) {
+          const listEl = body.querySelector('#country-users-list')
+          if (listEl) listEl.innerHTML = `<div class="muted" style="padding:20px;text-align:center">Fehler: ${htmlEscape(e.message || String(e))}</div>`
+        }
       } catch (err) {
         body.innerHTML = renderError(err)
       }

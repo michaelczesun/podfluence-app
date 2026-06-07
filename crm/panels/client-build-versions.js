@@ -29,9 +29,15 @@ function colorFor(rank) {
 
 // ---------- Daten laden ----------
 async function fetchVersionData() {
-  // RPC crm_app_versions_in_field und Tabelle user_devices existieren noch nicht im Schema.
-  // Sobald sie angelegt sind, diese Funktion reaktivieren.
-  return []
+  // admin_build_versions → [{ version, count }]
+  const { data, error } = await sb.rpc('admin_build_versions')
+  if (error) throw error
+  return (data || []).map(r => ({
+    version: String(r.version || 'unbekannt'),
+    user_count: Number(r.count || 0),
+    platforms: {},
+    last_seen: null
+  }))
 }
 
 function normalize(rows) {
@@ -47,9 +53,10 @@ function normalize(rows) {
 }
 
 async function fetchUsersOnVersion(version) {
-  // RPC crm_users_on_app_version und Tabelle user_devices existieren noch nicht im Schema.
-  // Sobald sie angelegt sind, diese Funktion reaktivieren.
-  return []
+  // Load all users and filter by client_build_version field
+  const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' })
+  if (error) throw error
+  return (data || []).filter(u => String(u.client_build_version || '') === String(version))
 }
 
 export default {

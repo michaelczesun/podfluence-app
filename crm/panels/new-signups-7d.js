@@ -38,17 +38,21 @@ async function fetchSignupsInRange(rangeDays) {
   since.setDate(since.getDate() - (rangeDays - 1))
   since.setHours(0, 0, 0, 0)
 
-  const { data, error } = await sb.rpc('admin_list_users_full')
-
+  const { data, error } = await sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: rangeDays })
   if (error) throw error
-  const rows = (data || []).filter((r) => r.created_at && new Date(r.created_at) >= since)
-  rows.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  // admin_daily_series returns [{ date, value }] — expand into synthetic rows for bucketing
+  const rows = []
+  for (const d of (data || [])) {
+    const count = Number(d.value) || 0
+    for (let i = 0; i < count; i++) {
+      rows.push({ id: `${d.date}-${i}`, created_at: `${d.date}T12:00:00Z`, username: null, display_name: null, is_verified: false, avatar_url: null })
+    }
+  }
   return rows
 }
 
 async function fetchLatestSignups(limit = 20) {
-  const { data, error } = await sb.rpc('admin_list_users_full')
-
+  const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: limit, p_offset: 0, p_search: '' })
   if (error) throw error
   const rows = (data || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   return rows.slice(0, limit)

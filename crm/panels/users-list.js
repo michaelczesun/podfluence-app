@@ -24,20 +24,39 @@ const state = {
 // Tabelle 'users' existiert nicht im Schema — alle user-Fetches laufen über admin_list_users_full (RPC)
 // fetchTotals und fetchSignupSeries zeigen Empty-State, fetchPage nutzt das RPC
 
+// _allRows cache for totals/series (loaded once, client-filtered per page)
+let _allRows = null
+
 async function fetchTotals() {
-  // Keine direkte users-Tabelle — Counts aus admin_list_users_full nicht möglich ohne Full-Scan
-  // Wir setzen Totals auf 0 und lassen das RPC-Result die Anzeige befüllen
-  state.totals = { all: 0, verified: 0, podcasters: 0, inactive: 0, admins: 0 }
+  if (!_allRows) await _loadAllRows()
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  state.totals = {
+    all: _allRows.length,
+    verified: _allRows.filter(r => r.is_verified).length,
+    podcasters: _allRows.filter(r => r.type === 'podcaster' || r.type === 'both').length,
+    admins: _allRows.filter(r => r.is_app_admin).length,
+    inactive: _allRows.filter(r => r.last_login_at && r.last_login_at < sevenDaysAgo).length
+  }
+}
+
+async function _loadAllRows() {
+  const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' })
+  if (error) throw error
+  _allRows = data || []
 }
 
 async function fetchSignupSeries() {
-  // Keine users-Tabelle → leere Serie
+  if (!_allRows) await _loadAllRows()
+  const since = new Date(Date.now() - 30 * 86400000).toISOString()
   const buckets = {}
   for (let i = 29; i >= 0; i--) {
     const d = new Date(Date.now() - i * 86400000)
-    const key = d.toISOString().slice(0, 10)
-    buckets[key] = 0
+    buckets[d.toISOString().slice(0, 10)] = 0
   }
+  _allRows.filter(r => r.created_at && r.created_at >= since).forEach(r => {
+    const key = (r.created_at || '').slice(0, 10)
+    if (buckets[key] !== undefined) buckets[key]++
+  })
   state.signupSeries = Object.entries(buckets).map(([date, count]) => ({ date, value: count }))
 }
 
@@ -51,45 +70,38 @@ function fetchTypeBreakdown() {
 }
 
 async function fetchPage() {
-  // Nutze admin_list_users_full RPC (users-Tabelle existiert nicht im Schema)
-  const { data, error } = await sb.rpc('admin_list_users_full')
+  // Server-side search via RPC, client-side filter for verified/podcaster/admin/inactive
+  const { data, error } = await sb.rpc('admin_users_list_full', {
+    p_limit: 5000,
+    p_offset: 0,
+    p_search: state.search?.trim() || ''
+  })
   if (error) throw error
 
   let rows = data || []
-
-  if (state.search?.trim()) {
-    const s = state.search.trim().toLowerCase()
-    rows = rows.filter(r =>
-      (r.username || '').toLowerCase().includes(s) ||
-      (r.display_name || '').toLowerCase().includes(s) ||
-      (r.email || '').toLowerCase().includes(s)
-    )
-  }
+  _allRows = rows  // refresh cache
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
   if (state.filter === 'verified') rows = rows.filter(r => r.is_verified)
-  else if (state.filter === 'podcaster') rows = rows.filter(r => r.is_podcaster)
-  else if (state.filter === 'admin') rows = rows.filter(r => r.is_admin)
-  else if (state.filter === 'inactive') rows = rows.filter(r => r.last_active_at && r.last_active_at < sevenDaysAgo)
+  else if (state.filter === 'podcaster') rows = rows.filter(r => r.type === 'podcaster' || r.type === 'both')
+  else if (state.filter === 'admin') rows = rows.filter(r => r.is_app_admin)
+  else if (state.filter === 'inactive') rows = rows.filter(r => r.last_login_at && r.last_login_at < sevenDaysAgo)
 
-  // Totals aus RPC-Result berechnen
-  const allRows = data || []
   state.totals = {
-    all: allRows.length,
-    verified: allRows.filter(r => r.is_verified).length,
-    podcasters: allRows.filter(r => r.is_podcaster).length,
-    admins: allRows.filter(r => r.is_admin).length,
-    inactive: allRows.filter(r => r.last_active_at && r.last_active_at < sevenDaysAgo).length
+    all: _allRows.length,
+    verified: _allRows.filter(r => r.is_verified).length,
+    podcasters: _allRows.filter(r => r.type === 'podcaster' || r.type === 'both').length,
+    admins: _allRows.filter(r => r.is_app_admin).length,
+    inactive: _allRows.filter(r => r.last_login_at && r.last_login_at < sevenDaysAgo).length
   }
 
-  // Signup-Serie aus RPC-Daten
   const since = new Date(Date.now() - 30 * 86400000).toISOString()
   const buckets = {}
   for (let i = 29; i >= 0; i--) {
     const d = new Date(Date.now() - i * 86400000)
     buckets[d.toISOString().slice(0, 10)] = 0
   }
-  allRows.filter(r => r.created_at && r.created_at >= since).forEach(r => {
+  _allRows.filter(r => r.created_at && r.created_at >= since).forEach(r => {
     const key = (r.created_at || '').slice(0, 10)
     if (buckets[key] !== undefined) buckets[key]++
   })
@@ -157,6 +169,7 @@ export default {
 async function loadAll(container) {
   const body = container.querySelector('#ul-body')
   if (!body) return
+  _allRows = null  // reset cache so next fetch is fresh
   state.loading = true
   body.innerHTML = skeletonLoader({ rows: 8 })
 
@@ -185,7 +198,7 @@ function renderShell(body) {
       <div class="ul-hero glass-card">
         ${statHero({
           label: 'Nutzer gesamt',
-          value: 0,
+          value: state.totals.all,
           icon: 'users',
           trend: `+${state.signupSeries.slice(-7).reduce((s, p) => s + p.value, 0)} diese Woche`
         })}
@@ -268,7 +281,7 @@ function renderTable() {
       </tr>
     </thead>`
   const rowsHtml = state.rows.map(r => {
-    const name = r.display_name || r.username || '—'
+    const name = r.full_name || r.username || '—'
     const initials = (name[0] || '?').toUpperCase()
     const avatar = r.avatar_url
       ? `<img src="${htmlEscape(r.avatar_url)}" alt="" class="ul-avatar" />`
@@ -276,7 +289,7 @@ function renderTable() {
     const badges = badgesFor(r)
     const checked = state.selected.has(r.id) ? 'checked' : ''
     const joined = r.created_at ? htmlEscape(fmtDateTime(r.created_at)) : '—'
-    const lastActive = r.last_active_at ? htmlEscape(fmtRelativeTime(r.last_active_at)) : '<span class="muted">nie</span>'
+    const lastActive = r.last_login_at ? htmlEscape(fmtRelativeTime(r.last_login_at)) : '<span class="muted">nie</span>'
     return `
       <tr data-id="${r.id}" class="${state.selected.has(r.id) ? 'is-selected' : ''}">
         <td class="col-check"><input type="checkbox" class="ul-row-check" ${checked} /></td>
@@ -303,11 +316,10 @@ function renderTable() {
 
 function badgesFor(r) {
   const out = []
-  if (r.is_admin) out.push(`<span class="badge badge-pink">Admin</span>`)
+  if (r.is_app_admin) out.push(`<span class="badge badge-pink">Admin</span>`)
   if (r.is_verified) out.push(`<span class="badge badge-green">Verifiziert</span>`)
-  if (r.is_podcaster) out.push(`<span class="badge badge-blue">Podcaster</span>`)
+  if (r.type === 'podcaster' || r.type === 'both') out.push(`<span class="badge badge-blue">Podcaster</span>`)
   if (r.is_premium) out.push(`<span class="badge badge-yellow">Premium</span>`)
-  if (r.is_banned) out.push(`<span class="badge badge-red">Gebannt</span>`)
   if (!out.length) out.push(`<span class="badge badge-muted">Standard</span>`)
   return out.join(' ')
 }
@@ -590,15 +602,16 @@ function toCsvRow(r) {
   return {
     id: r.id,
     username: r.username || '',
-    display_name: r.display_name || '',
+    full_name: r.full_name || '',
     email: r.email || '',
+    type: r.type || '',
     is_verified: r.is_verified ? 'ja' : 'nein',
-    is_podcaster: r.is_podcaster ? 'ja' : 'nein',
-    is_admin: r.is_admin ? 'ja' : 'nein',
+    is_app_admin: r.is_app_admin ? 'ja' : 'nein',
     is_premium: r.is_premium ? 'ja' : 'nein',
-    is_banned: r.is_banned ? 'ja' : 'nein',
+    country: r.country || '',
     created_at: r.created_at || '',
-    last_active_at: r.last_active_at || ''
+    last_login_at: r.last_login_at || '',
+    client_build_version: r.client_build_version || ''
   }
 }
 

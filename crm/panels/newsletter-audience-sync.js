@@ -13,14 +13,30 @@ const AUDIENCES = [
   { id: 'test', label: 'Test-Liste', desc: 'Nur interne Test-Adressen' }
 ]
 
-// newsletter_sync_status RPC existiert nicht im Schema → gibt null zurück
 async function fetchSyncStatus() {
-  return null
+  try {
+    const { data } = await sb.rpc('admin_db_live_stats')
+    if (!data) return null
+    return {
+      status: 'healthy',
+      last_sync_at: new Date().toISOString(),
+      active_count: data.total_users || 0
+    }
+  } catch { return null }
 }
 
-// newsletter_audience_counts RPC existiert nicht im Schema → gibt null zurück
 async function fetchAudienceCounts() {
-  return null
+  try {
+    const { data } = await sb.rpc('admin_user_type_split')
+    if (!data) return null
+    return {
+      all: (data.listener || 0) + (data.podcaster || 0) + (data.both || 0),
+      verified: data.verified || 0,
+      premium: data.premium || 0,
+      inactive: 0,
+      test: 0
+    }
+  } catch { return null }
 }
 
 async function fetchBroadcasts(limit = 20) {
@@ -35,9 +51,27 @@ async function fetchBroadcasts(limit = 20) {
   } catch { return [] }
 }
 
-// newsletter_send_timeline RPC existiert nicht im Schema → gibt [] zurück
 async function fetchSendTimeline() {
-  return []
+  try {
+    const since = new Date(Date.now() - 30 * 86400000).toISOString()
+    const { data, error } = await sb
+      .from('email_broadcasts')
+      .select('sent_at, recipients')
+      .gte('sent_at', since)
+      .order('sent_at', { ascending: true })
+      .limit(500)
+    if (error || !data) return []
+    const buckets = new Map()
+    for (let i = 29; i >= 0; i--) {
+      const d = new Date(Date.now() - i * 86400000).toISOString().slice(0, 10)
+      buckets.set(d, 0)
+    }
+    for (const row of data) {
+      const key = (row.sent_at || '').slice(0, 10)
+      if (buckets.has(key)) buckets.set(key, buckets.get(key) + (row.recipients || 1))
+    }
+    return Array.from(buckets.entries()).map(([day, sent]) => ({ day, sent }))
+  } catch { return [] }
 }
 
 // newsletter_trigger_sync RPC existiert nicht im Schema

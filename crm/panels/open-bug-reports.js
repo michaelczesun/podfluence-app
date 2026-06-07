@@ -89,7 +89,7 @@ async function fetchData() {
   let userMap = {}
   if (userIds.length) {
     try {
-      const { data: us } = await sb.rpc('admin_list_users_full', {})
+      const { data: us } = await sb.rpc('admin_users_list_full', { p_limit: 1000, p_offset: 0, p_search: '' })
       if (us) {
         const filtered = us.filter(u => userIds.includes(u.id))
         userMap = Object.fromEntries(filtered.map(u => [u.id, u]))

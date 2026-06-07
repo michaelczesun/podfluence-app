@@ -16,8 +16,7 @@ const DURATIONS = [
 ]
 
 async function fetchUsers() {
-  // admin_list_users_full returns all users with full profile data
-  const { data, error } = await sb.rpc('admin_list_users_full')
+  const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' })
   if (error) throw error
   const all = data || []
   return {
@@ -37,7 +36,7 @@ async function fetchUsers() {
 }
 
 function avatarHtml(u) {
-  const initials = (u.display_name || u.username || '?').slice(0, 2).toUpperCase()
+  const initials = (u.full_name || u.username || '?').slice(0, 2).toUpperCase()
   if (u.avatar_url) {
     return `<img src="${htmlEscape(u.avatar_url)}" alt="" class="row-avatar" />`
   }
@@ -56,7 +55,7 @@ function userRowHtml(u, kind) {
       ${avatarHtml(u)}
       <div class="user-row-main">
         <div class="user-row-name">
-          <span class="name">${htmlEscape(u.display_name || u.username || 'Unbekannt')}</span>
+          <span class="name">${htmlEscape(u.full_name || u.username || 'Unbekannt')}</span>
           ${badge}
         </div>
         <div class="user-row-sub">@${htmlEscape(u.username || '—')} · ${sub}</div>
@@ -131,7 +130,7 @@ function openBulkGrantModal(onDone) {
 
   const renderSelected = () => Array.from(selected.values()).map(u => `
     <span class="chip" data-id="${u.id}">
-      ${htmlEscape(u.display_name || u.username || '?')}
+      ${htmlEscape(u.full_name || u.username || '?')}
       <button class="chip-x" data-id="${u.id}">×</button>
     </span>
   `).join('')
@@ -176,7 +175,7 @@ function openBulkGrantModal(onDone) {
           <div class="picker-row ${selected.has(u.id) ? 'is-selected' : ''}" data-id="${u.id}">
             ${avatarHtml(u)}
             <div class="picker-row-main">
-              <div>${htmlEscape(u.display_name || u.username || '?')}</div>
+              <div>${htmlEscape(u.full_name || u.username || '?')}</div>
               <div class="muted">@${htmlEscape(u.username || '—')}${u.is_premium ? ' · bereits Premium' : ''}</div>
             </div>
             <div class="picker-row-check">${selected.has(u.id) ? iconHtml('check') : ''}</div>
@@ -437,7 +436,7 @@ export default {
         const q = (input.value || '').toLowerCase().trim()
         const filtered = !q ? src : src.filter(u =>
           (u.username || '').toLowerCase().includes(q) ||
-          (u.display_name || '').toLowerCase().includes(q))
+          (u.full_name || '').toLowerCase().includes(q))
         list.innerHTML = filtered.length === 0
           ? emptyListHtml(kind === 'premium' ? 'Premium' : 'Verified', '', '')
           : filtered.map(u => userRowHtml(u, kind)).join('')
@@ -465,12 +464,12 @@ export default {
         const u = (kind === 'premium' ? state.premium : state.verified).find(x => x.id === id)
         if (!u) return
         drawer({
-          title: u.display_name || u.username || 'Nutzer',
+          title: u.full_name || u.username || 'Nutzer',
           width: 420,
           body: `
             <div class="drawer-user">
               ${avatarHtml(u)}
-              <div class="drawer-name">${htmlEscape(u.display_name || u.username || '—')}</div>
+              <div class="drawer-name">${htmlEscape(u.full_name || u.username || '—')}</div>
               <div class="drawer-handle muted">@${htmlEscape(u.username || '—')}</div>
             </div>
             <div class="kv-list">
@@ -523,8 +522,8 @@ export default {
     })
     container.querySelector('#btn-csv')?.addEventListener('click', () => {
       const rows = [
-        ...state.verified.map(u => ({ type: 'verified', id: u.id, username: u.username, display_name: u.display_name, since: u.verified_at, is_premium: '' })),
-        ...state.premium.map(u  => ({ type: 'premium',  id: u.id, username: u.username, display_name: u.display_name, since: u.premium_granted_at, is_premium: u.is_premium || 'lifetime' })),
+        ...state.verified.map(u => ({ type: 'verified', id: u.id, username: u.username, display_name: u.full_name, since: u.verified_at, is_premium: '' })),
+        ...state.premium.map(u  => ({ type: 'premium',  id: u.id, username: u.username, display_name: u.full_name, since: u.premium_granted_at, is_premium: u.is_premium || 'lifetime' })),
       ]
       exportCsv(rows, 'verified-premium.csv')
       toast('CSV exportiert', 'success')

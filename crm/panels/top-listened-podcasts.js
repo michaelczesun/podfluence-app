@@ -22,9 +22,27 @@ function last7Days() {
   return out
 }
 
-// listening_sessions does not exist — replaced with empty-state stub
 async function fetchSessions(days = 7) {
-  return []
+  const since = new Date(Date.now() - days * DAY_MS).toISOString()
+  // episode_listening_pulses has: user_id, episode_id, minutes, created_at
+  // episodes has: id, title, podcast_id; podcasts has: id, title, cover_url, host_user_id
+  const { data, error } = await sb
+    .from('episode_listening_pulses')
+    .select('user_id, episode_id, minutes, created_at, episodes:episode_id(id, title, podcast_id, podcasts:podcast_id(id, title, cover_url, host_user_id))')
+    .gte('created_at', since)
+    .limit(100000)
+  if (error) throw error
+  // Remap to shape aggregatePodcasts expects: r.episodes.podcasts
+  return (data || []).map(r => ({
+    user_id: r.user_id,
+    episode_id: r.episode_id,
+    duration_seconds: (Number(r.minutes) || 0) * 60,
+    started_at: r.created_at,
+    episodes: r.episodes ? {
+      ...r.episodes,
+      podcasts: r.episodes.podcasts || null,
+    } : null,
+  }))
 }
 
 function aggregatePodcasts(rows) {
@@ -132,9 +150,9 @@ export default {
         if (aggregated.length === 0) {
           body.innerHTML = `
             <div class="empty-state glass-card">
-              <div class="empty-icon">${iconHtml('alert')}</div>
-              <h3>Daten kommen sobald die Tabelle listening_sessions angelegt ist</h3>
-              <p>Sobald Nutzer Episoden anhören und die Tabelle verfügbar ist, erscheint das Leaderboard hier.</p>
+              <div class="empty-icon">${iconHtml('headphones')}</div>
+              <h3>Noch keine Hör-Aktivität in den letzten ${days} Tagen</h3>
+              <p>Sobald Nutzer Episoden anhören, erscheint das Leaderboard hier.</p>
               <button class="btn btn-primary" data-act="reload">Erneut laden</button>
             </div>`
           body.querySelector('[data-act="reload"]')?.addEventListener('click', load)
@@ -323,15 +341,52 @@ export default {
         const root = d.contentEl || d.body || d.el || d
 
         try {
-          const detail = await fetchPodcastDetail(podcastId)
+          const p = aggregated.find(x => x.id === podcastId)
+          const episodeRows = rawRows
+            .filter(r => r.episodes?.podcast_id === podcastId || r.episodes?.podcasts?.id === podcastId)
+          const byEpisode = new Map()
+          for (const r of episodeRows) {
+            const epId = r.episode_id
+            if (!epId) continue
+            if (!byEpisode.has(epId)) {
+              byEpisode.set(epId, {
+                id: epId,
+                title: r.episodes?.title || 'Unbekannte Episode',
+                plays: 0,
+                minutes: 0,
+              })
+            }
+            const o = byEpisode.get(epId)
+            o.plays += 1
+            o.minutes += (r.duration_seconds || 0) / 60
+          }
+          const topEps = Array.from(byEpisode.values())
+            .sort((a, b) => b.minutes - a.minutes)
+            .slice(0, 15)
 
-          // podcasts table not yet in DB — show empty-state in drawer
           const html = `
             <div class="drawer-content-inner" style="padding:20px">
-              <div class="empty-state glass-card">
-                <div class="empty-icon">${iconHtml('alert')}</div>
-                <h3>Daten kommen sobald die Tabelle podcasts oder das RPC fetchPodcastDetail angelegt ist</h3>
+              <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px">
+                ${p?.cover ? `<img src="${htmlEscape(p.cover)}" style="width:56px;height:56px;border-radius:10px;object-fit:cover">` : ''}
+                <div>
+                  <div style="font-weight:700;font-size:17px">${htmlEscape(p?.title || podcastId)}</div>
+                  <div style="color:var(--muted);font-size:13px">${fmtNumber(p?.totalMinutes || 0)} Hörmin · ${fmtNumber(p?.totalPlays || 0)} Plays · letzte 7 Tage</div>
+                </div>
               </div>
+              ${topEps.length ? `
+              <h4 style="margin:0 0 10px;font-size:14px">Top Episodes</h4>
+              <table class="data-table" style="width:100%">
+                <thead><tr><th>#</th><th>Episode</th><th style="text-align:right">Min</th><th style="text-align:right">Plays</th></tr></thead>
+                <tbody>
+                  ${topEps.map((ep, i) => `
+                    <tr>
+                      <td style="color:var(--muted)">${i + 1}</td>
+                      <td>${htmlEscape(ep.title)}</td>
+                      <td style="text-align:right">${Math.round(ep.minutes)}</td>
+                      <td style="text-align:right">${ep.plays}</td>
+                    </tr>`).join('')}
+                </tbody>
+              </table>` : `<div class="empty-state" style="padding:24px;text-align:center">Keine Episode-Daten verfügbar.</div>`}
             </div>
           `
           const loadingEl = root.querySelector ? root.querySelector('#drawerLoading') : null

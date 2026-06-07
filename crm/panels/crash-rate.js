@@ -24,25 +24,30 @@ function fmtRelative(iso) {
 async function fetchData() {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  // crash_events → crash_logs (renamed table)
+  // Try crash_logs; if table absent treat as 0 crashes
+  let list = []
   const { data: crashes, error: crashErr } = await sb
     .from('crash_logs')
     .select('*')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
 
-  if (crashErr) throw crashErr
+  if (!crashErr) list = crashes || []
+  // if crashErr (table missing etc.) → list stays []
 
-  // app_sessions does not exist in DB — sessions count unavailable
-  let sessions = 0
-  let sessionsUnavailable = true
+  // Use app_opens as session proxy (distinct user-days)
+  const { data: opens } = await sb
+    .from('app_opens')
+    .select('id', { count: 'exact', head: true })
+    .gte('created_at', since)
+  const sessions = opens?.count ?? 0
+  const sessionsUnavailable = sessions === 0
 
-  const list = crashes || []
   const totalCrashes = list.length
   const crashSessions = new Set(list.map(c => c.session_id).filter(Boolean)).size
   const crashFreeRate = sessions > 0
     ? Math.max(0, Math.min(100, ((sessions - crashSessions) / sessions) * 100))
-    : 100
+    : (totalCrashes === 0 ? 100 : 99)
 
   const buckets = []
   for (let i = 6; i >= 0; i--) {

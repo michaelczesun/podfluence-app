@@ -19,14 +19,26 @@ const STATUS_COLORS = {
   verified: '#10b981'
 }
 
-// podcasts-Tabelle existiert nicht im Schema — fetchPodcasts liefert leeres Array
-async function fetchPodcasts(_filter) {
-  return []
+async function fetchPodcasts(filter) {
+  let q = sb
+    .from('podcasts')
+    .select('id, title, rss_url, cover_url, verification_status, owner_email, reject_reason, verify_token_sent_at, created_at')
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (filter && filter !== 'all') q = q.eq('verification_status', filter)
+  const { data, error } = await q
+  if (error) throw error
+  return data || []
 }
 
-// podcasts-Tabelle existiert nicht im Schema — fetchStats liefert leeres Array
 async function fetchStats() {
-  return []
+  const { data, error } = await sb
+    .from('podcasts')
+    .select('id, verification_status, created_at')
+    .order('created_at', { ascending: false })
+    .limit(2000)
+  if (error) throw error
+  return data || []
 }
 
 function statusBadge(status) {
@@ -97,13 +109,14 @@ function emptyState(filter) {
   </div>`
 }
 
-function tableEmptyState(tableName) {
+function tableEmptyState() {
   return `
   <div style="grid-column:1/-1;padding:60px 20px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:16px;">
-    <div style="width:72px;height:72px;border-radius:50%;background:rgba(245,158,11,.1);display:flex;align-items:center;justify-content:center;font-size:32px;color:#f59e0b;">
-      ${iconHtml('alert')}
+    <div style="width:72px;height:72px;border-radius:50%;background:rgba(16,185,129,.1);display:flex;align-items:center;justify-content:center;font-size:32px;color:#10b981;">
+      ${iconHtml('check-circle')}
     </div>
-    <p style="margin:0;color:#aaa;font-size:13px;max-width:420px;">Daten kommen sobald die Tabelle <code>${htmlEscape(tableName)}</code> angelegt ist.</p>
+    <h3 style="margin:0;color:#fff;font-size:18px;">Keine Podcasts in dieser Ansicht</h3>
+    <p style="margin:0;color:#888;font-size:13px;max-width:380px;">Keine Podcasts mit diesem Status vorhanden.</p>
   </div>`
 }
 
@@ -308,7 +321,7 @@ export default {
           countLabel.textContent = `${fmtNumber(pods.length)} Einträge`
 
           if (!pods.length) {
-            grid.innerHTML = tableEmptyState('podcasts')
+            grid.innerHTML = tableEmptyState()
             return
           }
           grid.innerHTML = pods.map(cardHtml).join('')
@@ -380,16 +393,30 @@ export default {
               </div>
               <label style="font-size:12px;color:#aaa;">Ablehnungs-Grund</label>
               <textarea id="reject-reason" rows="4" placeholder="Z.B. RSS-Feed nicht erreichbar, Owner-E-Mail im Feed stimmt nicht überein, ..." style="width:100%;padding:10px;background:#0a0a0a;border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#fff;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
-              <div class="glass-card" style="padding:14px 16px;border-radius:10px;display:flex;align-items:center;gap:10px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.2);">
-                ${iconHtml('alert')} <span style="font-size:12px;color:#fcd34d;">Daten kommen sobald das RPC <code>reject_podcast</code> angelegt ist.</span>
-              </div>
             </div>
           `,
           actions: [
-            { label: 'Schließen', style: 'ghost', value: false }
+            { label: 'Abbrechen', style: 'ghost', value: false },
+            { label: 'Ablehnen', style: 'danger', value: true }
           ],
-          onAction: async (_val, m) => {
-            m.close()
+          onAction: async (val, m) => {
+            if (!val) { m.close(); return }
+            const reason = document.querySelector('#reject-reason')?.value?.trim() || ''
+            try {
+              const { error } = await sb.from('podcasts').update({
+                verification_status: 'rejected',
+                reject_reason: reason || null
+              }).eq('id', id)
+              if (error) throw error
+              try {
+                await sb.functions.invoke('send-podcast-verify-mail', { body: { podcast_id: id, action: 'reject', reason } })
+              } catch (_) {}
+              toast('Podcast abgelehnt', { type: 'success' })
+              m.close()
+              loadAll()
+            } catch (e) {
+              toast('Fehler: ' + (e.message || 'unbekannt'), { type: 'error' })
+            }
           }
         })
       }

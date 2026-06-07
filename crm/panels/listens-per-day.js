@@ -7,13 +7,15 @@ import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js'
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
+// episode_listening_pulses: columns user_id, episode_id, minutes, created_at
 async function fetchDaily(days = 30) {
   const since = new Date(Date.now() - days * 86400000).toISOString()
   const { data, error } = await sb
-    .from('listening_activity')
-    .select('*')
-    .gte('started_at', since)
-    .order('started_at', { ascending: true })
+    .from('episode_listening_pulses')
+    .select('user_id, episode_id, minutes, created_at')
+    .gte('created_at', since)
+    .order('created_at', { ascending: true })
+    .limit(100000)
   if (error) throw error
   return data || []
 }
@@ -21,12 +23,12 @@ async function fetchDaily(days = 30) {
 function aggregateDaily(rows) {
   const byDay = new Map()
   for (const r of rows) {
-    const d = new Date(r.started_at)
-    const key = d.toISOString().slice(0, 10)
+    const key = (r.created_at || '').slice(0, 10)
+    if (!key) continue
     if (!byDay.has(key)) byDay.set(key, { date: key, plays: 0, seconds: 0 })
     const o = byDay.get(key)
     o.plays += 1
-    o.seconds += r.duration_seconds || 0
+    o.seconds += (Number(r.minutes) || 0) * 60
   }
   return Array.from(byDay.values()).sort((a, b) => a.date.localeCompare(b.date))
 }
@@ -34,7 +36,7 @@ function aggregateDaily(rows) {
 function aggregateHeatmap(rows) {
   const grid = Array.from({ length: 7 }, () => Array(24).fill(0))
   for (const r of rows) {
-    const d = new Date(r.started_at)
+    const d = new Date(r.created_at)
     const wd = (d.getDay() + 6) % 7
     const h = d.getHours()
     grid[wd][h] += 1
@@ -45,12 +47,13 @@ function aggregateHeatmap(rows) {
 async function fetchTopEpisodesForHour(weekday, hour, days = 30) {
   const since = new Date(Date.now() - days * 86400000).toISOString()
   const { data, error } = await sb
-    .from('listening_activity')
-    .select('*')
-    .gte('started_at', since)
+    .from('episode_listening_pulses')
+    .select('episode_id, created_at')
+    .gte('created_at', since)
+    .limit(50000)
   if (error) throw error
   const filtered = (data || []).filter(r => {
-    const d = new Date(r.started_at)
+    const d = new Date(r.created_at)
     const wd = (d.getDay() + 6) % 7
     return wd === weekday && d.getHours() === hour
   })
@@ -58,10 +61,29 @@ async function fetchTopEpisodesForHour(weekday, hour, days = 30) {
   for (const r of filtered) {
     const id = r.episode_id
     if (!id) continue
-    if (!counts.has(id)) counts.set(id, { id, title: r.episodes?.title || 'Unbekannte Episode', podcast: r.episodes?.podcast_title || '—', plays: 0 })
-    counts.get(id).plays += 1
+    counts.set(id, (counts.get(id) || 0) + 1)
   }
-  return Array.from(counts.values()).sort((a, b) => b.plays - a.plays).slice(0, 10)
+  const top = Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+  // Enrich with episode titles (best-effort)
+  const ids = top.map(([id]) => id)
+  let titles = {}
+  try {
+    const { data: eps } = await sb
+      .from('episodes')
+      .select('id, title, podcast_id, podcasts:podcast_id(title)')
+      .in('id', ids)
+    for (const ep of (eps || [])) {
+      titles[ep.id] = { title: ep.title || 'Unbekannte Episode', podcast: ep.podcasts?.title || '—' }
+    }
+  } catch (_) {}
+  return top.map(([id, plays]) => ({
+    id,
+    title: titles[id]?.title || 'Unbekannte Episode',
+    podcast: titles[id]?.podcast || '—',
+    plays,
+  }))
 }
 
 export default {
