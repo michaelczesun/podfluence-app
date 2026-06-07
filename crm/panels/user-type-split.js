@@ -71,7 +71,7 @@ export default {
       // FIX #1: Use correct RPC param names — without p_ prefix: limit, offset, search
       const [splitRes, usersRes] = await Promise.all([
         sb.rpc('admin_user_type_split'),
-        sb.rpc('admin_users_list_full', { limit: 5000, offset: 0, search: '' })
+        sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' })
       ])
       if (splitRes.error) throw splitRes.error
       if (usersRes.error) throw usersRes.error

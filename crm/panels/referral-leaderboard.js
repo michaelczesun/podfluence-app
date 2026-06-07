@@ -15,7 +15,7 @@ async function fetchLeaderboard() {
   // Kein referral_leaderboard-RPC vorhanden — direkt aus referrals-Tabelle aggregieren
   const { data: refs, error } = await sb
     .from('referrals')
-    .select('inviter_id, invited_user_id, created_at')
+    .select('inviter_id, invitee_id, created_at')
     .order('created_at', { ascending: false })
     .limit(5000)
   if (error) throw error
@@ -87,12 +87,12 @@ async function fetchReferredUsers(inviterId) {
   // FIX: select('*') → konkrete Spalten
   const { data, error } = await sb
     .from('referrals')
-    .select('id, inviter_id, invited_user_id, created_at, status, bonus_granted')
+    .select('id, inviter_id, invitee_id, created_at, status, bonus_granted')
     .eq('inviter_id', inviterId)
     .order('created_at', { ascending: false })
     .limit(100)
   if (error) return []
-  const ids = (data || []).map(r => r.invited_user_id).filter(Boolean)
+  const ids = (data || []).map(r => r.invitee_id).filter(Boolean)
   let users = []
   if (ids.length) {
     try {
@@ -107,7 +107,7 @@ async function fetchReferredUsers(inviterId) {
   const um = new Map(users.map(u => [u.id, u]))
   return (data || []).map(r => ({
     ...r,
-    user: um.get(r.invited_user_id) || null,
+    user: um.get(r.invitee_id) || null,
   }))
 }
 
@@ -239,7 +239,7 @@ async function openInviterDrawer(row) {
         const statusText = r.status ? htmlEscape(r.status) : 'aktiv'
         const bonusText = r.bonus_granted ? ' · 🎁 Bonus' : ''
         return `
-          <div class="referred-row" data-uid="${htmlEscape(r.invited_user_id || '')}">
+          <div class="referred-row" data-uid="${htmlEscape(r.invitee_id || '')}">
             ${av}
             <div class="referred-meta">
               <div>${htmlEscape(u.display_name || u.username || 'Gelöscht')} ${u.is_verified ? '<span class="verified-badge">✓</span>' : ''}</div>

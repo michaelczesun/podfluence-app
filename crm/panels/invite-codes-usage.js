@@ -19,11 +19,11 @@ const state = {
   sortDir: 'desc',
 }
 
-// FIX (high): join owner and used_by user objects so userCell() renders real usernames
+// FIX (high): join owner and invitee_id user objects so userCell() renders real usernames
 async function fetchCodes() {
   let { data, error } = await sb
     .from('invites')
-    .select('*, owner:users!owner_id(id,username,avatar_url), used:users!used_by(id,username,avatar_url)')
+    .select('*, owner:users!inviter_id(id,username,avatar_url), used:users!invitee_id(id,username,avatar_url)')
     .order('created_at', { ascending: false })
     .limit(2000)
   if (error) throw error
@@ -32,7 +32,7 @@ async function fetchCodes() {
 
 function codeStatus(c) {
   if (c.revoked_at) return 'revoked'
-  if (c.used_at || c.used_by) return 'used'
+  if (c.used_at || c.invitee_id) return 'used'
   return 'unused'
 }
 
@@ -102,11 +102,11 @@ function buildTimeSeries(codes) {
 function topOwners(codes) {
   const m = new Map()
   for (const c of codes) {
-    if (!c.owner_id) continue
-    const k = c.owner_id
+    if (!c.inviter_id) continue
+    const k = c.inviter_id
     if (!m.has(k)) m.set(k, { id: k, name: c.owner?.username || k.slice(0,8), total: 0, used: 0 })
     const o = m.get(k); o.total++
-    if (c.used_at || c.used_by) o.used++
+    if (c.used_at || c.invitee_id) o.used++
   }
   return Array.from(m.values()).sort((a,b)=>b.total-a.total).slice(0,8)
 }
@@ -222,8 +222,8 @@ const panel = {
             exportCsv(state.codes.map(c => ({
               code: c.code,
               status: codeStatus(c),
-              owner: c.owner?.username || c.owner_id || '',
-              used_by: c.used?.username || c.used_by || '',
+              owner: c.owner?.username || c.inviter_id || '',
+              invitee_id: c.used?.username || c.invitee_id || '',
               created_at: c.created_at,
               used_at: c.used_at || '',
               revoked_at: c.revoked_at || '',
@@ -242,8 +242,8 @@ export default panel
 function render(body, container) {
   const codes = state.codes
   const total = codes.length
-  const used = codes.filter(c => c.used_at || c.used_by).length
-  const unused = codes.filter(c => !c.used_at && !c.used_by && !c.revoked_at).length
+  const used = codes.filter(c => c.used_at || c.invitee_id).length
+  const unused = codes.filter(c => !c.used_at && !c.invitee_id && !c.revoked_at).length
   const revoked = codes.filter(c => c.revoked_at).length
   const rate = total ? Math.round(used / total * 100) : 0
 
@@ -424,8 +424,8 @@ function renderTable(body, container) {
               <tr data-id="${htmlEscape(c.id)}" style="border-top:1px solid rgba(255,255,255,.04);transition:background .12s" class="row">
                 <td style="padding:12px"><code style="font-family:'SF Mono',Menlo,monospace;font-size:12px;padding:4px 8px;border-radius:6px;background:rgba(255,255,255,.06);letter-spacing:.5px">${htmlEscape(c.code||c.id?.slice(0,8)||'—')}</code></td>
                 <td style="padding:12px">${statusBadge(s)}</td>
-                <td style="padding:12px">${userCell(c.owner, c.owner_id)}</td>
-                <td style="padding:12px">${userCell(c.used, c.used_by)}</td>
+                <td style="padding:12px">${userCell(c.owner, c.inviter_id)}</td>
+                <td style="padding:12px">${userCell(c.used, c.invitee_id)}</td>
                 <td style="padding:12px;opacity:.8" title="${c.created_at?htmlEscape(fmtDateTime(c.created_at)):''}">${c.created_at?htmlEscape(fmtRelativeTime(c.created_at)):'—'}</td>
                 <td style="padding:12px;opacity:.8" title="${c.used_at?htmlEscape(fmtDateTime(c.used_at)):''}">${c.used_at?htmlEscape(fmtRelativeTime(c.used_at)):'<span style="opacity:.4">—</span>'}</td>
                 <td style="padding:12px;text-align:right">
@@ -492,11 +492,11 @@ function openCodeDrawer(container, code) {
       <div style="display:grid;gap:14px;margin-bottom:20px">
         <div>
           <div style="font-size:11px;opacity:.5;text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:4px">Owner</div>
-          <div>${userCell(code.owner, code.owner_id)}</div>
+          <div>${userCell(code.owner, code.inviter_id)}</div>
         </div>
         <div>
           <div style="font-size:11px;opacity:.5;text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:4px">Eingelöst von</div>
-          <div>${code.used_by ? userCell(code.used, code.used_by) : '<span style="opacity:.4">— noch nicht eingelöst</span>'}</div>
+          <div>${code.invitee_id ? userCell(code.used, code.invitee_id) : '<span style="opacity:.4">— noch nicht eingelöst</span>'}</div>
         </div>
         <div>
           <div style="font-size:11px;opacity:.5;text-transform:uppercase;letter-spacing:.5px;font-weight:600;margin-bottom:4px">Erstellt am</div>
@@ -674,7 +674,7 @@ function openBulkGenerate(container, onDone) {
     if (!UUID_RE.test(ownerId)) { toast('Ungültige UUID — bitte aus der Dropdown-Liste wählen', 'error'); return }
     if (!count) { toast('Anzahl ungültig', 'error'); return }
     try {
-      const rows = Array.from({length: count}).map(() => ({ code: genCodeString(), owner_id: ownerId }))
+      const rows = Array.from({length: count}).map(() => ({ code: genCodeString(), inviter_id: ownerId }))
       const ins = await sb.from('invites').insert(rows).select('id, code')
       if (ins.error) throw ins.error
       const inserted = ins.data || []

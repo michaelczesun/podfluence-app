@@ -31,8 +31,8 @@ function metaFor(type) {
 async function fetchAchievementStats() {
   const since = new Date(Date.now() - 90 * 24 * 60 * 60 * 1000).toISOString()
   const { data, error } = await sb
-    .from('achievements')
-    .select('achievement_type, user_id, unlocked_at')
+    .from('user_achievements')
+    .select('achievement_key, user_id, unlocked_at')
     .gte('unlocked_at', since)
     .order('unlocked_at', { ascending: false })
     .limit(2000)
@@ -43,7 +43,7 @@ async function fetchAchievementStats() {
 function aggregateByType(rows) {
   const map = new Map()
   for (const r of rows) {
-    const t = r.achievement_type
+    const t = r.achievement_key
     if (!map.has(t)) map.set(t, { type: t, count: 0, uniqueUsers: new Set(), last: null })
     const e = map.get(t)
     e.count++
@@ -59,9 +59,9 @@ function aggregateByType(rows) {
 // FIX MED: JOIN auf users-Tabelle für username, display_name, avatar_url.
 async function fetchUsersForType(type) {
   const { data, error } = await sb
-    .from('achievements')
+    .from('user_achievements')
     .select('user_id, unlocked_at, users(username, full_name, avatar_url)')
-    .eq('achievement_type', type)
+    .eq('achievement_key', type)
     .order('unlocked_at', { ascending: false })
     .limit(500)
   if (error) throw error
@@ -96,8 +96,8 @@ async function manualGrant(type, userIdentifier) {
     }
   }
   const { error: insErr } = await sb
-    .from('achievements')
-    .insert({ user_id: userId, achievement_type: type, unlocked_at: new Date().toISOString(), granted_by: 'admin' })
+    .from('user_achievements')
+    .insert({ user_id: userId, achievement_key: type, unlocked_at: new Date().toISOString(), granted_by: 'admin' })
   if (insErr) throw insErr
   return userId
 }

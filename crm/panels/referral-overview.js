@@ -23,9 +23,9 @@ let state = {
 }
 
 // FIX(high): replace hardcoded stub with real DB query against the `referrals` table.
-// Schema: referrals(id, referrer_id, referred_id, created_at)
+// Schema: referrals(id, inviter_id, referred_id, created_at)
 // We derive funnel-like metrics from this table:
-//   generated  = users who have ever referred someone (distinct referrer_id count)
+//   generated  = users who have ever referred someone (distinct inviter_id count)
 //   used       = total referral rows (codes used)
 //   signedUp   = distinct new users who came via referral
 //   shared     = approximated as same as generated (no share-tracking column exists)
@@ -43,14 +43,14 @@ async function loadData(range) {
   // Fetch referral rows in the time window
   const { data: rows, error } = await sb
     .from('referrals')
-    .select('id, referrer_id, referred_id, created_at')
+    .select('id, inviter_id, referred_id, created_at')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
 
   if (error) throw new Error(error.message)
 
   const total = rows.length
-  const uniqueReferrers = new Set(rows.map(r => r.referrer_id)).size
+  const uniqueReferrers = new Set(rows.map(r => r.inviter_id)).size
   const uniqueReferred  = new Set(rows.map(r => r.referred_id)).size
 
   const funnel = {
@@ -72,9 +72,9 @@ async function loadData(range) {
     .sort((a, b) => a.date.localeCompare(b.date))
     .map(d => ({ ...d, rate: d.generated ? (d.signups / d.generated) * 100 : 0 }))
 
-  // Top referrers: count by referrer_id, fetch profiles
+  // Top referrers: count by inviter_id, fetch profiles
   const countMap = {}
-  rows.forEach(r => { countMap[r.referrer_id] = (countMap[r.referrer_id] || 0) + 1 })
+  rows.forEach(r => { countMap[r.inviter_id] = (countMap[r.inviter_id] || 0) + 1 })
   const sortedReferrers = Object.entries(countMap)
     .sort((a, b) => b[1] - a[1])
     .slice(0, 10)
@@ -99,7 +99,7 @@ async function loadData(range) {
   const recent50 = rows.slice(0, 50)
   let recentSignups = []
   if (recent50.length) {
-    const allIds = [...new Set(recent50.flatMap(r => [r.referrer_id, r.referred_id]).filter(Boolean))]
+    const allIds = [...new Set(recent50.flatMap(r => [r.inviter_id, r.referred_id]).filter(Boolean))]
     const { data: profiles2 } = await sb
       .from('users')
       .select('id, full_name, username, avatar_url')
@@ -109,7 +109,7 @@ async function loadData(range) {
     recentSignups = recent50.map(r => ({
       ...r,
       new_user_id: r.referred_id,
-      referrer: pmap[r.referrer_id] || null,
+      referrer: pmap[r.inviter_id] || null,
       newUser:  pmap[r.referred_id] || null
     }))
   }

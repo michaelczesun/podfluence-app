@@ -32,20 +32,20 @@ async function fetchData(range) {
   const since = rangeStartIso(range)
 
   // FIX (med): Use server-side count aggregation instead of fetching raw rows.
-  // episode_vibes has (episode_id, vibe, user_id, created_at).
+  // episode_vibes has (episode_guid, vibe, user_id, created_at).
   // We still need user_id per episode for the drawer, so we fetch a capped set
   // of rows but warn loudly if the result is truncated at the hard cap.
   const HARD_CAP = 100000
   const { data, error, count } = await sb
     .from('episode_vibes')
-    .select('vibe, episode_id, user_id', { count: 'exact' })
+    .select('vibe, episode_guid, user_id', { count: 'exact' })
     .gte('created_at', since)
     .limit(HARD_CAP)
   if (error) throw error
 
   const reactionRows = (data || []).map(r => ({
     vibe: r.vibe,
-    episode_id: r.episode_id,
+    episode_guid: r.episode_guid,
     user_id: r.user_id,
   }))
 
@@ -57,9 +57,9 @@ async function fetchData(range) {
   for (const r of reactionRows) {
     if (!r.vibe || !(r.vibe in counts)) continue
     counts[r.vibe]++
-    const m = episodeScores.get(r.episode_id) || { _user_id: r.user_id }
+    const m = episodeScores.get(r.episode_guid) || { _user_id: r.user_id }
     m[r.vibe] = (m[r.vibe] || 0) + 1
-    episodeScores.set(r.episode_id, m)
+    episodeScores.set(r.episode_guid, m)
   }
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0)
@@ -68,7 +68,7 @@ async function fetchData(range) {
   for (const v of VIBES) {
     const arr = []
     for (const [episodeId, m] of episodeScores.entries()) {
-      if (m[v.key]) arr.push({ episode_id: episodeId, count: m[v.key], user_id: m._user_id })
+      if (m[v.key]) arr.push({ episode_guid: episodeId, count: m[v.key], user_id: m._user_id })
     }
     arr.sort((a, b) => b.count - a.count)
     topEpisodesPerVibe[v.key] = arr.slice(0, 10)
@@ -77,8 +77,8 @@ async function fetchData(range) {
   return { counts, total, topEpisodesPerVibe, sampleSize: reactionRows.length, truncated, range }
 }
 
-// FIX (high): Fetch episode details from the podcasts table by episode_id.
-// Returns a map of episode_id -> { title, podcast_title, user_id }
+// FIX (high): Fetch episode details from the podcasts table by episode_guid.
+// Returns a map of episode_guid -> { title, podcast_title, user_id }
 async function fetchEpisodeDetails(episodeIds) {
   if (!episodeIds || episodeIds.length === 0) return {}
   try {
@@ -134,19 +134,19 @@ async function openVibeDrawer(vibeKey, data) {
   const v = VIBE_BY_KEY[vibeKey]
   if (!v) return
   const top = data.topEpisodesPerVibe[vibeKey] || []
-  const episodeIds = top.map(t => t.episode_id)
+  const episodeIds = top.map(t => t.episode_guid)
 
   // FIX (high): Fetch real episode details from podcasts table
   const details = await fetchEpisodeDetails(episodeIds)
 
   const rows = top.map((t, i) => {
-    const ep = details[t.episode_id] || {}
-    // FIX (high): Show episode title if available, fall back to episode_id as readable identifier
-    const title = htmlEscape(ep.title || t.episode_id || '–')
+    const ep = details[t.episode_guid] || {}
+    // FIX (high): Show episode title if available, fall back to episode_guid as readable identifier
+    const title = htmlEscape(ep.title || t.episode_guid || '–')
     // FIX (high): uid comes from details or the vibe row itself
     const uid = ep.user_id || t.user_id || ''
     return `
-      <tr data-episode-id="${htmlEscape(t.episode_id)}" data-user-id="${htmlEscape(uid)}" style="cursor:${uid ? 'pointer' : 'default'};">
+      <tr data-episode-id="${htmlEscape(t.episode_guid)}" data-user-id="${htmlEscape(uid)}" style="cursor:${uid ? 'pointer' : 'default'};">
         <td style="width:32px;color:var(--muted);font-variant-numeric:tabular-nums;">${i + 1}</td>
         <td>
           <div style="font-weight:600;">${title}</div>

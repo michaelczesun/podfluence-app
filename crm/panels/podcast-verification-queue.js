@@ -22,7 +22,7 @@ const STATUS_COLORS = {
 async function fetchAllPodcasts() {
   const { data, error } = await sb
     .from('podcasts')
-    .select('id, title, rss_url, cover_url, verification_status, owner_email, rejection_reason, verify_token_sent_at, created_at')
+    .select('id, title, rss_url, cover_image, verification_status, owner_email, rejection_reason, verify_token_sent_at, created_at')
     .order('created_at', { ascending: false })
   if (error) throw error
   return data || []
@@ -38,8 +38,8 @@ function cardHtml(p) {
   const created = p.created_at ? fmtRelativeTime(p.created_at) : '—'
   const sentAt = p.verify_token_sent_at ? fmtRelativeTime(p.verify_token_sent_at) : 'Noch nicht gesendet'
   const reject = p.rejection_reason ? `<div class="reject-reason" style="margin-top:10px;padding:8px 10px;background:#ef44441a;border-left:3px solid #ef4444;border-radius:6px;font-size:12px;color:#fca5a5;">${iconHtml('alert-circle')} ${htmlEscape(p.rejection_reason)}</div>` : ''
-  const cover = p.cover_url
-    ? `<img src="${htmlEscape(p.cover_url)}" alt="" style="width:56px;height:56px;border-radius:10px;object-fit:cover;flex-shrink:0;background:#1a1a1a;">`
+  const cover = p.cover_image
+    ? `<img src="${htmlEscape(p.cover_image)}" alt="" style="width:56px;height:56px;border-radius:10px;object-fit:cover;flex-shrink:0;background:#1a1a1a;">`
     : `<div style="width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,#2a2a2a,#1a1a1a);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconHtml('mic')}</div>`
 
   return `
@@ -438,7 +438,7 @@ export default {
           content: `
             <div style="display:flex;flex-direction:column;gap:16px;padding:4px;">
               <div style="display:flex;gap:14px;align-items:center;">
-                ${p.cover_url ? `<img src="${htmlEscape(p.cover_url)}" style="width:80px;height:80px;border-radius:12px;object-fit:cover;">` : `<div style="width:80px;height:80px;border-radius:12px;background:#1a1a1a;display:flex;align-items:center;justify-content:center;font-size:28px;">${iconHtml('mic')}</div>`}
+                ${p.cover_image ? `<img src="${htmlEscape(p.cover_image)}" style="width:80px;height:80px;border-radius:12px;object-fit:cover;">` : `<div style="width:80px;height:80px;border-radius:12px;background:#1a1a1a;display:flex;align-items:center;justify-content:center;font-size:28px;">${iconHtml('mic')}</div>`}
                 <div>
                   <h3 style="margin:0 0 6px;color:#fff;">${htmlEscape(p.title || '')}</h3>
                   ${statusBadge(p.verification_status)}

@@ -54,12 +54,12 @@ function regionOf(code) {
 async function fetchCountries() {
   const { data, error } = await sb
     .from('users')
-    .select('country_code, created_at')
+    .select('country, created_at')
   if (error) throw error
   const byCode = new Map()
   const now = Date.now()
   for (const row of (data || [])) {
-    const raw = (row.country_code || '').toString().trim()
+    const raw = (row.country || '').toString().trim()
     if (!raw) continue
     const code = raw.length === 2 ? raw.toUpperCase() : raw
     const entry = byCode.get(code) || { code, count: 0, recent: 0 }
@@ -425,14 +425,14 @@ export default {
           </div>
           <div id="country-users-list"><div class="muted" style="padding:20px;text-align:center">Lade User…</div></div>
         `
-        // FIX HIGH #2: Query users table directly filtered by country_code.
+        // FIX HIGH #2: Query users table directly filtered by country.
         // Using RPC admin_users_list_full with p_limit:50 and client-side filter would silently
         // truncate results for large countries — a country with 200 users might show 0-50.
         try {
           const { data: users, error: usersErr } = await sb
             .from('users')
             .select('id, username, full_name, is_verified, is_premium, type')
-            .eq('country_code', code)
+            .eq('country', code)
             .limit(200)
           if (usersErr) throw usersErr
           const listEl = body.querySelector('#country-users-list')

@@ -19,7 +19,8 @@ const state = {
   loading: false,
   signupSeries: [],
   typeBreakdown: [],
-  totals: { all: 0, verified: 0, podcasters: 0, inactive: 0, admins: 0 }
+  totals: { all: 0, verified: 0, podcasters: 0, inactive: 0, admins: 0 },
+  filterBuilder: {} // E-Feature: type/verified/premium/country/createdFrom/createdTo
 }
 
 // Tabelle 'users' existiert nicht im Schema — alle user-Fetches laufen über admin_users_list_full (RPC)
@@ -89,21 +90,29 @@ function fetchTypeBreakdown() {
 }
 
 async function fetchPage() {
-  // Server-side search via RPC, client-side filter for verified/podcaster/admin/inactive
-  const { data, error } = await sb.rpc('admin_users_list_full', {
-    p_limit: 5000,
-    p_offset: 0,
-    p_search: state.search?.trim() || ''
+  // FILTER-BUILDER: nutzt admin_users_list_filtered RPC mit Multi-Kriterien.
+  const f = state.filterBuilder || {}
+  let rows = []
+  let res = await sb.rpc('admin_users_list_filtered', {
+    p_limit: 5000, p_offset: 0,
+    p_search: state.search?.trim() || null,
+    p_type: f.type || null,
+    p_verified: typeof f.verified === 'boolean' ? f.verified : null,
+    p_premium: typeof f.premium === 'boolean' ? f.premium : null,
+    p_country: f.country || null,
+    p_created_from: f.createdFrom || null,
+    p_created_to: f.createdTo || null,
   })
-  if (error) throw error
-
-  let rows = data || []
-  _allRows = rows  // refresh cache
-
-  // FIX #5: warn admin if result may be truncated at 5000
-  if (rows.length === 5000) {
-    toast('Hinweis: Ergebnis bei 5.000 Nutzern abgeschnitten. Ggf. nicht alle Nutzer sichtbar.', 'warning')
+  if (res.error) {
+    // Fallback auf alte RPC falls die neue noch nicht im Schema-Cache
+    res = await sb.rpc('admin_users_list_full', {
+      p_limit: 5000, p_offset: 0, p_search: state.search?.trim() || ''
+    })
+    if (res.error) throw res.error
   }
+  rows = res.data || []
+  _allRows = rows
+  if (rows.length === 5000) toast('Hinweis: Ergebnis bei 5.000 Nutzern abgeschnitten.', 'warning')
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
   if (state.filter === 'verified') rows = rows.filter(r => r.is_verified)
@@ -144,6 +153,20 @@ export default {
   async mount(container) {
     try {
       container.innerHTML = `
+        <style>
+          .ul-fbuilder { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
+          .ul-fbuilder select, .ul-fbuilder input { padding:6px 8px; border-radius:7px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); color:inherit; font-size:12px; }
+          .ul-inline-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; }
+          .btn-pill { width:30px; height:30px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); color:#aaa; cursor:pointer; font-size:13px; padding:0; display:inline-flex; align-items:center; justify-content:center; transition:all .15s; }
+          .btn-pill:hover { background:rgba(255,255,255,0.1); transform:translateY(-1px); }
+          .btn-pill.on { background:rgba(34,197,94,0.18); color:#22c55e; border-color:rgba(34,197,94,0.4); }
+          .btn-pill.on.yellow { background:rgba(245,158,11,0.18); color:#F59E0B; border-color:rgba(245,158,11,0.4); }
+          .btn-pill.red { color:#f87171; }
+          .btn-pill.red:hover { background:rgba(239,68,68,0.18); border-color:rgba(239,68,68,0.4); }
+          .btn-pill.orange { color:#fb923c; }
+          .btn-pill.orange:hover { background:rgba(251,146,60,0.18); border-color:rgba(251,146,60,0.4); }
+          .btn-pill:disabled { opacity:0.4; cursor:wait; }
+        </style>
         <div class="panel-shell users-list-panel">
           <div class="panel-head">
             <div>
@@ -171,6 +194,21 @@ export default {
 
       try { fadeIn(container.querySelector('.panel-shell')) } catch {}
       await loadAll(container)
+
+      // FEATURE C: Realtime — neue/geänderte User live nachziehen.
+      let rtCh = null
+      try {
+        rtCh = sb.channel('users-list-live')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+            // sanftes Re-Fetch (debounced via Timer-Trick)
+            clearTimeout(window.__ulRtTimer)
+            window.__ulRtTimer = setTimeout(() => { loadAll(container).catch(() => {}) }, 800)
+          })
+          .subscribe()
+      } catch (_) {}
+      // Container destruktor merken damit Channel beim Panel-Wechsel weggeht
+      container.__cleanup = () => { if (rtCh) try { sb.removeChannel(rtCh) } catch (_) {} }
+      return container.__cleanup
     } catch (e) {
       console.error('[users-list] mount failed', e)
       container.innerHTML = `
@@ -258,6 +296,15 @@ function renderShell(body) {
         ${pill('inactive', 'Inaktiv', state.totals.inactive)}
         ${pill('admin', 'Admin', state.totals.admins)}
       </div>
+      <div class="ul-fbuilder">
+        <select id="fb-type"><option value="">Typ: Alle</option><option value="listener" ${state.filterBuilder.type==='listener'?'selected':''}>Hörer</option><option value="podcaster" ${state.filterBuilder.type==='podcaster'?'selected':''}>Podcaster</option><option value="both" ${state.filterBuilder.type==='both'?'selected':''}>Beide</option></select>
+        <select id="fb-verified"><option value="">Verifiziert: egal</option><option value="true" ${state.filterBuilder.verified===true?'selected':''}>Ja</option><option value="false" ${state.filterBuilder.verified===false?'selected':''}>Nein</option></select>
+        <select id="fb-premium"><option value="">Premium: egal</option><option value="true" ${state.filterBuilder.premium===true?'selected':''}>Ja</option><option value="false" ${state.filterBuilder.premium===false?'selected':''}>Nein</option></select>
+        <input id="fb-country" type="text" placeholder="Land (z.B. AT)" value="${htmlEscape(state.filterBuilder.country || '')}" style="width:100px" />
+        <input id="fb-from" type="date" value="${(state.filterBuilder.createdFrom || '').slice(0,10)}" title="Registriert von" />
+        <input id="fb-to" type="date" value="${(state.filterBuilder.createdTo || '').slice(0,10)}" title="Registriert bis" />
+        <button id="fb-clear" class="btn-pill">Reset</button>
+      </div>
     </div>
 
     <div class="ul-table-wrap glass-card">
@@ -333,7 +380,13 @@ function renderTable() {
         <td>${joined}</td>
         <td>${lastActive}</td>
         <td class="col-actions">
-          <button class="btn-icon ul-menu-btn" data-menu="${r.id}" title="Aktionen">${iconHtml('more-horizontal')}</button>
+          <div class="ul-inline-actions">
+            <button class="btn-pill ${r.is_verified ? 'on' : ''}" data-act="verify" data-uid="${r.id}" title="${r.is_verified ? 'Verifizierung entziehen' : 'Verifizieren'}">✓</button>
+            <button class="btn-pill ${r.is_premium ? 'on yellow' : ''}" data-act="premium" data-uid="${r.id}" title="${r.is_premium ? 'Premium entziehen' : 'Premium vergeben'}">⭐</button>
+            <button class="btn-pill red" data-act="ban" data-uid="${r.id}" title="Bannen">🚫</button>
+            <button class="btn-pill orange" data-act="impersonate" data-uid="${r.id}" title="Als User ansehen">👁</button>
+            <button class="btn-icon ul-menu-btn" data-menu="${r.id}" title="Mehr Aktionen">${iconHtml('more-horizontal')}</button>
+          </div>
         </td>
       </tr>`
   }).join('')
@@ -465,6 +518,71 @@ function wireTable(body, container) {
       e.stopPropagation()
       openActionMenu(btn, btn.dataset.menu, body, container)
     })
+  })
+
+  // FEATURE D: Inline-Actions in der Row
+  table.querySelectorAll('.ul-inline-actions [data-act]').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const uid = btn.dataset.uid
+      const act = btn.dataset.act
+      btn.disabled = true
+      try {
+        const pa = await import('/lib/panel-actions.js')
+        const row = state.rows.find(r => r.id === uid)
+        if (act === 'verify') {
+          if (row?.is_verified) await pa.unverifyUser(uid); else await pa.verifyUser(uid)
+        } else if (act === 'premium') {
+          if (row?.is_premium) await pa.revokePremium(uid); else await pa.grantPremium(uid)
+        } else if (act === 'ban') {
+          await pa.banUser(uid)
+        } else if (act === 'impersonate') {
+          await pa.impersonateUser(uid)
+        }
+        // Optimistic UI: nach Action neu laden
+        if (act !== 'impersonate') {
+          try { await fetchPage(); refreshTableOnly(body, container) } catch (_) {}
+        }
+      } catch (err) {
+        toast(err?.message || 'Aktion fehlgeschlagen', 'error')
+      } finally {
+        btn.disabled = false
+      }
+    })
+  })
+
+  // FEATURE E: Filter-Builder
+  const onFbChange = async () => {
+    const tEl = body.querySelector('#fb-type')
+    const vEl = body.querySelector('#fb-verified')
+    const pEl = body.querySelector('#fb-premium')
+    const cEl = body.querySelector('#fb-country')
+    const fEl = body.querySelector('#fb-from')
+    const dEl = body.querySelector('#fb-to')
+    state.filterBuilder = {
+      type: tEl?.value || null,
+      verified: vEl?.value === 'true' ? true : vEl?.value === 'false' ? false : null,
+      premium:  pEl?.value === 'true' ? true : pEl?.value === 'false' ? false : null,
+      country: cEl?.value?.trim() || null,
+      createdFrom: fEl?.value ? new Date(fEl.value).toISOString() : null,
+      createdTo: dEl?.value ? new Date(dEl.value).toISOString() : null,
+    }
+    state.page = 1
+    try { await fetchPage(); refreshTableOnly(body, container) }
+    catch (err) { toast(err?.message || 'Filter-Fehler', 'error') }
+  }
+  body.querySelector('#fb-type')?.addEventListener('change', onFbChange)
+  body.querySelector('#fb-verified')?.addEventListener('change', onFbChange)
+  body.querySelector('#fb-premium')?.addEventListener('change', onFbChange)
+  body.querySelector('#fb-country')?.addEventListener('change', onFbChange)
+  body.querySelector('#fb-from')?.addEventListener('change', onFbChange)
+  body.querySelector('#fb-to')?.addEventListener('change', onFbChange)
+  body.querySelector('#fb-clear')?.addEventListener('click', async () => {
+    state.filterBuilder = {}
+    ;['#fb-type','#fb-verified','#fb-premium'].forEach(s => { const el = body.querySelector(s); if (el) el.value = '' })
+    ;['#fb-country','#fb-from','#fb-to'].forEach(s => { const el = body.querySelector(s); if (el) el.value = '' })
+    state.page = 1
+    try { await fetchPage(); refreshTableOnly(body, container) } catch (_) {}
   })
 
   updateBulkBar(body)
