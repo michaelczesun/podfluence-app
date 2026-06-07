@@ -282,65 +282,7 @@
   .toast { position: fixed; top: 20px; right: 20px; background: #16161D; border: 1px solid #2A2A33; padding: 12px 18px; border-radius: 10px; color: #fff; z-index: 9999; animation: fadeUp 0.3s; }
   @keyframes fadeUp { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
 
-  /* Quick-Search Modal (Cmd+K) */
-  .qs-backdrop {
-    position: fixed; inset: 0;
-    background: rgba(0,0,0,0.55);
-    backdrop-filter: blur(6px);
-    z-index: 9500;
-    display: flex; align-items: flex-start; justify-content: center;
-    padding-top: 12vh;
-    animation: fadeUp 0.18s;
-  }
-  .qs-modal {
-    width: min(620px, calc(100% - 32px));
-    background: var(--surface-elev);
-    border: 1px solid var(--border);
-    border-radius: 14px;
-    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
-    overflow: hidden;
-  }
-  .qs-modal input {
-    width: 100%;
-    background: transparent;
-    border: none;
-    color: #fff;
-    padding: 18px 20px;
-    font-size: 16px;
-    font-family: inherit;
-    border-bottom: 1px solid var(--border);
-  }
-  .qs-modal input:focus { outline: none; }
-  .qs-list { max-height: 56vh; overflow-y: auto; padding: 6px; }
-  .qs-item {
-    display: flex; align-items: center; gap: 10px;
-    padding: 10px 14px;
-    border-radius: 8px;
-    cursor: pointer;
-    color: var(--text-muted);
-    font-size: 13px;
-  }
-  .qs-item .qs-cat { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
-  .qs-item .qs-title { color: var(--text); flex: 1; font-weight: 500; }
-  .qs-item.sel, .qs-item:hover { background: rgba(139,92,246,0.15); }
-  .qs-item.sel .qs-title { color: #fff; }
-  .qs-empty { padding: 28px; text-align: center; color: var(--text-dim); font-size: 13px; }
-  .qs-footer {
-    display: flex; gap: 14px;
-    padding: 10px 16px;
-    border-top: 1px solid var(--border);
-    color: var(--text-dim);
-    font-size: 11px;
-  }
-  .qs-footer kbd {
-    background: rgba(255,255,255,0.06);
-    border: 1px solid var(--border);
-    padding: 1px 5px;
-    border-radius: 3px;
-    font-family: ui-monospace, monospace;
-    font-size: 10px;
-    color: var(--text-muted);
-  }
+  /* Cmd-K Modal-Styles werden vom /crm/lib/cmdk.js Modul injiziert */
 
   /* Sidebar-toggle (mobile + cmd+/) */
   #sidebar-toggle { display: none; }
@@ -492,6 +434,7 @@
 
 <script type="module">
 import { sb } from '/lib/supabase.js?v=20260608f'
+import { openCmdK, closeCmdK, toggleCmdK, isCmdKOpen, installCmdK } from '/crm/lib/cmdk.js?v=20260607-cmdk1'
 
 // ---- Auth-Guard (Admin-Only) ----
 const mountEl = document.getElementById('panel-mount')
@@ -687,183 +630,24 @@ document.getElementById('settings-btn')?.addEventListener('click', () => {
   location.hash = '#settings'
 })
 
-// ---- Quick-Search (Cmd+K) ----
-let qsBackdrop = null
-let qsItems = []
-let qsSel = 0
-let qsUserResults = []
-
-function buildQuickSearchItems(query) {
-  const q = (query || '').trim().toLowerCase()
-  const panels = VISIBLE_PANELS.map(p => {
-    return {
-      type: 'panel',
-      id: p.id,
-      title: p.title,
-      cat: 'Tab',
-      icon: p.icon || '•',
-      match: scoreMatch(p.title.toLowerCase(), q)
-    }
-  })
-  let items = panels.filter(i => !q || i.match > 0)
-  items.sort((a,b) => b.match - a.match || a.title.localeCompare(b.title))
-  // append user results if loaded
-  if (qsUserResults.length && q) {
-    items = items.concat(qsUserResults.map(u => ({
-      type: 'user',
-      id: u.id,
-      title: u.display_name || u.username || u.email || u.id.slice(0,8),
-      cat: 'Nutzer',
-      icon: '👤',
-      match: 1
-    })))
-  }
-  return items.slice(0, 30)
-}
-
-function scoreMatch(haystack, needle) {
-  if (!needle) return 1
-  if (haystack.includes(needle)) return 10
-  // fuzzy: every char appears in order
-  let idx = 0
-  for (const ch of needle) {
-    idx = haystack.indexOf(ch, idx)
-    if (idx === -1) return 0
-    idx++
-  }
-  return 1
-}
-
-async function searchUsers(query) {
-  if (!query || query.length < 2) { qsUserResults = []; return }
-  try {
-    const { data } = await sb.from('users')
-      .select('id, display_name, username, email')
-      .or(`display_name.ilike.%${query}%,username.ilike.%${query}%,email.ilike.%${query}%`)
-      .limit(5)
-    qsUserResults = data || []
-  } catch { qsUserResults = [] }
-}
-
-function renderQuickSearch(query) {
-  qsItems = buildQuickSearchItems(query)
-  qsSel = 0
-  const list = qsBackdrop?.querySelector('.qs-list')
-  if (!list) return
-  if (!qsItems.length) {
-    list.innerHTML = `<div class="qs-empty">Nichts gefunden für „${escapeHtml(query)}"</div>`
-    return
-  }
-  list.innerHTML = qsItems.map((it, i) => `
-    <div class="qs-item ${i===0?'sel':''}" data-idx="${i}">
-      <span style="font-size:14px">${it.icon}</span>
-      <span class="qs-title">${escapeHtml(it.title)}</span>
-      <span class="qs-cat">${escapeHtml(it.cat)}</span>
-    </div>
-  `).join('')
-  list.querySelectorAll('.qs-item').forEach(el => {
-    el.addEventListener('mouseenter', () => {
-      list.querySelectorAll('.qs-item').forEach(x => x.classList.remove('sel'))
-      el.classList.add('sel')
-      qsSel = +el.dataset.idx
-    })
-    el.addEventListener('click', () => activateQuickSearchItem(qsItems[+el.dataset.idx]))
-  })
-}
-
-function activateQuickSearchItem(it) {
-  if (!it) return
-  if (it.type === 'panel') {
-    location.hash = '#' + buildHashFor(it.id)
-  } else if (it.type === 'user') {
-    // Direkt in den People/Users-Subtab springen mit User-Parameter
-    location.hash = '#people/users?u=' + it.id
-  }
-  closeQuickSearch()
-}
-
-function openQuickSearch() {
-  if (qsBackdrop) return
-  qsBackdrop = document.createElement('div')
-  qsBackdrop.className = 'qs-backdrop'
-  qsBackdrop.innerHTML = `
-    <div class="qs-modal">
-      <input type="text" placeholder="Panels, Nutzer suchen…" autofocus />
-      <div class="qs-list"></div>
-      <div class="qs-footer">
-        <span><kbd>↑↓</kbd> Navigieren</span>
-        <span><kbd>↵</kbd> Öffnen</span>
-        <span><kbd>Esc</kbd> Schließen</span>
-      </div>
-    </div>
-  `
-  document.body.appendChild(qsBackdrop)
-  const input = qsBackdrop.querySelector('input')
-  renderQuickSearch('')
-  let timer = null
-  input.addEventListener('input', e => {
-    const v = e.target.value
-    renderQuickSearch(v)
-    clearTimeout(timer)
-    timer = setTimeout(async () => {
-      await searchUsers(v)
-      renderQuickSearch(v)
-    }, 220)
-  })
-  input.addEventListener('keydown', e => {
-    if (e.key === 'ArrowDown') {
-      e.preventDefault()
-      qsSel = Math.min(qsItems.length - 1, qsSel + 1)
-      updateQsSel()
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault()
-      qsSel = Math.max(0, qsSel - 1)
-      updateQsSel()
-    } else if (e.key === 'Enter') {
-      e.preventDefault()
-      activateQuickSearchItem(qsItems[qsSel])
-    }
-  })
-  qsBackdrop.addEventListener('click', e => {
-    if (e.target === qsBackdrop) closeQuickSearch()
-  })
-  setTimeout(() => input.focus(), 10)
-}
-
-function updateQsSel() {
-  const list = qsBackdrop?.querySelector('.qs-list')
-  if (!list) return
-  list.querySelectorAll('.qs-item').forEach((el, i) => {
-    el.classList.toggle('sel', i === qsSel)
-    if (i === qsSel) el.scrollIntoView({ block: 'nearest' })
-  })
-}
-
-function closeQuickSearch() {
-  qsBackdrop?.remove()
-  qsBackdrop = null
-  qsUserResults = []
-}
-
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
-}
+// ---- Cmd-K Universal Bar (lib/cmdk.js) ----
+installCmdK({
+  sb,
+  panels: VISIBLE_PANELS.map(p => ({ id: p.id, title: p.title, icon: p.icon })),
+  buildHashFor,
+  bindKeyboard: true,
+  installMicFab: true
+})
 
 // Global-search input in top-bar opens Cmd+K modal
 document.getElementById('global-search-input')?.addEventListener('focus', e => {
   e.target.blur()
-  openQuickSearch()
+  openCmdK()
 })
 
-// ---- Keyboard Shortcuts ----
+// ---- Keyboard Shortcuts (Cmd+K wird vom cmdk-Modul gehandhabt) ----
 window.addEventListener('keydown', e => {
   const meta = e.metaKey || e.ctrlKey
-  // Cmd+K
-  if (meta && e.key.toLowerCase() === 'k') {
-    e.preventDefault()
-    if (qsBackdrop) closeQuickSearch(); else openQuickSearch()
-    return
-  }
   // Cmd+/ — Desktop: toggle collapse; Mobile: toggle drawer
   if (meta && e.key === '/') {
     e.preventDefault()
@@ -877,7 +661,7 @@ window.addEventListener('keydown', e => {
   }
   // ESC
   if (e.key === 'Escape') {
-    if (qsBackdrop) { closeQuickSearch(); return }
+    if (isCmdKOpen()) return  // Modul handhabt sein eigenes Esc
     // close any open drawer/modal
     document.querySelectorAll('.drawer.open, .modal.open, [data-dismiss-on-esc].open').forEach(el => {
       el.classList.remove('open')
