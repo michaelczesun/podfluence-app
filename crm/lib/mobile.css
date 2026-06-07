@@ -85,3 +85,196 @@
     border-left: none !important;
   }
 }
+
+/* ============================================================
+ * Touch-Targets-Sweep (7.6.26)
+ * Sweep über /crm/panels/*.js: Buttons/Tabs/Pills/Chips/Icon-
+ * Buttons/Actions haben oft padding<12px oder height<44px.
+ * iOS HIG / Apple-Guideline: 44pt minimum tap target.
+ * Nur Mobile (≤767px) — Desktop unverändert.
+ * ============================================================ */
+@media (max-width: 767px) {
+
+  /* ---------- Buttons (alle Varianten) ---------- */
+  .btn,
+  .btn-primary, .btn-secondary, .btn-ghost, .btn-danger, .btn-danger-ghost,
+  .btn-warn, .btn-amber, .btn-link, .btn-detail, .btn-reset, .btn-resolve,
+  .btn-revoke, .btn-save, .btn-p, .btn-lg,
+  .btn--primary, .btn--ghost, .btn--danger,
+  .refresh-btn, .toolbar-btn {
+    min-height: 44px;
+    padding: 10px 14px;
+    font-size: 14px;
+    line-height: 1.2;
+  }
+
+  /* Kleine Buttons (sm/xs/mini/tiny) — Tap-Höhe trotzdem 44px */
+  .btn-sm, .btn-xs, .btn-mini, .btn-tiny {
+    min-height: 44px;
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  /* ---------- Icon-Buttons (quadratisch) ---------- */
+  .icon-btn,
+  .btn-icon,
+  .btn-dots {
+    min-height: 44px;
+    min-width: 44px;
+    padding: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* ---------- Tabs ---------- */
+  .tab,
+  .tab-item,
+  .tab-pill,
+  [role="tab"] {
+    min-height: 44px;
+    padding: 10px 14px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  .tabs > a, .tabs > button,
+  .tab-bar > a, .tab-bar > button {
+    min-height: 44px;
+    padding: 10px 14px;
+  }
+
+  /* ---------- Pills / Chips (klickbar) ---------- */
+  .btn-pill,
+  a.pill, button.pill,
+  .pill[role="button"], .pill.clickable,
+  a.chip, button.chip,
+  .chip[role="button"], .chip.clickable,
+  .chip-x {
+    min-height: 36px;
+    padding: 8px 12px;
+    display: inline-flex;
+    align-items: center;
+  }
+  /* Bei dichten Chip/Pill-Gruppen ein wenig mehr Luft */
+  .chips, .pills { gap: 8px !important; }
+
+  /* ---------- Action-Cells in Tabellen ---------- */
+  .action, .actions, .actions-cell, .action-cell {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 44px;
+  }
+  .action > button, .action > a,
+  .actions > button, .actions > a,
+  .actions-cell > button, .actions-cell > a,
+  .action-cell > button, .action-cell > a {
+    min-height: 40px;
+    min-width: 40px;
+    padding: 8px 10px;
+  }
+
+  /* ---------- Links als Button ---------- */
+  a.btn-link,
+  a[role="button"] {
+    min-height: 44px;
+    padding: 10px 12px;
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* ---------- Inputs / Selects (44px + 16px gegen iOS-Zoom) ---------- */
+  input[type="text"], input[type="search"], input[type="email"],
+  input[type="tel"], input[type="number"], input[type="password"],
+  select, textarea {
+    min-height: 44px;
+    font-size: 16px;
+  }
+
+  /* ---------- Topbar Buttons (kompakt aber min Tap-Fläche) ---------- */
+  .topbar .icon-btn,
+  .topbar #logout {
+    min-height: 40px;
+    min-width: 40px;
+  }
+}
+
+/* ============================================================
+ * Responsive Cards — Panels mit .kpi-grid / .mini-stat / .hero-row
+ * Audit 7.6.26: pattern auf Mobile von repeat(4,1fr) → repeat(2,1fr) → 1fr.
+ * Selektoren decken globale + per-Panel scoped Varianten (inline-styles +
+ * ID-Selektoren) ab. !important nötig weil viele Panels Grid-Spalten
+ * direkt im style-Attribut setzen.
+ * ============================================================ */
+
+/* Tablet / Small Laptop: 4-Spalten-Hero-Rows auf 2 zwingen */
+@media (max-width: 900px) {
+  .kpi-grid,
+  .hero-row,
+  .of-hero-row,
+  .tp-hero-row,
+  #hero-row,
+  #heroRow,
+  #tp-hero,
+  #hero,
+  #of-heroes {
+    grid-template-columns: repeat(2, 1fr) !important;
+    gap: 12px !important;
+  }
+
+  /* hero-section in crash-rate ist 2-Spalten (Avatar | Stats) — auf 1 stacken */
+  .hero-section {
+    grid-template-columns: 1fr !important;
+    gap: 16px !important;
+  }
+}
+
+/* Phone: alles auf 1 Spalte */
+@media (max-width: 600px) {
+  .kpi-grid,
+  .hero-row,
+  .hero-section,
+  .of-hero-row,
+  .tp-hero-row,
+  #hero-row,
+  #heroRow,
+  #tp-hero,
+  #hero,
+  #of-heroes {
+    grid-template-columns: 1fr !important;
+    gap: 10px !important;
+  }
+
+  /* Mini-Stats kompakter — Padding + Schriftgrößen runter */
+  .mini-stat {
+    padding: 10px 12px !important;
+  }
+  .mini-stat-val,
+  .mini-stat .value {
+    font-size: 20px !important;
+  }
+  .mini-stat-label,
+  .mini-stat .label {
+    font-size: 11px !important;
+  }
+
+  /* KPI-Tile kompakter */
+  .kpi-tile {
+    padding: 14px !important;
+  }
+  .kpi-tile .value {
+    font-size: 22px !important;
+  }
+  .kpi-tile .label {
+    font-size: 11px !important;
+  }
+
+  /* Innere 3er-Mini-Stat-Grids (crash-rate, hero-section Innenleben) → 1 Spalte */
+  .hero-section > div[style*="grid-template-columns"],
+  .glass-card > div[style*="grid-template-columns:repeat(3"],
+  .glass-card > div[style*="grid-template-columns: repeat(3"] {
+    grid-template-columns: 1fr !important;
+    gap: 8px !important;
+  }
+}
