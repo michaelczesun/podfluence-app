@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608d'
-import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608d'
-import { makeBarChart } from '/lib/charts.js?v=20260608d'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608d'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608d'
-import { segmentedControl } from '/lib/layout-extras.js?v=20260608d'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608d'
+import { sb } from '/lib/supabase.js?v=20260608e'
+import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608e'
+import { makeBarChart } from '/lib/charts.js?v=20260608e'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608e'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608e'
+import { segmentedControl } from '/lib/layout-extras.js?v=20260608e'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608e'
 
 const PANEL_ID = 'new-signups-7d'
 

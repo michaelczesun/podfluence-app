@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608d'
-import { toast, modal, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, confirmDialog } from '/lib/ui.js?v=20260608d'
-import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608d'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608d'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608d'
-import { drawer, statHero, glassCard, segmentedControl } from '/lib/layout-extras.js?v=20260608d'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608d'
+import { sb } from '/lib/supabase.js?v=20260608e'
+import { toast, modal, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, confirmDialog } from '/lib/ui.js?v=20260608e'
+import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608e'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608e'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608e'
+import { drawer, statHero, glassCard, segmentedControl } from '/lib/layout-extras.js?v=20260608e'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608e'
 
 const STAGES = [
   { key: 'signup',  label: 'Signup',          desc: 'Account erstellt',            icon: 'user-plus',   color: '#6366f1' },
@@ -211,14 +211,18 @@ function renderFunnelHTML(data) {
     `
     if (i < STAGES.length - 1) {
       const next = counts[STAGES[i + 1].key] || 0
-      const conv = c ? Math.round((next / c) * 100) : 0
-      const drop = c - next
+      // FIX (math-impossible-values): clamp conversion to max 100% and drop-off to min 0.
+      // Wenn next > c (z.B. weil eine Stufe einen strengeren Filter hat als die nächste),
+      // sind 242% Conversion und negative Drop-offs Unsinn. max(0, prev-curr) für Drop,
+      // min(100, curr/prev*100) für Conversion. Wenn drop=0 wird "−0" nicht angezeigt.
+      const conv = c ? Math.min(100, Math.round((next / c) * 100)) : 0
+      const drop = Math.max(0, c - next)
       html += `
         <div class="of-arrow">
           ${iconHtml('arrow-down')}
           <span class="of-conv">${conv}% Conversion</span>
           <span>·</span>
-          <span class="of-drop">−${fmtNumber(drop)} Drop-off</span>
+          <span class="of-drop">${drop > 0 ? '−' : ''}${fmtNumber(drop)} Drop-off</span>
         </div>
       `
     }

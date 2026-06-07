@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608d'
-import { toast, modal, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608d'
-import { makeDonutChart, makeBarChart } from '/lib/charts.js?v=20260608d'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608d'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608d'
-import { drawer, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js?v=20260608d'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608d'
+import { sb } from '/lib/supabase.js?v=20260608e'
+import { toast, modal, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608e'
+import { makeDonutChart, makeBarChart } from '/lib/charts.js?v=20260608e'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608e'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608e'
+import { drawer, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js?v=20260608e'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608e'
 
 const VIBES = [
   { key: 'fire',   emoji: '🔥', label: 'Fire',       color: '#ff5b3a' },

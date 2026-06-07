@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608d'
-import { toast, modal, confirmDialog, fmtNumber, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608d'
-import { makeAreaChart, makeSparkline } from '/lib/charts.js?v=20260608d'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608d'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608d'
-import { drawer, segmentedControl } from '/lib/layout-extras.js?v=20260608d'
-import { showUserDetailModal, grantPremium, sendBroadcastPush } from '/lib/panel-actions.js?v=20260608d'
+import { sb } from '/lib/supabase.js?v=20260608e'
+import { toast, modal, confirmDialog, fmtNumber, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608e'
+import { makeAreaChart, makeSparkline } from '/lib/charts.js?v=20260608e'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608e'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608e'
+import { drawer, segmentedControl } from '/lib/layout-extras.js?v=20260608e'
+import { showUserDetailModal, grantPremium, sendBroadcastPush } from '/lib/panel-actions.js?v=20260608e'
 
 const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 }
 

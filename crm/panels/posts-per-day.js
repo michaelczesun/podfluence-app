@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608d'
-import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608d'
-import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260608d'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608d'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608d'
-import { drawer, tabs, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js?v=20260608d'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608d'
+import { sb } from '/lib/supabase.js?v=20260608e'
+import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608e'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260608e'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608e'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608e'
+import { drawer, tabs, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js?v=20260608e'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608e'
 
 const TYPES = [
   { key: 'announcement', label: 'Ankündigung', color: '#6366f1' },
