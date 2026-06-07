@@ -484,6 +484,7 @@ export default {
             for (const def of KPI_DEFS) {
               animateCard(def.key, 0, totals[def.key].value, def.fmt)
             }
+            renderSparklines(container).catch(() => {})
           } else {
             for (const def of KPI_DEFS) {
               const t = totals[def.key]
@@ -493,6 +494,20 @@ export default {
               if (card) {
                 const change = pctChange(t.value, t.prev)
                 const up = change >= 0
+                const alert = isAlertChange(def, change, t.prev)
+                const warn = isLowActivityWarn(def, t.value)
+                card.classList.toggle('kpi-alert', alert)
+                card.classList.toggle('kpi-warn', warn)
+                let warnEl = card.querySelector('.kpi-warn-badge')
+                if (warn && !warnEl) {
+                  warnEl = document.createElement('span')
+                  warnEl.className = 'kpi-warn-badge'
+                  warnEl.title = 'Wenig Aktivität heute'
+                  warnEl.innerHTML = `${iconHtml('alert-triangle')} Wenig Aktivität`
+                  card.prepend(warnEl)
+                } else if (!warn && warnEl) {
+                  warnEl.remove()
+                }
                 const chEl = card.querySelector('.kpi-change')
                 if (chEl) {
                   chEl.className = `kpi-change ${up ? 'up' : 'down'}`
@@ -502,6 +517,7 @@ export default {
                 }
               }
             }
+            renderSparklines(container).catch(() => {})
           }
 
           if (lastUpd) lastUpd.textContent = `Zuletzt aktualisiert: ${fmtDateTime(new Date())} · Auto-Refresh 60s`

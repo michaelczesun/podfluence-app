@@ -559,7 +559,9 @@ export default {
 
         const filter = (input, list, src, kind) => {
           const q = (input.value || '').toLowerCase().trim()
-          const filtered = !q ? src : src.filter(u =>
+          let base = src
+          if (kind === 'premium') base = applyPremiumFilter(src, state.premiumFilter)
+          const filtered = !q ? base : base.filter(u =>
             (u.username || '').toLowerCase().includes(q) ||
             (u.full_name || '').toLowerCase().includes(q))
           list.innerHTML = filtered.length === 0
