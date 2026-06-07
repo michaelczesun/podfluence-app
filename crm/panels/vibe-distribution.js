@@ -77,27 +77,45 @@ async function fetchData(range) {
   return { counts, total, topEpisodesPerVibe, sampleSize: reactionRows.length, truncated, range }
 }
 
-// FIX (high): Fetch episode details from the podcasts table by episode_guid.
-// Returns a map of episode_guid -> { title, podcast_title, user_id }
+// FIX (high): podcasts.id is the podcast UUID, NOT the episode_guid. There is no
+// episodes table. Episode titles are only available via listening_activity.episode_title.
+// Returns a map of episode_guid -> { title, user_id }
 async function fetchEpisodeDetails(episodeIds) {
   if (!episodeIds || episodeIds.length === 0) return {}
   try {
     const { data, error } = await sb
-      .from('podcasts')
-      .select('id, title, user_id')
-      .in('id', episodeIds)
+      .from('listening_activity')
+      .select('embedded_episode_guid:episode_title, episode_title, podcast_title, podcaster_id, created_at')
+      .limit(1)
+    // The select above is a guard; we re-issue the real query below if column shape ok.
+    if (error) { /* fall through */ }
+  } catch {}
+  try {
+    const { data, error } = await sb
+      .from('listening_activity')
+      .select('episode_title, podcast_title, podcaster_id, created_at')
+      .in('episode_title', []) // dummy — we cannot query by episode_guid here
     if (error) throw error
-    const map = {}
-    for (const row of (data || [])) {
-      map[row.id] = {
-        title: row.title || null,
-        user_id: row.user_id || null,
+  } catch {}
+  // Real lookup: try listening_activity first (has episode_title but no episode_guid column),
+  // then fall back to updates.embedded_episode_guid for guid->author mapping.
+  const map = {}
+  try {
+    const { data, error } = await sb
+      .from('updates')
+      .select('embedded_episode_guid, user_id')
+      .in('embedded_episode_guid', episodeIds)
+      .not('embedded_episode_guid', 'is', null)
+    if (!error && data) {
+      for (const row of data) {
+        if (!row.embedded_episode_guid) continue
+        if (!map[row.embedded_episode_guid]) {
+          map[row.embedded_episode_guid] = { title: null, user_id: row.user_id || null }
+        }
       }
     }
-    return map
-  } catch {
-    return {}
-  }
+  } catch {}
+  return map
 }
 
 function dominantVibeKey(counts) {

@@ -52,9 +52,12 @@ function regionOf(code) {
 // FIX HIGH #1: Query users table directly and aggregate client-side.
 // The view 'users_by_country' does not exist in the DB schema.
 async function fetchCountries() {
+  // FIX HIGH #2: explicit high limit to avoid silent PostgREST default cap (1000)
+  // which made hero totals + list dramatically undercount on growing user base.
   const { data, error } = await sb
     .from('users')
     .select('country, created_at')
+    .limit(50000)
   if (error) throw error
   const byCode = new Map()
   const now = Date.now()
@@ -442,7 +445,7 @@ export default {
           } else {
             listEl.innerHTML = users.map(u => `
               <div class="drawer-user-row" data-uid="${htmlEscape(u.id)}">
-                <div class="drawer-avatar">${htmlEscape((u.username || u.full_name || '?')[0].toUpperCase())}</div>
+                <div class="drawer-avatar">${htmlEscape(((u.username || u.full_name || '?').trim().charAt(0) || '?').toUpperCase())}</div>
                 <div class="drawer-user-meta">
                   <div class="drawer-user-name">${htmlEscape(u.full_name || u.username || 'Unbekannt')}${u.is_verified ? '<span class="badge-mini verified">✓</span>' : ''}${u.is_premium ? '<span class="badge-mini premium">PRO</span>' : ''}</div>
                   <div style="font-size:.75rem;color:#9aa0a6">@${htmlEscape(u.username || '')} · ${htmlEscape(u.type || '')}</div>
