@@ -1,0 +1,700 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>User-Detail · CRM · hozd</title>
+<meta name="robots" content="noindex,nofollow" />
+<meta name="theme-color" content="#0B0B0F" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E%F0%9F%91%A4%3C/text%3E%3C/svg%3E" />
+<link rel="stylesheet" href="/crm/lib/mobile.css?v=20260607-cards" />
+<style>
+  :root {
+    --bg-deep: #07070A;
+    --bg: #0B0B0F;
+    --surface: #16161D;
+    --surface-elev: #1C1C25;
+    --surface-glass: rgba(22,22,29,0.72);
+    --border: #2A2A33;
+    --border-soft: rgba(255,255,255,0.06);
+    --primary: #8B5CF6;
+    --primary-2: #A78BFA;
+    --primary-dark: #7C3AED;
+    --text: #FFFFFF;
+    --text-muted: #9CA3AF;
+    --text-dim: #6B7280;
+    --success: #34D399;
+    --warn: #FCD34D;
+    --error: #F87171;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-deep); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    min-height: 100vh;
+  }
+  a { color: var(--primary-2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  .topbar {
+    height: 60px;
+    background: var(--surface-glass);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border-bottom: 1px solid var(--border-soft);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 18px;
+    position: sticky; top: 0; z-index: 50;
+    gap: 16px;
+  }
+  .topbar .brand { display: flex; align-items: center; gap: 12px; }
+  .topbar .logo {
+    width: 34px; height: 34px; border-radius: 9px;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 17px;
+  }
+  .topbar .title { font-weight: 700; font-size: 15px; letter-spacing: 0.3px; }
+  .topbar .title small { color: var(--text-muted); font-weight: 500; margin-left: 8px; }
+  .back-btn {
+    background: transparent; color: var(--text-muted);
+    border: 1px solid var(--border-soft);
+    padding: 7px 14px; border-radius: 9px;
+    font-family: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer; transition: all 0.15s;
+  }
+  .back-btn:hover { background: var(--surface-elev); color: var(--text); border-color: var(--border); }
+
+  .ud-wrap { max-width: 1100px; margin: 0 auto; padding: 24px 20px 80px; }
+
+  /* Header card */
+  .ud-header {
+    display: flex; gap: 20px; align-items: flex-start;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 22px;
+    margin-bottom: 20px;
+  }
+  .ud-avatar {
+    width: 96px; height: 96px;
+    border-radius: 50%;
+    object-fit: cover;
+    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+    display: flex; align-items: center; justify-content: center;
+    color: #fff; font-size: 38px; font-weight: 700;
+    flex-shrink: 0;
+  }
+  .ud-meta { flex: 1; min-width: 0; }
+  .ud-name { font-size: 24px; font-weight: 700; margin: 0 0 4px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .ud-handle { color: var(--text-muted); font-size: 14px; margin-bottom: 8px; }
+  .ud-email  { color: var(--text-muted); font-size: 13px; }
+  .ud-badges { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+  .ud-badge {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 10px; border-radius: 12px;
+    font-size: 11px; font-weight: 600;
+  }
+  .badge-verified { background: rgba(52,211,153,0.18); color: #34D399; }
+  .badge-admin    { background: rgba(244,114,182,0.18); color: #F472B6; }
+  .badge-podcaster{ background: rgba(96,165,250,0.18); color: #60A5FA; }
+  .badge-premium  { background: rgba(252,211,77,0.18); color: #FCD34D; }
+  .badge-banned   { background: rgba(248,113,113,0.18); color: #F87171; }
+  .badge-muted    { background: rgba(156,163,175,0.18); color: #9CA3AF; }
+  .ud-uid { font-family: ui-monospace, monospace; font-size: 11px; color: var(--text-dim); margin-top:8px; }
+
+  /* Tab bar */
+  .ud-tabs {
+    display: flex; gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+    overflow-x: auto;
+    margin-bottom: 20px;
+    position: sticky; top: 70px; z-index: 20;
+    backdrop-filter: blur(18px);
+  }
+  .ud-tab {
+    background: transparent;
+    color: var(--text-muted);
+    border: none;
+    padding: 10px 16px;
+    border-radius: 9px;
+    font: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.15s;
+  }
+  .ud-tab:hover { color: var(--text); background: rgba(255,255,255,0.04); }
+  .ud-tab.active {
+    background: linear-gradient(135deg, rgba(139,92,246,0.28), rgba(139,92,246,0.08));
+    color: #fff;
+  }
+
+  /* Tab content */
+  .ud-pane {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px;
+    min-height: 280px;
+    animation: fadeInUp 0.22s ease both;
+  }
+  @keyframes fadeInUp { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+  .ud-pane h3 { font-size: 14px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.8px; margin: 0 0 14px; }
+  .ud-pane h3:not(:first-child) { margin-top: 24px; }
+
+  .kv-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+  .kv {
+    background: var(--surface-elev);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 10px 12px;
+  }
+  .kv .k { font-size: 11px; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 3px; }
+  .kv .v { font-size: 14px; color: var(--text); word-break: break-word; }
+  .kv .v.mono { font-family: ui-monospace, monospace; font-size: 12px; }
+
+  .actions-row { display: flex; flex-wrap: wrap; gap: 8px; }
+  .btn {
+    background: var(--surface-elev);
+    color: var(--text);
+    border: 1px solid var(--border);
+    padding: 8px 14px;
+    border-radius: 9px;
+    font: inherit; font-size: 13px; font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .btn:hover { background: rgba(255,255,255,0.06); border-color: rgba(255,255,255,0.12); }
+  .btn-primary { background: linear-gradient(135deg, var(--primary), var(--primary-dark)); border-color: transparent; }
+  .btn-primary:hover { filter: brightness(1.1); }
+  .btn-danger { background: rgba(248,113,113,0.18); color: #F87171; border-color: rgba(248,113,113,0.35); }
+  .btn-success { background: rgba(52,211,153,0.18); color: #34D399; border-color: rgba(52,211,153,0.35); }
+  .btn-warn { background: rgba(252,211,77,0.18); color: #FCD34D; border-color: rgba(252,211,77,0.35); }
+
+  .ud-list { display: flex; flex-direction: column; gap: 10px; }
+  .ud-item {
+    background: var(--surface-elev);
+    border: 1px solid var(--border-soft);
+    border-radius: 10px;
+    padding: 12px 14px;
+  }
+  .ud-item .meta { color: var(--text-dim); font-size: 11px; margin-top: 4px; }
+
+  .loading, .empty {
+    text-align: center;
+    padding: 50px 20px;
+    color: var(--text-muted);
+    font-size: 14px;
+  }
+  .empty .ico { font-size: 32px; margin-bottom: 8px; }
+
+  .note-add {
+    display: flex; flex-direction: column; gap: 8px;
+    margin-bottom: 16px;
+  }
+  .note-add textarea {
+    background: var(--bg);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 10px 12px;
+    border-radius: 9px;
+    font: inherit; font-size: 13px;
+    resize: vertical;
+    min-height: 70px;
+  }
+  .note-add .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .note-add label { font-size: 12px; color: var(--text-muted); display: flex; align-items: center; gap: 6px; cursor: pointer; }
+
+  .note-item.pinned { border-color: rgba(252,211,77,0.4); background: rgba(252,211,77,0.05); }
+
+  @media (max-width: 640px) {
+    .ud-header { flex-direction: column; align-items: center; text-align: center; }
+    .ud-avatar { width: 80px; height: 80px; font-size: 32px; }
+    .ud-tabs { top: 60px; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <button class="back-btn" id="back-btn" title="Zurück">← Zurück</button>
+    <div class="logo">👤</div>
+    <div class="title">User-Detail <small>CRM</small></div>
+  </div>
+  <div>
+    <button class="back-btn" id="open-crm">CRM öffnen</button>
+  </div>
+</header>
+
+<div class="ud-wrap" id="ud-root">
+  <div class="loading">Lade Nutzer…</div>
+</div>
+
+<script type="module">
+import { sb } from '/lib/supabase.js?v=20260608f'
+import { toast, confirmDialog, fmtDateTime, fmtRelativeTime, htmlEscape } from '/lib/ui.js?v=20260608f'
+import {
+  verifyUser, unverifyUser, banUser, unbanUser,
+  grantPremium, revokePremium, setUserRole,
+  sendTestPush, assignInviteCodes
+} from '/lib/panel-actions.js?v=20260608f'
+
+// ---- Auth-Guard (Admin-Only) ----
+const root = document.getElementById('ud-root')
+try {
+  const { data: { session } } = await sb.auth.getSession()
+  if (!session) {
+    location.replace('/login/?next=/crm/user-detail.html' + location.hash)
+    throw new Error('no session')
+  }
+  const { data: profile } = await sb.from('users').select('is_app_admin').eq('id', session.user.id).maybeSingle()
+  if (!profile?.is_app_admin) {
+    location.replace('/app/')
+    throw new Error('not admin')
+  }
+} catch (e) {
+  root.innerHTML = `<div class="empty" style="color:#F87171">Auth-Fehler: ${htmlEscape(e?.message || String(e))}<br><br><a href="/login/">Anmelden</a></div>`
+  throw e
+}
+
+document.getElementById('back-btn').addEventListener('click', () => {
+  if (history.length > 1) history.back()
+  else location.href = '/crm/#people/users'
+})
+document.getElementById('open-crm').addEventListener('click', () => { location.href = '/crm/' })
+
+// ---- Hash-Routing: #user/<uuid>[/<tab>] ----
+function parseHash() {
+  // URL-Format: #user/<uuid>/<tab>   (tab optional)
+  const raw = (location.hash || '').replace(/^#/, '').trim()
+  const seg = raw.split('/').filter(Boolean)
+  // Wenn erstes Segment 'user' ist, war es das (legacy), sonst uuid direkt
+  let uuid = '', tab = ''
+  if (seg[0] === 'user') {
+    uuid = seg[1] || ''
+    tab = seg[2] || ''
+  } else {
+    uuid = seg[0] || ''
+    tab = seg[1] || ''
+  }
+  return { uuid, tab: tab || 'profile' }
+}
+
+const TABS = [
+  { id: 'profile',   label: 'Profil',     icon: '👤' },
+  { id: 'timeline',  label: 'Timeline',   icon: '🕒' },
+  { id: 'posts',     label: 'Posts',      icon: '📝' },
+  { id: 'listening', label: 'Hören',      icon: '🎧' },
+  { id: 'notes',     label: 'Notizen',    icon: '📌' },
+  { id: 'lifecycle', label: 'Lifecycle',  icon: '📈' },
+  { id: 'actions',   label: 'Aktionen',   icon: '⚙️' }
+]
+
+let _state = { user: null, uuid: null, tab: 'profile' }
+
+async function loadUser(uuid) {
+  // Versuche zuerst die neue zusammengefasste RPC, sonst Fallback auf admin_get_user_full.
+  let data = null
+  try {
+    const res = await sb.rpc('admin_user_full', { p_user_id: uuid })
+    if (!res.error && res.data) data = Array.isArray(res.data) ? res.data[0] : res.data
+  } catch (_) {}
+  if (!data) {
+    const res = await sb.rpc('admin_get_user_full', { p_user_id: uuid })
+    if (res.error) throw res.error
+    data = Array.isArray(res.data) ? res.data[0] : res.data
+  }
+  if (!data) {
+    // Letzter Versuch: über admin_users_list_filtered suchen
+    const r = await sb.rpc('admin_users_list_filtered', { p_limit: 1, p_offset: 0, p_search: uuid })
+    if (!r.error) data = (r.data || [])[0] || null
+  }
+  return data
+}
+
+function renderShell() {
+  const u = _state.user
+  if (!u) { root.innerHTML = `<div class="empty"><div class="ico">😕</div>Nutzer nicht gefunden.</div>`; return }
+  const name = u.full_name || u.display_name || u.username || 'Unbenannt'
+  const initial = (name[0] || '?').toUpperCase()
+  const avatar = u.avatar_url
+    ? `<img src="${htmlEscape(u.avatar_url)}" class="ud-avatar" alt="" />`
+    : `<div class="ud-avatar">${htmlEscape(initial)}</div>`
+
+  const badges = []
+  if (u.is_verified) badges.push(`<span class="ud-badge badge-verified">✓ Verifiziert</span>`)
+  if (u.is_app_admin) badges.push(`<span class="ud-badge badge-admin">Admin</span>`)
+  if (u.type === 'podcaster' || u.type === 'both') badges.push(`<span class="ud-badge badge-podcaster">Podcaster</span>`)
+  if (u.is_premium) badges.push(`<span class="ud-badge badge-premium">★ Premium</span>`)
+  if (u.is_banned) badges.push(`<span class="ud-badge badge-banned">Gebannt</span>`)
+  if (!badges.length) badges.push(`<span class="ud-badge badge-muted">Standard</span>`)
+
+  root.innerHTML = `
+    <div class="ud-header">
+      ${avatar}
+      <div class="ud-meta">
+        <h1 class="ud-name">${htmlEscape(name)}</h1>
+        <div class="ud-handle">@${htmlEscape(u.username || '—')}</div>
+        <div class="ud-email">${htmlEscape(u.email || '—')}</div>
+        <div class="ud-badges">${badges.join('')}</div>
+        <div class="ud-uid">${htmlEscape(u.id)}</div>
+      </div>
+    </div>
+
+    <div class="ud-tabs" role="tablist">
+      ${TABS.map(t => `<button class="ud-tab ${t.id === _state.tab ? 'active' : ''}" data-tab="${t.id}" role="tab"><span style="margin-right:6px">${t.icon}</span>${t.label}</button>`).join('')}
+    </div>
+
+    <div class="ud-pane" id="ud-pane">
+      <div class="loading">Lädt…</div>
+    </div>
+  `
+
+  root.querySelectorAll('.ud-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const t = btn.dataset.tab
+      const target = `#${_state.uuid}/${t}`
+      if (location.hash !== target) {
+        history.pushState(null, '', target)
+      }
+      _state.tab = t
+      root.querySelectorAll('.ud-tab').forEach(x => x.classList.toggle('active', x.dataset.tab === t))
+      renderTab()
+    })
+  })
+
+  renderTab()
+}
+
+function _kv(k, v, mono = false) {
+  return `<div class="kv"><div class="k">${htmlEscape(k)}</div><div class="v ${mono ? 'mono' : ''}">${v == null || v === '' ? '<span style="color:var(--text-dim)">—</span>' : htmlEscape(String(v))}</div></div>`
+}
+
+function _fmtDate(d) { return d ? fmtDateTime(d) : '' }
+
+async function renderTab() {
+  const pane = document.getElementById('ud-pane')
+  if (!pane) return
+  const u = _state.user
+  pane.innerHTML = `<div class="loading">Lädt…</div>`
+  try {
+    switch (_state.tab) {
+      case 'profile':   return paneProfile(pane, u)
+      case 'timeline':  return paneTimeline(pane, u)
+      case 'posts':     return panePosts(pane, u)
+      case 'listening': return paneListening(pane, u)
+      case 'notes':     return paneNotes(pane, u)
+      case 'lifecycle': return paneLifecycle(pane, u)
+      case 'actions':   return paneActions(pane, u)
+      default: pane.innerHTML = `<div class="empty">Unbekannter Tab.</div>`
+    }
+  } catch (e) {
+    console.error('[user-detail] tab render failed', _state.tab, e)
+    pane.innerHTML = `<div class="empty" style="color:#F87171">Fehler: ${htmlEscape(e?.message || String(e))}</div>`
+  }
+}
+
+function paneProfile(pane, u) {
+  pane.innerHTML = `
+    <h3>Identität</h3>
+    <div class="kv-grid">
+      ${_kv('User-ID', u.id, true)}
+      ${_kv('Username', u.username)}
+      ${_kv('Voller Name', u.full_name || u.display_name)}
+      ${_kv('E-Mail', u.email)}
+      ${_kv('Typ', u.type)}
+      ${_kv('Rolle', u.role || (u.is_app_admin ? 'admin' : 'user'))}
+      ${_kv('Land', u.country)}
+      ${_kv('Sprache', u.language)}
+    </div>
+    <h3>Status</h3>
+    <div class="kv-grid">
+      ${_kv('Verifiziert', u.is_verified ? 'Ja' : 'Nein')}
+      ${_kv('Premium', u.is_premium ? (u.premium_until ? `bis ${_fmtDate(u.premium_until)}` : 'Ja') : 'Nein')}
+      ${_kv('Gebannt', u.is_banned ? (u.ban_reason || 'Ja') : 'Nein')}
+      ${_kv('App-Admin', u.is_app_admin ? 'Ja' : 'Nein')}
+    </div>
+    <h3>Datum</h3>
+    <div class="kv-grid">
+      ${_kv('Registriert', _fmtDate(u.created_at))}
+      ${_kv('Zuletzt aktiv', _fmtDate(u.last_seen_at))}
+      ${_kv('Letztes App-Open', _fmtDate(u.last_app_open_at))}
+      ${_kv('Client-Build', u.client_build_version)}
+    </div>
+    <h3>Zahlen</h3>
+    <div class="kv-grid">
+      ${_kv('Follower', u.follower_count ?? 0)}
+      ${_kv('Folgt', u.following_count ?? 0)}
+      ${_kv('Posts', u.post_count ?? 0)}
+      ${_kv('Episoden gehört', u.episodes_listened ?? 0)}
+      ${_kv('Invite-Codes übrig', u.invite_codes_left ?? 0)}
+    </div>
+  `
+}
+
+async function paneTimeline(pane, u) {
+  // Versuche RPC; sonst aus updates / app_opens / notifications zusammenbauen
+  let items = []
+  try {
+    const r = await sb.rpc('admin_user_timeline', { p_user_id: u.id, p_limit: 100 })
+    if (!r.error && Array.isArray(r.data)) items = r.data
+  } catch (_) {}
+  if (!items.length) {
+    // Fallback: events aus updates + app_opens
+    try {
+      const [{ data: posts }, { data: opens }] = await Promise.all([
+        sb.from('updates').select('id, created_at, content').eq('user_id', u.id).order('created_at', { ascending: false }).limit(30),
+        sb.from('app_opens').select('opened_at').eq('user_id', u.id).order('opened_at', { ascending: false }).limit(30)
+      ])
+      ;(posts || []).forEach(p => items.push({ ts: p.created_at, type: 'post', title: (p.content || '').slice(0, 100) }))
+      ;(opens || []).forEach(o => items.push({ ts: o.opened_at, type: 'open', title: 'App geöffnet' }))
+      items.sort((a, b) => new Date(b.ts) - new Date(a.ts))
+    } catch (_) {}
+  }
+  if (!items.length) {
+    pane.innerHTML = `<div class="empty"><div class="ico">📭</div>Keine Aktivität gefunden.</div>`
+    return
+  }
+  pane.innerHTML = `
+    <h3>Aktivität · letzte ${items.length}</h3>
+    <div class="ud-list">
+      ${items.map(i => `
+        <div class="ud-item">
+          <div>${htmlEscape(i.title || i.type || '—')}</div>
+          <div class="meta">${htmlEscape(i.type || '')} · ${htmlEscape(_fmtDate(i.ts || i.created_at))}</div>
+        </div>
+      `).join('')}
+    </div>
+  `
+}
+
+async function panePosts(pane, u) {
+  let posts = []
+  try {
+    const r = await sb.from('updates').select('id, created_at, content, like_count, comment_count').eq('user_id', u.id).order('created_at', { ascending: false }).limit(50)
+    if (!r.error) posts = r.data || []
+  } catch (_) {}
+  if (!posts.length) {
+    pane.innerHTML = `<div class="empty"><div class="ico">📝</div>Keine Posts.</div>`
+    return
+  }
+  pane.innerHTML = `
+    <h3>Letzte ${posts.length} Posts</h3>
+    <div class="ud-list">
+      ${posts.map(p => `
+        <div class="ud-item">
+          <div>${htmlEscape((p.content || '').slice(0, 220) || '(leer)')}</div>
+          <div class="meta">${htmlEscape(_fmtDate(p.created_at))} · ♥ ${p.like_count ?? 0} · 💬 ${p.comment_count ?? 0}</div>
+        </div>
+      `).join('')}
+    </div>
+  `
+}
+
+async function paneListening(pane, u) {
+  let rows = []
+  try {
+    const r = await sb.from('listening_activity').select('podcast_title, episode_title, listened_ms, last_listened_at').eq('user_id', u.id).order('last_listened_at', { ascending: false }).limit(50)
+    if (!r.error) rows = r.data || []
+  } catch (_) {}
+  if (!rows.length) {
+    pane.innerHTML = `<div class="empty"><div class="ico">🎧</div>Keine Hör-Aktivität.</div>`
+    return
+  }
+  const totalMin = Math.round(rows.reduce((s, r) => s + (r.listened_ms || 0), 0) / 60000)
+  pane.innerHTML = `
+    <h3>Hör-Aktivität · ${rows.length} Einträge · ~${totalMin} min</h3>
+    <div class="ud-list">
+      ${rows.map(r => `
+        <div class="ud-item">
+          <div><strong>${htmlEscape(r.podcast_title || '—')}</strong>${r.episode_title ? ' · ' + htmlEscape(r.episode_title) : ''}</div>
+          <div class="meta">${htmlEscape(_fmtDate(r.last_listened_at))} · ${Math.round((r.listened_ms || 0) / 60000)} min</div>
+        </div>
+      `).join('')}
+    </div>
+  `
+}
+
+async function paneNotes(pane, u) {
+  pane.innerHTML = `
+    <div class="note-add">
+      <textarea id="note-text" placeholder="Interne Notiz hinzufügen…" maxlength="500"></textarea>
+      <div class="row">
+        <label><input type="checkbox" id="note-pinned" /> 📌 Anpinnen</label>
+        <button class="btn btn-primary" id="note-save">Speichern</button>
+      </div>
+    </div>
+    <h3>Notizen</h3>
+    <div id="notes-list"><div class="loading">Lädt…</div></div>
+  `
+  async function reload() {
+    const list = pane.querySelector('#notes-list')
+    try {
+      const r = await sb.rpc('admin_user_notes_list', { p_user_id: u.id })
+      if (r.error) throw r.error
+      const notes = (r.data || []).slice().sort((a, b) => {
+        if (!!b.is_pinned !== !!a.is_pinned) return b.is_pinned ? 1 : -1
+        return new Date(b.created_at) - new Date(a.created_at)
+      })
+      if (!notes.length) { list.innerHTML = `<div class="empty">Noch keine Notizen.</div>`; return }
+      list.innerHTML = `<div class="ud-list">${notes.map(n => `
+        <div class="ud-item note-item ${n.is_pinned ? 'pinned' : ''}">
+          <div style="white-space:pre-wrap">${n.is_pinned ? '📌 ' : ''}${htmlEscape(n.body || '')}</div>
+          <div class="meta">${htmlEscape(n.admin_full_name || n.admin_username || 'Admin')} · ${htmlEscape(fmtRelativeTime(n.created_at))}</div>
+        </div>
+      `).join('')}</div>`
+    } catch (e) {
+      list.innerHTML = `<div class="empty" style="color:#F87171">Konnte Notizen nicht laden: ${htmlEscape(e?.message || '')}</div>`
+    }
+  }
+  reload()
+  pane.querySelector('#note-save')?.addEventListener('click', async () => {
+    const text = pane.querySelector('#note-text').value.trim()
+    const pinned = pane.querySelector('#note-pinned').checked
+    if (!text) { toast('Bitte Text eingeben.', 'error'); return }
+    try {
+      const r = await sb.rpc('admin_user_note_add', { p_user_id: u.id, p_body: text, p_is_pinned: pinned })
+      if (r.error) throw r.error
+      pane.querySelector('#note-text').value = ''
+      pane.querySelector('#note-pinned').checked = false
+      toast('Notiz gespeichert.', 'success')
+      reload()
+    } catch (e) {
+      toast(e?.message || 'Speichern fehlgeschlagen', 'error')
+    }
+  })
+}
+
+async function paneLifecycle(pane, u) {
+  // Heuristisches Lifecycle-Bild: Registrierung, erstes Login, erste Aktion, last_seen, premium-Phase, bans.
+  const events = []
+  if (u.created_at) events.push({ k: 'Registriert', v: _fmtDate(u.created_at) })
+  if (u.last_seen_at) events.push({ k: 'Zuletzt aktiv', v: _fmtDate(u.last_seen_at) })
+  if (u.is_premium) events.push({ k: 'Premium', v: u.premium_until ? `aktiv bis ${_fmtDate(u.premium_until)}` : 'aktiv' })
+  if (u.is_banned) events.push({ k: 'Gebannt', v: u.ban_reason || 'Ja' })
+  if (u.is_verified) events.push({ k: 'Verifiziert', v: 'Ja' })
+
+  // Tage seit Registrierung
+  let daysActive = null
+  if (u.created_at) {
+    daysActive = Math.floor((Date.now() - new Date(u.created_at).getTime()) / 86400000)
+  }
+  pane.innerHTML = `
+    <h3>Lifecycle</h3>
+    <div class="kv-grid">
+      ${events.map(e => _kv(e.k, e.v)).join('')}
+      ${daysActive != null ? _kv('Tage seit Registrierung', daysActive) : ''}
+    </div>
+    <h3>Engagement-Hinweise</h3>
+    <div class="kv-grid">
+      ${_kv('Posts', u.post_count ?? 0)}
+      ${_kv('Episoden gehört', u.episodes_listened ?? 0)}
+      ${_kv('Follower', u.follower_count ?? 0)}
+      ${_kv('Folgt', u.following_count ?? 0)}
+    </div>
+  `
+}
+
+function paneActions(pane, u) {
+  const uid = u.id
+  pane.innerHTML = `
+    <h3>Status</h3>
+    <div class="actions-row">
+      <button class="btn btn-success" data-a="verify">✓ Verifizieren</button>
+      <button class="btn btn-warn" data-a="unverify">Verifizierung entziehen</button>
+      <button class="btn btn-primary" data-a="grant-premium">★ Premium gewähren</button>
+      <button class="btn" data-a="revoke-premium">Premium entziehen</button>
+    </div>
+    <h3>Moderation</h3>
+    <div class="actions-row">
+      <button class="btn btn-danger" data-a="ban">🚫 Bannen</button>
+      <button class="btn" data-a="unban">Entbannen</button>
+      <button class="btn" data-a="set-role">Rolle setzen</button>
+    </div>
+    <h3>Kommunikation</h3>
+    <div class="actions-row">
+      <button class="btn" data-a="test-push">🔔 Test-Push</button>
+      <button class="btn" data-a="invite-codes">Invite-Codes vergeben</button>
+      <button class="btn" data-a="impersonate">👁 Als User ansehen</button>
+    </div>
+  `
+  pane.querySelectorAll('button[data-a]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const a = btn.dataset.a
+      btn.disabled = true
+      try {
+        switch (a) {
+          case 'verify':         await verifyUser(uid); break
+          case 'unverify':       await unverifyUser(uid); break
+          case 'grant-premium':  await grantPremium(uid); break
+          case 'revoke-premium': await revokePremium(uid); break
+          case 'ban':            await banUser(uid); break
+          case 'unban':          await unbanUser(uid); break
+          case 'set-role':       await setUserRole(uid); break
+          case 'test-push':      await sendTestPush(uid); break
+          case 'invite-codes':   await assignInviteCodes(uid); break
+          case 'impersonate': {
+            const pa = await import('/lib/panel-actions.js?v=20260608f')
+            await pa.impersonateUser(uid)
+            return
+          }
+        }
+        // User-Daten neu laden (Status könnte sich geändert haben)
+        _state.user = await loadUser(uid)
+        renderShell()
+      } catch (e) {
+        // Toast wird in panel-actions geworfen
+      } finally {
+        btn.disabled = false
+      }
+    })
+  })
+}
+
+async function bootstrap() {
+  const { uuid, tab } = parseHash()
+  if (!uuid || !/^[0-9a-f-]{16,}$/i.test(uuid)) {
+    root.innerHTML = `<div class="empty"><div class="ico">❓</div>Keine User-ID im URL-Hash.<br><br><a href="/crm/#people/users">Zur Nutzer-Liste</a></div>`
+    return
+  }
+  _state.uuid = uuid
+  _state.tab = tab
+  try {
+    _state.user = await loadUser(uuid)
+  } catch (e) {
+    root.innerHTML = `<div class="empty" style="color:#F87171">Fehler beim Laden: ${htmlEscape(e?.message || '')}</div>`
+    return
+  }
+  if (!_state.user) {
+    root.innerHTML = `<div class="empty"><div class="ico">😕</div>Nutzer nicht gefunden.<br><br><a href="/crm/#people/users">Zur Nutzer-Liste</a></div>`
+    return
+  }
+  renderShell()
+}
+
+window.addEventListener('hashchange', () => {
+  const { uuid, tab } = parseHash()
+  if (uuid !== _state.uuid) {
+    bootstrap()
+  } else if (tab !== _state.tab) {
+    _state.tab = tab
+    document.querySelectorAll('.ud-tab').forEach(x => x.classList.toggle('active', x.dataset.tab === tab))
+    renderTab()
+  }
+})
+
+bootstrap()
+</script>
+
+</body>
+</html>
