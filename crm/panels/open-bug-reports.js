@@ -191,6 +191,29 @@ function wireTable(root, rows, userMap, refresh) {
       if (row) openResolveDrawer(row, userMap[row.user_id], refresh)
     })
   })
+  root.querySelectorAll('.obr-status-btn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id
+      const target = btn.dataset.target
+      const original = btn.textContent
+      btn.disabled = true
+      btn.textContent = '…'
+      try {
+        const { error } = await sb.rpc('admin_set_bug_status', {
+          id,
+          status: target,
+          note: null
+        })
+        if (error) throw error
+        toast(target === 'in_progress' ? 'Übernommen' : 'Zurück auf Offen', 'success')
+        refresh()
+      } catch (err) {
+        btn.disabled = false
+        btn.textContent = original
+        toast('Fehler: ' + (err.message || err), 'error')
+      }
+    })
+  })
   root.querySelectorAll('.obr-user-link').forEach(el => {
     el.addEventListener('click', () => {
       if (typeof showUserDetailModal === 'function') {
