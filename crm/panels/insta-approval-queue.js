@@ -5,6 +5,8 @@ import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn } from '/lib/animations.js'
 import { drawer } from '/lib/layout-extras.js'
 
+// ─── helpers ────────────────────────────────────────────────────────────────
+
 function loadImage(url) {
   return new Promise((resolve, reject) => {
     const img = new Image()
@@ -46,87 +48,957 @@ function roundRectClip(ctx, x, y, w, h, r) {
   ctx.closePath()
 }
 
-async function renderImage(item) {
-  const brief = item.image_brief || {}
-  const accent = brief.accent_color || '#8B5CF6'
-  const canvas = document.createElement('canvas')
-  canvas.width = 1080
-  canvas.height = 1080
-  const ctx = canvas.getContext('2d')
+function roundRect(ctx, x, y, w, h, r) {
+  roundRectClip(ctx, x, y, w, h, r)
+  ctx.fill()
+}
 
-  const grad = ctx.createLinearGradient(0, 0, 1080, 1080)
-  grad.addColorStop(0, accent)
-  grad.addColorStop(1, '#0B0B0F')
-  ctx.fillStyle = grad
-  ctx.fillRect(0, 0, 1080, 1080)
+// ─── brand drawing primitives ────────────────────────────────────────────────
 
-  ctx.fillStyle = '#FFFFFF'
-  ctx.font = 'bold 64px -apple-system, system-ui, sans-serif'
+const BRAND = {
+  bg: '#0B0B0F',
+  bgAlt: '#07070A',
+  purple: '#8B5CF6',
+  pink: '#EC4899',
+  white: '#FFFFFF',
+  whiteDim: 'rgba(255,255,255,0.75)',
+  whiteSubtle: 'rgba(255,255,255,0.45)',
+  font: '-apple-system, "SF Pro Display", "Inter", system-ui, sans-serif',
+}
+
+function fillBg(ctx, W, H) {
+  const g = ctx.createLinearGradient(0, 0, W, H)
+  g.addColorStop(0, '#0E0B1A')
+  g.addColorStop(0.5, '#0B0B0F')
+  g.addColorStop(1, '#08060E')
+  ctx.fillStyle = g
+  ctx.fillRect(0, 0, W, H)
+}
+
+function drawBubbles(ctx, W, H) {
+  const bubbles = [
+    { cx: W * 0.15, cy: H * 0.25, r: 220, opacity: 0.18 },
+    { cx: W * 0.82, cy: H * 0.15, r: 180, opacity: 0.13 },
+    { cx: W * 0.65, cy: H * 0.72, r: 260, opacity: 0.20 },
+    { cx: W * 0.08, cy: H * 0.78, r: 140, opacity: 0.15 },
+    { cx: W * 0.92, cy: H * 0.55, r: 160, opacity: 0.12 },
+  ]
+  for (const b of bubbles) {
+    const grad = ctx.createRadialGradient(b.cx, b.cy, 0, b.cx, b.cy, b.r)
+    grad.addColorStop(0, `rgba(139,92,246,${b.opacity})`)
+    grad.addColorStop(0.5, `rgba(139,92,246,${b.opacity * 0.5})`)
+    grad.addColorStop(1, 'rgba(139,92,246,0)')
+    ctx.fillStyle = grad
+    ctx.beginPath()
+    ctx.arc(b.cx, b.cy, b.r, 0, Math.PI * 2)
+    ctx.fill()
+  }
+}
+
+function drawLogo(ctx, W) {
+  ctx.save()
+  ctx.font = `800 46px ${BRAND.font}`
   ctx.textBaseline = 'top'
   ctx.textAlign = 'left'
-  ctx.fillText('hozd', 60, 60)
+  const gL = ctx.createLinearGradient(60, 56, 200, 56)
+  gL.addColorStop(0, BRAND.purple)
+  gL.addColorStop(1, BRAND.pink)
+  ctx.fillStyle = gL
+  ctx.fillText('hozd', 60, 56)
+  ctx.restore()
+}
 
-  ctx.font = 'bold 84px -apple-system, system-ui, sans-serif'
-  ctx.textAlign = 'center'
+function drawFooter(ctx, W, H) {
+  ctx.save()
+  ctx.font = `500 22px ${BRAND.font}`
+  ctx.textBaseline = 'bottom'
+  ctx.textAlign = 'right'
+  ctx.fillStyle = BRAND.whiteSubtle
+  ctx.fillText('hozd.app', W - 60, H - 40)
+  ctx.restore()
+}
+
+function pillCTA(ctx, text, cx, cy, W) {
+  const pillW = Math.min(W - 120, 520)
+  const pillH = 72
+  const px = cx - pillW / 2
+  const py = cy - pillH / 2
+  const g = ctx.createLinearGradient(px, py, px + pillW, py)
+  g.addColorStop(0, BRAND.purple)
+  g.addColorStop(1, BRAND.pink)
+  ctx.fillStyle = g
+  roundRect(ctx, px, py, pillW, pillH, 36)
+  ctx.font = `700 26px ${BRAND.font}`
+  ctx.fillStyle = BRAND.white
   ctx.textBaseline = 'middle'
-  const headline = brief.headline || ''
-  const headlineLines = wrapText(ctx, headline, 800)
-  const lineHeight = 96
-  const headlineBlockHeight = headlineLines.length * lineHeight
-  const headlineStartY = 540 - headlineBlockHeight / 2 + lineHeight / 2
-  headlineLines.forEach((line, i) => {
-    ctx.fillText(line, 540, headlineStartY + i * lineHeight)
-  })
+  ctx.textAlign = 'center'
+  ctx.fillText(text, cx, cy)
+}
 
-  ctx.font = '36px -apple-system, system-ui, sans-serif'
-  ctx.fillStyle = 'rgba(255,255,255,0.8)'
+// ─── template: hero ──────────────────────────────────────────────────────────
+
+async function renderHero(brief, W, H) {
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')
+
+  fillBg(ctx, W, H)
+  drawBubbles(ctx, W, H)
+  drawLogo(ctx, W)
+  drawFooter(ctx, W, H)
+
+  const headline = brief.headline || ''
   const subtext = brief.subtext || ''
-  const subLines = wrapText(ctx, subtext, 820)
-  const subLineHeight = 46
-  const subStartY = headlineStartY + headlineBlockHeight + 30
-  subLines.forEach((line, i) => {
-    ctx.fillText(line, 540, subStartY + i * subLineHeight)
+  const cta = brief.cta || 'Jetzt entdecken → hozd.app'
+
+  ctx.save()
+  ctx.font = `800 80px ${BRAND.font}`
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'center'
+  ctx.fillStyle = BRAND.white
+  const headLines = wrapText(ctx, headline, W - 160)
+  const lh = 96
+  const blockH = headLines.length * lh
+  const startY = H * 0.44 - blockH / 2
+  headLines.forEach((line, i) => {
+    ctx.fillText(line, W / 2, startY + i * lh + lh / 2)
   })
+  ctx.restore()
+
+  if (subtext) {
+    ctx.save()
+    ctx.font = `400 28px ${BRAND.font}`
+    ctx.textBaseline = 'top'
+    ctx.textAlign = 'center'
+    ctx.fillStyle = BRAND.whiteDim
+    const subLines = wrapText(ctx, subtext, W - 200)
+    const subY = startY + blockH + 28
+    subLines.forEach((line, i) => {
+      ctx.fillText(line, W / 2, subY + i * 40)
+    })
+    ctx.restore()
+  }
 
   if (brief.cover_image_url) {
     try {
       const img = await loadImage(brief.cover_image_url)
       ctx.save()
-      roundRectClip(ctx, 60, 820, 200, 200, 20)
+      const iW = 200, iH = 200
+      const ix = W / 2 - iW / 2
+      const iy = H * 0.13
+      roundRectClip(ctx, ix, iy, iW, iH, 24)
       ctx.clip()
-      ctx.drawImage(img, 60, 820, 200, 200)
+      ctx.drawImage(img, ix, iy, iW, iH)
       ctx.restore()
-    } catch (e) {}
+    } catch {}
   }
 
-  ctx.font = '32px -apple-system, system-ui, sans-serif'
-  ctx.fillStyle = 'rgba(255,255,255,0.9)'
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'bottom'
-  ctx.fillText('Lade hozd 🎧 — hozd.app', 540, 1020)
+  pillCTA(ctx, cta, W / 2, H - 110, W)
 
-  return canvas
+  return [canvas]
 }
 
-async function handleRenderImage(item, refresh) {
+// ─── template: comparison ────────────────────────────────────────────────────
+
+async function renderComparison(brief, W, H) {
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')
+
+  fillBg(ctx, W, H)
+  drawBubbles(ctx, W, H)
+  drawLogo(ctx, W)
+  drawFooter(ctx, W, H)
+
+  const leftLabel = brief.left_label || brief.before_label || 'Frühere'
+  const rightLabel = brief.right_label || brief.after_label || 'Heute'
+  const leftItems = Array.isArray(brief.left_items) ? brief.left_items : (brief.left_text ? [brief.left_text] : ['Alt'])
+  const rightItems = Array.isArray(brief.right_items) ? brief.right_items : (brief.right_text ? [brief.right_text] : ['Neu'])
+
+  const colW = (W - 160) / 2
+  const colH = H - 280
+  const leftX = 60
+  const rightX = W / 2 + 20
+  const topY = 160
+
+  ctx.save()
+  ctx.fillStyle = 'rgba(255,255,255,0.04)'
+  roundRect(ctx, leftX, topY, colW, colH, 24)
+  ctx.restore()
+
+  ctx.save()
+  const rg = ctx.createLinearGradient(rightX, topY, rightX + colW, topY + colH)
+  rg.addColorStop(0, 'rgba(139,92,246,0.16)')
+  rg.addColorStop(1, 'rgba(236,72,153,0.10)')
+  ctx.fillStyle = rg
+  roundRect(ctx, rightX, topY, colW, colH, 24)
+  ctx.restore()
+
+  ctx.save()
+  const dg = ctx.createLinearGradient(W / 2 - 2, topY, W / 2 - 2, topY + colH)
+  dg.addColorStop(0, 'rgba(139,92,246,0)')
+  dg.addColorStop(0.4, BRAND.purple)
+  dg.addColorStop(0.6, BRAND.pink)
+  dg.addColorStop(1, 'rgba(236,72,153,0)')
+  ctx.strokeStyle = dg
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  ctx.moveTo(W / 2, topY + 20)
+  ctx.lineTo(W / 2, topY + colH - 20)
+  ctx.stroke()
+  ctx.restore()
+
+  ctx.save()
+  ctx.font = `700 26px ${BRAND.font}`
+  ctx.textBaseline = 'top'
+  ctx.textAlign = 'center'
+  ctx.fillStyle = 'rgba(255,255,255,0.4)'
+  ctx.fillText(leftLabel.toUpperCase(), leftX + colW / 2, topY + 26)
+  const rg2 = ctx.createLinearGradient(rightX, 0, rightX + colW, 0)
+  rg2.addColorStop(0, BRAND.purple)
+  rg2.addColorStop(1, BRAND.pink)
+  ctx.fillStyle = rg2
+  ctx.fillText(rightLabel.toUpperCase(), rightX + colW / 2, topY + 26)
+  ctx.restore()
+
+  ctx.save()
+  ctx.font = `500 30px ${BRAND.font}`
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'center'
+  ctx.fillStyle = 'rgba(255,255,255,0.35)'
+  leftItems.slice(0, 5).forEach((item, i) => {
+    const ty = topY + 90 + i * 72
+    const lines = wrapText(ctx, String(item), colW - 40)
+    lines.slice(0, 2).forEach((line, li) => {
+      const lineY = ty + li * 38
+      ctx.fillText(line, leftX + colW / 2, lineY)
+      const tw = ctx.measureText(line).width
+      ctx.save()
+      ctx.strokeStyle = 'rgba(239,68,68,0.6)'
+      ctx.lineWidth = 2.5
+      ctx.beginPath()
+      ctx.moveTo(leftX + colW / 2 - tw / 2 - 4, lineY)
+      ctx.lineTo(leftX + colW / 2 + tw / 2 + 4, lineY)
+      ctx.stroke()
+      ctx.restore()
+    })
+  })
+  ctx.restore()
+
+  ctx.save()
+  ctx.font = `700 30px ${BRAND.font}`
+  ctx.textBaseline = 'middle'
+  ctx.textAlign = 'center'
+  rightItems.slice(0, 5).forEach((item, i) => {
+    const ty = topY + 90 + i * 72
+    const lines = wrapText(ctx, String(item), colW - 40)
+    lines.slice(0, 2).forEach((line, li) => {
+      const lineY = ty + li * 38
+      const tw = ctx.measureText(line).width
+      const g = ctx.createLinearGradient(rightX + colW / 2 - tw / 2, lineY, rightX + colW / 2 + tw / 2, lineY)
+      g.addColorStop(0, BRAND.purple)
+      g.addColorStop(1, BRAND.pink)
+      ctx.fillStyle = g
+      ctx.fillText(line, rightX + colW / 2, lineY)
+    })
+  })
+  ctx.restore()
+
+  const hl = brief.headline || ''
+  if (hl) {
+    ctx.save()
+    ctx.font = `800 48px ${BRAND.font}`
+    ctx.textBaseline = 'top'
+    ctx.textAlign = 'center'
+    ctx.fillStyle = BRAND.white
+    const hlLines = wrapText(ctx, hl, W - 120)
+    hlLines.slice(0, 2).forEach((line, i) => {
+      ctx.fillText(line, W / 2, topY + colH + 30 + i * 58)
+    })
+    ctx.restore()
+  }
+
+  return [canvas]
+}
+
+// ─── template: step_grid ─────────────────────────────────────────────────────
+
+async function renderStepGrid(brief, W, H) {
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')
+
+  fillBg(ctx, W, H)
+  drawBubbles(ctx, W, H)
+  drawLogo(ctx, W)
+  drawFooter(ctx, W, H)
+
+  const steps = Array.isArray(brief.steps) ? brief.steps : []
+  const headline = brief.headline || ''
+  const count = Math.min(steps.length, 4) || 3
+
+  if (headline) {
+    ctx.save()
+    ctx.font = `800 64px ${BRAND.font}`
+    ctx.textBaseline = 'top'
+    ctx.textAlign = 'center'
+    ctx.fillStyle = BRAND.white
+    const hLines = wrapText(ctx, headline, W - 120)
+    hLines.slice(0, 2).forEach((line, i) => {
+      ctx.fillText(line, W / 2, 160 + i * 76)
+    })
+    ctx.restore()
+  }
+
+  const headH = headline ? (Math.min(wrapText(ctx, headline, W - 120).length, 2) * 76 + 160 + 40) : 180
+  const gridTop = headH
+  const gridH = H - gridTop - 120
+  const cols = count <= 2 ? count : 2
+  const rows = Math.ceil(count / cols)
+  const cellW = (W - 120 - (cols - 1) * 24) / cols
+  const cellH = (gridH - (rows - 1) * 24) / rows
+
+  for (let i = 0; i < count; i++) {
+    const step = steps[i] || {}
+    const col = i % cols
+    const row = Math.floor(i / cols)
+    const cx = 60 + col * (cellW + 24)
+    const cy = gridTop + row * (cellH + 24)
+
+    ctx.save()
+    const cg = ctx.createLinearGradient(cx, cy, cx + cellW, cy + cellH)
+    cg.addColorStop(0, 'rgba(139,92,246,0.14)')
+    cg.addColorStop(1, 'rgba(236,72,153,0.06)')
+    ctx.fillStyle = cg
+    roundRect(ctx, cx, cy, cellW, cellH, 28)
+    ctx.strokeStyle = 'rgba(139,92,246,0.28)'
+    ctx.lineWidth = 1.5
+    roundRectClip(ctx, cx, cy, cellW, cellH, 28)
+    ctx.stroke()
+    ctx.restore()
+
+    ctx.save()
+    const nb = 52
+    const nx = cx + 28
+    const ny = cy + 28
+    const ng = ctx.createLinearGradient(nx, ny, nx + nb, ny + nb)
+    ng.addColorStop(0, BRAND.purple)
+    ng.addColorStop(1, BRAND.pink)
+    ctx.fillStyle = ng
+    ctx.beginPath()
+    ctx.arc(nx + nb / 2, ny + nb / 2, nb / 2, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.font = `800 26px ${BRAND.font}`
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'center'
+    ctx.fillStyle = BRAND.white
+    ctx.fillText(String(i + 1), nx + nb / 2, ny + nb / 2)
+    ctx.restore()
+
+    const icon = step.icon || ''
+    if (icon) {
+      ctx.save()
+      ctx.font = `42px serif`
+      ctx.textBaseline = 'top'
+      ctx.textAlign = 'left'
+      ctx.fillText(icon, cx + cellW - 68, cy + 20)
+      ctx.restore()
+    }
+
+    const title = step.title || step.text || step.label || `Schritt ${i + 1}`
+    ctx.save()
+    ctx.font = `700 30px ${BRAND.font}`
+    ctx.textBaseline = 'top'
+    ctx.textAlign = 'left'
+    ctx.fillStyle = BRAND.white
+    const titleLines = wrapText(ctx, title, cellW - 56)
+    titleLines.slice(0, 2).forEach((line, li) => {
+      ctx.fillText(line, cx + 28, cy + 96 + li * 38)
+    })
+    ctx.restore()
+
+    const desc = step.desc || step.description || ''
+    if (desc) {
+      ctx.save()
+      ctx.font = `400 22px ${BRAND.font}`
+      ctx.textBaseline = 'top'
+      ctx.textAlign = 'left'
+      ctx.fillStyle = BRAND.whiteDim
+      const dLines = wrapText(ctx, desc, cellW - 56)
+      dLines.slice(0, 3).forEach((line, li) => {
+        ctx.fillText(line, cx + 28, cy + 96 + Math.min(titleLines.length, 2) * 38 + 14 + li * 30)
+      })
+      ctx.restore()
+    }
+  }
+
+  return [canvas]
+}
+
+// ─── template: quote ─────────────────────────────────────────────────────────
+
+async function renderQuote(brief, W, H) {
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')
+
+  fillBg(ctx, W, H)
+  drawBubbles(ctx, W, H)
+  drawLogo(ctx, W)
+  drawFooter(ctx, W, H)
+
+  const quote = brief.quote || brief.headline || ''
+  const author = brief.author || brief.name || ''
+  const role = brief.role || brief.subtitle || ''
+  const avatarUrl = brief.avatar_url || brief.cover_image_url || null
+
+  ctx.save()
+  ctx.font = `800 260px ${BRAND.font}`
+  ctx.textBaseline = 'top'
+  ctx.textAlign = 'left'
+  const qg = ctx.createLinearGradient(60, 100, 260, 260)
+  qg.addColorStop(0, 'rgba(139,92,246,0.25)')
+  qg.addColorStop(1, 'rgba(236,72,153,0.08)')
+  ctx.fillStyle = qg
+  ctx.fillText('“', 48, 60)
+  ctx.restore()
+
+  ctx.save()
+  ctx.font = `600 52px ${BRAND.font}`
+  ctx.textBaseline = 'top'
+  ctx.textAlign = 'center'
+  ctx.fillStyle = BRAND.white
+  const qLines = wrapText(ctx, quote, W - 160)
+  const qStartY = H * 0.32
+  qLines.slice(0, 5).forEach((line, i) => {
+    ctx.fillText(line, W / 2, qStartY + i * 66)
+  })
+  ctx.restore()
+
+  const qBlockH = Math.min(qLines.length, 5) * 66
+  ctx.save()
+  ctx.font = `800 180px ${BRAND.font}`
+  ctx.textBaseline = 'top'
+  ctx.textAlign = 'right'
+  const qg2 = ctx.createLinearGradient(W - 200, qStartY + qBlockH, W - 60, qStartY + qBlockH + 160)
+  qg2.addColorStop(0, 'rgba(236,72,153,0.22)')
+  qg2.addColorStop(1, 'rgba(139,92,246,0.08)')
+  ctx.fillStyle = qg2
+  ctx.fillText('”', W - 48, qStartY + qBlockH - 20)
+  ctx.restore()
+
+  const authorY = H - 220
+  if (avatarUrl) {
+    try {
+      const img = await loadImage(avatarUrl)
+      ctx.save()
+      const aR = 52
+      const ax = W / 2 - (author ? 180 : aR)
+      const ay = authorY
+      ctx.beginPath()
+      ctx.arc(ax + aR, ay + aR, aR, 0, Math.PI * 2)
+      ctx.clip()
+      ctx.drawImage(img, ax, ay, aR * 2, aR * 2)
+      ctx.restore()
+      if (author) {
+        ctx.save()
+        ctx.font = `700 28px ${BRAND.font}`
+        ctx.textBaseline = 'top'
+        ctx.textAlign = 'left'
+        ctx.fillStyle = BRAND.white
+        ctx.fillText(author, ax + aR * 2 + 18, authorY + 10)
+        if (role) {
+          ctx.font = `400 22px ${BRAND.font}`
+          ctx.fillStyle = BRAND.whiteSubtle
+          ctx.fillText(role, ax + aR * 2 + 18, authorY + 46)
+        }
+        ctx.restore()
+      }
+    } catch {}
+  } else if (author) {
+    ctx.save()
+    const dg = ctx.createLinearGradient(W / 2 - 120, authorY - 20, W / 2 + 120, authorY - 20)
+    dg.addColorStop(0, 'rgba(139,92,246,0)')
+    dg.addColorStop(0.3, BRAND.purple)
+    dg.addColorStop(0.7, BRAND.pink)
+    dg.addColorStop(1, 'rgba(236,72,153,0)')
+    ctx.strokeStyle = dg
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(W / 2 - 120, authorY - 20)
+    ctx.lineTo(W / 2 + 120, authorY - 20)
+    ctx.stroke()
+    ctx.restore()
+    ctx.save()
+    ctx.font = `700 30px ${BRAND.font}`
+    ctx.textBaseline = 'top'
+    ctx.textAlign = 'center'
+    ctx.fillStyle = BRAND.white
+    ctx.fillText(author, W / 2, authorY)
+    if (role) {
+      ctx.font = `400 22px ${BRAND.font}`
+      ctx.fillStyle = BRAND.whiteSubtle
+      ctx.fillText(role, W / 2, authorY + 40)
+    }
+    ctx.restore()
+  }
+
+  return [canvas]
+}
+
+// ─── template: avatar_grid ───────────────────────────────────────────────────
+
+async function renderAvatarGrid(brief, W, H) {
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')
+
+  fillBg(ctx, W, H)
+  drawBubbles(ctx, W, H)
+  drawLogo(ctx, W)
+  drawFooter(ctx, W, H)
+
+  const headline = brief.headline || ''
+  const avatars = Array.isArray(brief.avatars) ? brief.avatars.slice(0, 6) : []
+  const count = avatars.length || 4
+
+  if (headline) {
+    ctx.save()
+    ctx.font = `800 66px ${BRAND.font}`
+    ctx.textBaseline = 'top'
+    ctx.textAlign = 'center'
+    ctx.fillStyle = BRAND.white
+    const hLines = wrapText(ctx, headline, W - 120)
+    hLines.slice(0, 2).forEach((line, i) => ctx.fillText(line, W / 2, 140 + i * 78))
+    ctx.restore()
+  }
+
+  const gridTop = headline ? 360 : 200
+  const cols = count <= 3 ? count : 3
+  const rows = Math.ceil(count / cols)
+  const cardW = Math.floor((W - 120 - (cols - 1) * 20) / cols)
+  const cardH = Math.floor((H - gridTop - 120 - (rows - 1) * 20) / rows)
+  const avatarR = Math.min(cardW * 0.35, 90)
+
+  for (let i = 0; i < count; i++) {
+    const av = avatars[i] || {}
+    const col = i % cols
+    const row = Math.floor(i / cols)
+    const cx = 60 + col * (cardW + 20)
+    const cy = gridTop + row * (cardH + 20)
+
+    ctx.save()
+    ctx.fillStyle = 'rgba(139,92,246,0.10)'
+    roundRect(ctx, cx, cy, cardW, cardH, 22)
+    ctx.strokeStyle = 'rgba(139,92,246,0.22)'
+    ctx.lineWidth = 1.5
+    roundRectClip(ctx, cx, cy, cardW, cardH, 22)
+    ctx.stroke()
+    ctx.restore()
+
+    const acx = cx + cardW / 2
+    const acy = cy + avatarR + 24
+    ctx.save()
+    const ag = ctx.createLinearGradient(acx - avatarR, acy - avatarR, acx + avatarR, acy + avatarR)
+    ag.addColorStop(0, BRAND.purple)
+    ag.addColorStop(1, BRAND.pink)
+    ctx.fillStyle = ag
+    ctx.beginPath()
+    ctx.arc(acx, acy, avatarR + 4, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.restore()
+
+    if (av.image_url) {
+      try {
+        const img = await loadImage(av.image_url)
+        ctx.save()
+        ctx.beginPath()
+        ctx.arc(acx, acy, avatarR, 0, Math.PI * 2)
+        ctx.clip()
+        ctx.drawImage(img, acx - avatarR, acy - avatarR, avatarR * 2, avatarR * 2)
+        ctx.restore()
+      } catch {
+        ctx.save()
+        ctx.fillStyle = BRAND.bgAlt
+        ctx.beginPath()
+        ctx.arc(acx, acy, avatarR, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.restore()
+      }
+    } else {
+      ctx.save()
+      ctx.fillStyle = BRAND.bgAlt
+      ctx.beginPath()
+      ctx.arc(acx, acy, avatarR, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.font = `${avatarR * 0.8}px serif`
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = 'center'
+      ctx.fillText(av.emoji || '🎙', acx, acy)
+      ctx.restore()
+    }
+
+    const name = av.name || ''
+    if (name) {
+      ctx.save()
+      ctx.font = `700 ${Math.min(26, cardW / 6)}px ${BRAND.font}`
+      ctx.textBaseline = 'top'
+      ctx.textAlign = 'center'
+      ctx.fillStyle = BRAND.white
+      ctx.fillText(name.slice(0, 18), acx, acy + avatarR + 16)
+      ctx.restore()
+    }
+
+    const badge = av.badge || ''
+    if (badge) {
+      ctx.save()
+      const bFont = `600 ${Math.min(19, cardW / 7)}px ${BRAND.font}`
+      ctx.font = bFont
+      const bw = ctx.measureText(badge).width + 24
+      const bh = 30
+      const bx = acx - bw / 2
+      const by = cy + cardH - bh - 16
+      const bg2 = ctx.createLinearGradient(bx, by, bx + bw, by)
+      bg2.addColorStop(0, 'rgba(139,92,246,0.35)')
+      bg2.addColorStop(1, 'rgba(236,72,153,0.25)')
+      ctx.fillStyle = bg2
+      roundRect(ctx, bx, by, bw, bh, 15)
+      ctx.strokeStyle = 'rgba(139,92,246,0.5)'
+      ctx.lineWidth = 1
+      roundRectClip(ctx, bx, by, bw, bh, 15)
+      ctx.stroke()
+      ctx.font = bFont
+      ctx.fillStyle = '#C4B5FD'
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = 'center'
+      ctx.fillText(badge, acx, by + bh / 2)
+      ctx.restore()
+    }
+  }
+
+  return [canvas]
+}
+
+// ─── template: podium ────────────────────────────────────────────────────────
+
+async function renderPodium(brief, W, H) {
+  const canvas = document.createElement('canvas')
+  canvas.width = W; canvas.height = H
+  const ctx = canvas.getContext('2d')
+
+  fillBg(ctx, W, H)
+  drawBubbles(ctx, W, H)
+  drawLogo(ctx, W)
+  drawFooter(ctx, W, H)
+
+  const headline = brief.headline || ''
+  const entries = Array.isArray(brief.entries) ? brief.entries.slice(0, 3) : []
+
+  if (headline) {
+    ctx.save()
+    ctx.font = `800 66px ${BRAND.font}`
+    ctx.textBaseline = 'top'
+    ctx.textAlign = 'center'
+    ctx.fillStyle = BRAND.white
+    const hLines = wrapText(ctx, headline, W - 120)
+    hLines.slice(0, 2).forEach((line, i) => ctx.fillText(line, W / 2, 140 + i * 78))
+    ctx.restore()
+  }
+
+  const baseTop = headline ? 370 : 240
+  // order: 2nd left, 1st center, 3rd right
+  const cardDefs = [
+    { x: 60, w: 280, h: 380, rank: 2, rankColor: '#A0A0B0', entryIdx: 1 },
+    { x: 60 + 280 + 20, w: 380, h: 480, rank: 1, rankColor: '#F59E0B', entryIdx: 0 },
+    { x: 60 + 280 + 20 + 380 + 20, w: 280, h: 330, rank: 3, rankColor: '#CD7F32', entryIdx: 2 },
+  ]
+
+  for (const def of cardDefs) {
+    const entry = entries[def.entryIdx] || {}
+    const cy = baseTop + (480 - def.h)
+    const cx = def.x
+
+    ctx.save()
+    const cg = ctx.createLinearGradient(cx, cy, cx + def.w, cy + def.h)
+    if (def.rank === 1) {
+      cg.addColorStop(0, 'rgba(139,92,246,0.22)')
+      cg.addColorStop(1, 'rgba(236,72,153,0.14)')
+    } else {
+      cg.addColorStop(0, 'rgba(255,255,255,0.07)')
+      cg.addColorStop(1, 'rgba(255,255,255,0.03)')
+    }
+    ctx.fillStyle = cg
+    roundRect(ctx, cx, cy, def.w, def.h, 24)
+    ctx.strokeStyle = def.rank === 1 ? 'rgba(139,92,246,0.5)' : 'rgba(255,255,255,0.08)'
+    ctx.lineWidth = def.rank === 1 ? 2 : 1
+    roundRectClip(ctx, cx, cy, def.w, def.h, 24)
+    ctx.stroke()
+    ctx.restore()
+
+    ctx.save()
+    const rnb = def.rank === 1 ? 56 : 44
+    const rnbx = cx + def.w / 2 - rnb / 2
+    const rnby = cy + 20
+    ctx.fillStyle = def.rankColor
+    ctx.beginPath()
+    ctx.arc(rnbx + rnb / 2, rnby + rnb / 2, rnb / 2, 0, Math.PI * 2)
+    ctx.fill()
+    ctx.font = `800 ${def.rank === 1 ? 28 : 22}px ${BRAND.font}`
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'center'
+    ctx.fillStyle = def.rank === 1 ? '#0B0B0F' : '#fff'
+    ctx.fillText(def.rank === 1 ? '🏆' : `#${def.rank}`, rnbx + rnb / 2, rnby + rnb / 2)
+    ctx.restore()
+
+    const avR = def.rank === 1 ? 66 : 50
+    const avCx = cx + def.w / 2
+    const avCy = cy + rnb + 20 + avR + 14
+
+    if (entry.image_url) {
+      try {
+        const img = await loadImage(entry.image_url)
+        ctx.save()
+        const gr = ctx.createRadialGradient(avCx, avCy, avR - 4, avCx, avCy, avR + 12)
+        gr.addColorStop(0, BRAND.purple)
+        gr.addColorStop(1, 'rgba(139,92,246,0)')
+        ctx.fillStyle = gr
+        ctx.beginPath()
+        ctx.arc(avCx, avCy, avR + 12, 0, Math.PI * 2)
+        ctx.fill()
+        ctx.beginPath()
+        ctx.arc(avCx, avCy, avR, 0, Math.PI * 2)
+        ctx.clip()
+        ctx.drawImage(img, avCx - avR, avCy - avR, avR * 2, avR * 2)
+        ctx.restore()
+      } catch {}
+    } else {
+      ctx.save()
+      ctx.fillStyle = 'rgba(139,92,246,0.3)'
+      ctx.beginPath()
+      ctx.arc(avCx, avCy, avR, 0, Math.PI * 2)
+      ctx.fill()
+      ctx.font = `${avR * 0.8}px serif`
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = 'center'
+      ctx.fillText(entry.emoji || '🎙', avCx, avCy)
+      ctx.restore()
+    }
+
+    const name = entry.name || `Platz ${def.rank}`
+    ctx.save()
+    ctx.font = `700 ${def.rank === 1 ? 28 : 22}px ${BRAND.font}`
+    ctx.textBaseline = 'top'
+    ctx.textAlign = 'center'
+    ctx.fillStyle = BRAND.white
+    const nameLines = wrapText(ctx, name, def.w - 32)
+    nameLines.slice(0, 2).forEach((line, li) => {
+      ctx.fillText(line, avCx, avCy + avR + 14 + li * 34)
+    })
+    ctx.restore()
+
+    const value = entry.value || entry.score || entry.count || ''
+    if (value) {
+      ctx.save()
+      const valY = avCy + avR + 14 + Math.min(nameLines.length, 2) * 34 + 10
+      ctx.font = `600 ${def.rank === 1 ? 24 : 19}px ${BRAND.font}`
+      ctx.textBaseline = 'top'
+      ctx.textAlign = 'center'
+      const vg = ctx.createLinearGradient(cx, valY, cx + def.w, valY)
+      vg.addColorStop(0, BRAND.purple)
+      vg.addColorStop(1, BRAND.pink)
+      ctx.fillStyle = vg
+      ctx.fillText(String(value), avCx, valY)
+      ctx.restore()
+    }
+  }
+
+  return [canvas]
+}
+
+// ─── carousel render: each slide portrait 1080x1350 ─────────────────────────
+
+async function renderCarouselSlides(brief, W, H) {
+  const slides = Array.isArray(brief.slides) ? brief.slides : []
+  if (!slides.length) {
+    return renderHero(brief, W, H)
+  }
+
+  const canvases = []
+  for (let si = 0; si < slides.length; si++) {
+    const slide = slides[si]
+    const c = document.createElement('canvas')
+    c.width = W; c.height = H
+    const ctx = c.getContext('2d')
+
+    fillBg(ctx, W, H)
+    drawBubbles(ctx, W, H)
+    drawLogo(ctx, W)
+    drawFooter(ctx, W, H)
+
+    // slide counter pill top-right
+    const pillTxt = `${si + 1} / ${slides.length}`
+    ctx.save()
+    ctx.font = `600 22px ${BRAND.font}`
+    const ptw = ctx.measureText(pillTxt).width + 28
+    const pth = 36
+    const ptx = W - 60 - ptw
+    const pty = 52
+    ctx.fillStyle = 'rgba(139,92,246,0.22)'
+    roundRect(ctx, ptx, pty, ptw, pth, 18)
+    ctx.strokeStyle = 'rgba(139,92,246,0.4)'
+    ctx.lineWidth = 1
+    roundRectClip(ctx, ptx, pty, ptw, pth, 18)
+    ctx.stroke()
+    ctx.fillStyle = '#C4B5FD'
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = 'center'
+    ctx.fillText(pillTxt, ptx + ptw / 2, pty + pth / 2)
+    ctx.restore()
+
+    const headline = slide.headline || ''
+    const subtext = slide.subtext || slide.text || ''
+    const cta = slide.cta || ''
+
+    if (slide.image_url) {
+      try {
+        const img = await loadImage(slide.image_url)
+        ctx.save()
+        const iH = Math.min(H * 0.36, 480)
+        const iW = Math.min(W - 120, iH)
+        const ix = W / 2 - iW / 2
+        const iy = H * 0.10
+        roundRectClip(ctx, ix, iy, iW, iH, 24)
+        ctx.clip()
+        ctx.drawImage(img, ix, iy, iW, iH)
+        ctx.restore()
+      } catch {}
+    }
+
+    if (headline) {
+      ctx.save()
+      ctx.font = `800 76px ${BRAND.font}`
+      ctx.textBaseline = 'middle'
+      ctx.textAlign = 'center'
+      ctx.fillStyle = BRAND.white
+      const hLines = wrapText(ctx, headline, W - 140)
+      const lh = 90
+      const blkH = hLines.length * lh
+      const startY = H * 0.48 - blkH / 2
+      hLines.slice(0, 4).forEach((line, i) => {
+        ctx.fillText(line, W / 2, startY + i * lh + lh / 2)
+      })
+      ctx.restore()
+
+      if (subtext) {
+        ctx.save()
+        ctx.font = `400 28px ${BRAND.font}`
+        ctx.textBaseline = 'top'
+        ctx.textAlign = 'center'
+        ctx.fillStyle = BRAND.whiteDim
+        const sLines = wrapText(ctx, subtext, W - 200)
+        const subTop = H * 0.48 + blkH / 2 + 24
+        sLines.slice(0, 3).forEach((line, i) => ctx.fillText(line, W / 2, subTop + i * 38))
+        ctx.restore()
+      }
+    }
+
+    if (si === slides.length - 1 && cta) {
+      pillCTA(ctx, cta, W / 2, H - 120, W)
+    } else if (cta) {
+      ctx.save()
+      ctx.font = `500 24px ${BRAND.font}`
+      ctx.textBaseline = 'bottom'
+      ctx.textAlign = 'center'
+      const ctag = ctx.createLinearGradient(W / 2 - 200, H - 60, W / 2 + 200, H - 60)
+      ctag.addColorStop(0, BRAND.purple)
+      ctag.addColorStop(1, BRAND.pink)
+      ctx.fillStyle = ctag
+      ctx.fillText(cta, W / 2, H - 60)
+      ctx.restore()
+    }
+
+    canvases.push(c)
+  }
+  return canvases
+}
+
+// ─── main renderBrandedCanvas dispatcher ────────────────────────────────────
+
+const LAYOUT_LABELS = {
+  hero: 'Hero',
+  comparison: 'Vorher|Nachher',
+  step_grid: 'Step-Grid',
+  quote: 'Quote',
+  avatar_grid: 'Avatar-Grid',
+  podium: 'Podium',
+  carousel: 'Carousel',
+}
+
+async function renderBrandedCanvas(item) {
+  const brief = item.image_brief || {}
+  const layout = brief.layout || 'hero'
+  const isCarousel = layout === 'carousel'
+  const W = 1080
+  const H = isCarousel ? 1350 : 1080
+
+  switch (layout) {
+    case 'comparison':  return renderComparison(brief, W, H)
+    case 'step_grid':   return renderStepGrid(brief, W, H)
+    case 'quote':       return renderQuote(brief, W, H)
+    case 'avatar_grid': return renderAvatarGrid(brief, W, H)
+    case 'podium':      return renderPodium(brief, W, H)
+    case 'carousel':    return renderCarouselSlides(brief, W, H)
+    case 'hero':
+    default:            return renderHero(brief, W, H)
+  }
+}
+
+// ─── upload helpers ──────────────────────────────────────────────────────────
+
+function canvasToBlob(canvas) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(b => b ? resolve(b) : reject(new Error('toBlob failed')), 'image/png')
+  })
+}
+
+async function uploadCanvas(canvas, filename) {
+  const blob = await canvasToBlob(canvas)
+  const { error } = await sb.storage.from('insta-marketing').upload(filename, blob, { upsert: true, contentType: 'image/png' })
+  if (error) throw new Error('Upload fehlgeschlagen: ' + error.message)
+  const { data: pub } = sb.storage.from('insta-marketing').getPublicUrl(filename)
+  return pub.publicUrl
+}
+
+async function handleRenderImage(item, layout, refresh) {
+  const augmentedItem = layout
+    ? { ...item, image_brief: { ...(item.image_brief || {}), layout } }
+    : item
+
   toast('Bild wird gerendert…')
   try {
-    const canvas = await renderImage(item)
-    canvas.toBlob(async (blob) => {
-      if (!blob) { toast('Bild konnte nicht erzeugt werden', 'error'); return }
-      const filename = item.id + '.png'
-      const { error } = await sb.storage.from('insta-marketing').upload(filename, blob, { upsert: true, contentType: 'image/png' })
-      if (error) { toast('Upload fehlgeschlagen: ' + error.message, 'error'); return }
-      const { data: pub } = sb.storage.from('insta-marketing').getPublicUrl(filename)
-      const { error: updErr } = await sb.from('insta_posts_queue').update({ image_url: pub.publicUrl }).eq('id', item.id)
-      if (updErr) { toast('DB-Update fehlgeschlagen: ' + updErr.message, 'error'); return }
-      toast('Bild gespeichert ✓', 'success')
-      refresh()
-    }, 'image/png')
+    const canvases = await renderBrandedCanvas(augmentedItem)
+
+    let imageUrl
+    if (canvases.length === 1) {
+      imageUrl = await uploadCanvas(canvases[0], item.id + '.png')
+    } else {
+      const urls = []
+      for (let i = 0; i < canvases.length; i++) {
+        urls.push(await uploadCanvas(canvases[i], `${item.id}_slide${i + 1}.png`))
+      }
+      imageUrl = JSON.stringify(urls)
+    }
+
+    const { error: updErr } = await sb.from('insta_posts_queue').update({ image_url: imageUrl }).eq('id', item.id)
+    if (updErr) { toast('DB-Update fehlgeschlagen: ' + updErr.message, 'error'); return }
+    toast('Bild gespeichert ✓', 'success')
+    refresh()
   } catch (e) {
     toast('Render-Fehler: ' + (e?.message || 'unbekannt'), 'error')
   }
 }
+
+// ─── styles ──────────────────────────────────────────────────────────────────
 
 function styles() {
   if (document.getElementById('insta-approval-styles')) return
@@ -208,9 +1080,18 @@ function styles() {
     .insights-row .stat-chip.empty{background:rgba(255,255,255,.04);color:#666;border-color:rgba(255,255,255,.06);}
     .btn-insights-edit{background:rgba(139,92,246,.14);color:#C4B5FD;border:1px solid rgba(139,92,246,.25);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap;flex-shrink:0;}
     .btn-insights-edit:hover{background:rgba(139,92,246,.25);border-color:rgba(139,92,246,.45);}
+    .layout-switcher{display:flex;gap:6px;flex-wrap:wrap;margin-top:12px;padding:12px;background:rgba(255,255,255,.03);border-radius:12px;border:1px solid rgba(255,255,255,.06);}
+    .layout-switcher-label{color:#9090a0;font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;width:100%;margin-bottom:4px;}
+    .layout-btn{background:rgba(255,255,255,.05);color:#b0b0c0;border:1px solid rgba(255,255,255,.07);border-radius:8px;padding:6px 12px;font-size:12px;font-weight:500;cursor:pointer;transition:all .2s;white-space:nowrap;}
+    .layout-btn:hover{background:rgba(139,92,246,.15);color:#C4B5FD;border-color:rgba(139,92,246,.3);}
+    .layout-btn.active{background:rgba(139,92,246,.22);color:#C4B5FD;border-color:rgba(139,92,246,.45);font-weight:700;}
+    .carousel-thumbs{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;}
+    .carousel-thumbs img{width:72px;height:90px;object-fit:cover;border-radius:10px;border:1px solid rgba(139,92,246,.3);}
   `
   document.head.appendChild(s)
 }
+
+// ─── stats helpers ────────────────────────────────────────────────────────────
 
 function buildHero(stats) {
   const items = [
@@ -289,6 +1170,84 @@ function buildAudienceChart(byAudience) {
   return wrap
 }
 
+// ─── image slot with layout-switcher ────────────────────────────────────────
+
+function buildImageSlot(item, refresh) {
+  const container = document.createElement('div')
+  const brief = item.image_brief || {}
+  const currentLayout = brief.layout || 'hero'
+
+  let imageUrls = []
+  if (item.image_url) {
+    try {
+      const parsed = JSON.parse(item.image_url)
+      imageUrls = Array.isArray(parsed) ? parsed : [item.image_url]
+    } catch {
+      imageUrls = [item.image_url]
+    }
+  }
+
+  const previewWrap = document.createElement('div')
+  previewWrap.style.cssText = 'margin-bottom:10px;'
+
+  if (imageUrls.length === 1) {
+    const img = document.createElement('img')
+    img.src = imageUrls[0]
+    img.className = 'image-slot'
+    previewWrap.appendChild(img)
+  } else if (imageUrls.length > 1) {
+    const thumbRow = document.createElement('div')
+    thumbRow.className = 'carousel-thumbs'
+    imageUrls.forEach(url => {
+      const img = document.createElement('img')
+      img.src = url
+      thumbRow.appendChild(img)
+    })
+    previewWrap.appendChild(thumbRow)
+    const note = document.createElement('div')
+    note.style.cssText = 'color:#8B5CF6;font-size:12px;margin-top:6px;'
+    note.textContent = `Carousel: ${imageUrls.length} Slides`
+    previewWrap.appendChild(note)
+  }
+  container.appendChild(previewWrap)
+
+  const switcher = document.createElement('div')
+  switcher.className = 'layout-switcher'
+  const swLabel = document.createElement('div')
+  swLabel.className = 'layout-switcher-label'
+  swLabel.textContent = 'Layout wählen'
+  switcher.appendChild(swLabel)
+
+  let selectedLayout = currentLayout
+
+  Object.keys(LAYOUT_LABELS).forEach(key => {
+    const btn = document.createElement('button')
+    btn.className = 'layout-btn' + (key === selectedLayout ? ' active' : '')
+    btn.textContent = LAYOUT_LABELS[key]
+    btn.dataset.layout = key
+    btn.addEventListener('click', () => {
+      selectedLayout = key
+      switcher.querySelectorAll('.layout-btn').forEach(b => b.classList.toggle('active', b.dataset.layout === selectedLayout))
+    })
+    switcher.appendChild(btn)
+  })
+  container.appendChild(switcher)
+
+  const actRow = document.createElement('div')
+  actRow.style.cssText = 'display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;'
+
+  const renderBtn = document.createElement('button')
+  renderBtn.className = 'btn-secondary'
+  renderBtn.innerHTML = imageUrls.length > 0 ? '🔁 Neu rendern' : '🎨 Bild rendern'
+  renderBtn.addEventListener('click', () => handleRenderImage(item, selectedLayout, refresh))
+  actRow.appendChild(renderBtn)
+  container.appendChild(actRow)
+
+  return container
+}
+
+// ─── queue card ──────────────────────────────────────────────────────────────
+
 function renderQueueCard(item, refresh) {
   const card = document.createElement('div')
   card.className = 'insta-queue-card'
@@ -309,33 +1268,14 @@ function renderQueueCard(item, refresh) {
     <textarea class="cap-input" rows="4">${htmlEscape(caption)}</textarea>
     <label>Hashtags (kommagetrennt)</label>
     <input class="hash-input" type="text" value="${htmlEscape(hashtags)}" />
-    <div class="image-slot" style="margin-top:14px;"></div>
+    <div class="image-slot-wrap" style="margin-top:14px;"></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:16px;">
-      <button class="btn-approve">✓ Approven & jetzt posten</button>
+      <button class="btn-approve">✓ Approven &amp; jetzt posten</button>
       <button class="btn-reject">✕ Verwerfen</button>
     </div>
   `
 
-  const imgSlot = card.querySelector('.image-slot')
-  if (item.image_url) {
-    const wrap = document.createElement('div')
-    wrap.style.cssText = 'display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;'
-    const img = document.createElement('img')
-    img.src = item.image_url
-    wrap.appendChild(img)
-    const reRender = document.createElement('button')
-    reRender.className = 'btn-secondary'
-    reRender.innerHTML = '🔁 Bild neu rendern'
-    reRender.addEventListener('click', () => handleRenderImage(item, refresh))
-    wrap.appendChild(reRender)
-    imgSlot.appendChild(wrap)
-  } else {
-    const renderBtn = document.createElement('button')
-    renderBtn.className = 'btn-secondary'
-    renderBtn.innerHTML = '🎨 Bild rendern'
-    renderBtn.addEventListener('click', () => handleRenderImage(item, refresh))
-    imgSlot.appendChild(renderBtn)
-  }
+  card.querySelector('.image-slot-wrap').appendChild(buildImageSlot(item, refresh))
 
   const capInput = card.querySelector('.cap-input')
   capInput.addEventListener('blur', async () => {
@@ -419,6 +1359,18 @@ function renderQueueCard(item, refresh) {
   return card
 }
 
+// ─── history + insights rows ─────────────────────────────────────────────────
+
+function getFirstThumb(image_url) {
+  if (!image_url) return null
+  try {
+    const parsed = JSON.parse(image_url)
+    return Array.isArray(parsed) ? parsed[0] : image_url
+  } catch {
+    return image_url
+  }
+}
+
 function renderHistoryRow(item) {
   const row = document.createElement('div')
   row.className = 'history-row'
@@ -434,9 +1386,8 @@ function renderHistoryRow(item) {
       insightsText = parts.join(' · ')
     } catch {}
   }
-  const thumbHtml = item.image_url
-    ? `<img src="${htmlEscape(item.image_url)}" alt="">`
-    : '📷'
+  const thumbSrc = getFirstThumb(item.image_url)
+  const thumbHtml = thumbSrc ? `<img src="${htmlEscape(thumbSrc)}" alt="">` : '📷'
   row.innerHTML = `
     <div class="h-thumb">${thumbHtml}</div>
     <div class="h-main">
@@ -454,7 +1405,7 @@ function renderHistoryRow(item) {
         title: 'Post-Details',
         content: `
           <div style="padding:6px 4px;">
-            ${item.image_url ? `<img src="${htmlEscape(item.image_url)}" style="width:100%;border-radius:14px;margin-bottom:14px;">` : ''}
+            ${thumbSrc ? `<img src="${htmlEscape(thumbSrc)}" style="width:100%;border-radius:14px;margin-bottom:14px;">` : ''}
             <div style="color:#fff;font-size:14px;line-height:1.55;white-space:pre-wrap;margin-bottom:14px;">${htmlEscape(item.caption || '')}</div>
             <div style="color:#888;font-size:12.5px;">${htmlEscape(item.posted_at ? fmtDateTime(item.posted_at) : '—')}</div>
             ${insightsText ? `<div style="margin-top:14px;padding:14px;background:rgba(139,92,246,.08);border-radius:12px;color:#C4B5FD;font-size:14px;">${htmlEscape(insightsText)}</div>` : ''}
@@ -494,7 +1445,6 @@ function openInsightsModal(item, onSaved) {
   `
 
   const close = () => overlay.remove()
-
   overlay.querySelector('.ins-cancel-btn').addEventListener('click', close)
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
 
@@ -533,9 +1483,8 @@ function renderInsightsRow(item, onEdit) {
     try { ins = typeof item.insights === 'string' ? JSON.parse(item.insights) : item.insights } catch {}
   }
 
-  const thumbHtml = item.image_url
-    ? `<img src="${htmlEscape(item.image_url)}" alt="">`
-    : '📷'
+  const thumbSrc = getFirstThumb(item.image_url)
+  const thumbHtml = thumbSrc ? `<img src="${htmlEscape(thumbSrc)}" alt="">` : '📷'
 
   const statsHtml = ins
     ? [
@@ -566,6 +1515,8 @@ function renderInsightsRow(item, onEdit) {
 
   return row
 }
+
+// ─── panel mount ─────────────────────────────────────────────────────────────
 
 export default {
   id: 'insta-approval-queue',
@@ -605,7 +1556,6 @@ export default {
         `
       }
 
-      // Sofort Skeleton zeigen, damit kein weißer Screen entsteht
       renderSkeleton()
 
       let posted = []
@@ -632,11 +1582,8 @@ export default {
           const stats = computeStats(queue, posted)
 
           body.innerHTML = ''
-
-          // Hero
           body.appendChild(buildHero(stats))
 
-          // Charts grid (2 cols)
           const chartsGrid = document.createElement('div')
           chartsGrid.className = 'insta-grid-2'
 
@@ -654,7 +1601,6 @@ export default {
 
           body.appendChild(chartsGrid)
 
-          // Tab bar
           const tabBar = document.createElement('div')
           tabBar.className = 'tab-bar'
           tabBar.innerHTML = `
@@ -666,7 +1612,6 @@ export default {
           })
           body.appendChild(tabBar)
 
-          // Queue pane
           const queuePane = document.createElement('div')
           queuePane.className = `tab-pane${activeTab === 'queue' ? ' active' : ''}`
           queuePane.dataset.pane = 'queue'
@@ -697,7 +1642,6 @@ export default {
           queuePane.appendChild(queueSection)
           body.appendChild(queuePane)
 
-          // Insights pane
           const insightsPane = document.createElement('div')
           insightsPane.className = `tab-pane${activeTab === 'insights' ? ' active' : ''}`
           insightsPane.dataset.pane = 'insights'
@@ -723,7 +1667,6 @@ export default {
               list.innerHTML = ''
               posted.forEach(it => {
                 list.appendChild(renderInsightsRow(it, async () => {
-                  // Refresh only the insights data without full skeleton reload
                   const { data: fresh } = await sb.from('insta_posts_queue')
                     .select('*').eq('status', 'posted').order('posted_at', { ascending: false }).limit(50)
                   if (fresh) {
@@ -781,7 +1724,6 @@ export default {
         refresh()
       })
 
-      // Daten im Hintergrund laden (Skeleton ist schon sichtbar)
       refresh()
     } catch (mountErr) {
       container.innerHTML = `
