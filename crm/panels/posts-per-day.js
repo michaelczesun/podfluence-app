@@ -419,7 +419,8 @@ function buildToolbar(container) {
       TYPES.forEach(t => { o[t.key] = state.perType[t.key][i] })
       return o
     })
-    exportCsv(rows, { filename: `posts-pro-tag-${state.range}d.csv` })
+    // FIX (med): exportCsv signature is (rows, 'filename.csv'), not {filename}
+    exportCsv(rows, `posts-pro-tag-${state.range}d.csv`)
     toast('CSV heruntergeladen', { type: 'success' })
   })
 }

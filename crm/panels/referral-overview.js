@@ -479,7 +479,8 @@ export default {
             title: name,
             subtitle: `${fmtNumber(ref?.count || 0)} erfolgreiche Einladungen`,
             width: 480,
-            html: `
+            // FIX(med): drawer-Sig erwartet contentHtml/content (html ist Backwards-compat-Alias)
+            contentHtml: `
               <div style="padding:20px">
                 <div style="display:flex;gap:14px;align-items:center;margin-bottom:20px">
                   <div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.06);overflow:hidden;display:flex;align-items:center;justify-content:center">
