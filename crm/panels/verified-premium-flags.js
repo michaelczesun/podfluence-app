@@ -414,9 +414,9 @@ export default {
           </div>
         `
 
-        // Hero count-up
-        const vHeroVal = body.querySelector('#hero-verified .stat-hero-value')
-        const pHeroVal = body.querySelector('#hero-premium .stat-hero-value')
+        // Hero count-up — statHero uses class 'lx-hero-value' (not 'stat-hero-value')
+        const vHeroVal = body.querySelector('#hero-verified .lx-hero-value')
+        const pHeroVal = body.querySelector('#hero-premium .lx-hero-value')
         if (vHeroVal) countUp(vHeroVal, 0, verifiedCount, 900)
         if (pHeroVal) countUp(pHeroVal, 0, premiumCount, 900)
 

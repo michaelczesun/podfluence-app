@@ -1,5 +1,5 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
 import { makeAreaChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
@@ -16,14 +16,17 @@ function audienceLabel(v) {
   return AUDIENCES.find(a => a.value === v)?.label || v || '—'
 }
 
-// Map audience value → count from admin_user_type_split result
+// Map audience value → count from admin_user_type_split result.
+// admin_user_type_split may return keys: podcaster, listener, both, beta_user, premium, unknown.
+// We use all plausible key names defensively.
 function countForAudience(audience, splitData, statsData) {
   const sp = splitData || {}
   const st = statsData || {}
   if (audience === 'all')       return st.total_users || 0
   if (audience === 'podcaster') return (sp.podcaster || 0) + (sp.both || 0)
   if (audience === 'listener')  return (sp.listener  || 0) + (sp.both || 0)
-  if (audience === 'beta')      return sp.beta || sp.premium || 0
+  // accept 'beta_user', 'beta', or 'premium' — whatever key the RPC returns
+  if (audience === 'beta')      return sp.beta_user || sp.beta || sp.premium || 0
   return 0
 }
 
@@ -45,33 +48,48 @@ async function fetchAudienceCounts() {
   return { counts, statsData, splitData }
 }
 
+// History is read from email_broadcasts (broadcast_push_log does not exist).
+// email_broadcasts columns expected: id, subject (title), body, audience, sent_at,
+// recipient_count (= recipients), delivered_count (= delivered), opened_count (= opened),
+// deep_link. We normalise to a consistent shape so the rest of the UI can use
+// h.title / h.body / h.recipients / h.delivered / h.opened / h.deep_link / h.audience.
+function normaliseBroadcast(row) {
+  return {
+    id:         row.id,
+    title:      row.subject       || row.title            || '',
+    body:       row.body          || row.message          || '',
+    audience:   row.audience      || row.segment          || 'all',
+    deep_link:  row.deep_link     || row.deeplink         || '',
+    sent_at:    row.sent_at       || row.created_at       || null,
+    recipients: row.recipient_count ?? row.recipients     ?? 0,
+    delivered:  row.delivered_count ?? row.delivered      ?? 0,
+    opened:     row.opened_count    ?? row.opened         ?? 0
+  }
+}
+
 async function fetchHistory() {
   try {
     const { data, error } = await sb
-      .from('broadcast_push_log')
+      .from('email_broadcasts')
       .select('*')
       .order('sent_at', { ascending: false })
       .limit(10)
-    if (error) return []   // table may not exist yet
-    return data || []
-  } catch (_) {
+    if (error) {
+      console.warn('[push-broadcast] fetchHistory error:', error.message)
+      return []
+    }
+    return (data || []).map(normaliseBroadcast)
+  } catch (err) {
+    console.warn('[push-broadcast] fetchHistory exception:', err)
     return []
   }
 }
 
-async function getCurrentUserId() {
-  const { data } = await sb.auth.getSession()
-  return data?.session?.user?.id || null
-}
-
-// Call send_broadcast_push RPC. Returns { success, message } or throws.
+// Call send_broadcast_push RPC.
+// Bare param names (no p_ prefix) as per RPC signature: send_broadcast_push(title,body,audience,deep_link?)
 async function doSendBroadcast({ title, body, audience, deepLink }) {
-  const params = {
-    p_title:    title,
-    p_body:     body,
-    p_audience: audience
-  }
-  if (deepLink && deepLink.trim()) params.p_deep_link = deepLink.trim()
+  const params = { title, body, audience }
+  if (deepLink && deepLink.trim()) params.deep_link = deepLink.trim()
   const { data, error } = await sb.rpc('send_broadcast_push', params)
   if (error) throw new Error(error.message || JSON.stringify(error))
   return data
@@ -152,7 +170,7 @@ function renderForm(counts) {
 
       <div class="form-actions">
         <button class="btn btn-ghost" id="btn-test">
-          ${iconHtml('user')} Test an mich
+          ${iconHtml('users')} Test an Beta-User
         </button>
         <button class="btn btn-primary btn-lg" id="btn-send" disabled>
           ${iconHtml('send')} An <span id="send-count">${fmtNumber(counts['all'] || 0)}</span> User senden
@@ -416,7 +434,13 @@ export default {
               `<div class="history-empty">${iconHtml('pie-chart')} Noch keine Daten</div>`
           }
         }
-      } catch (_) {}
+      } catch (chartErr) {
+        console.warn('[push-broadcast] chart init error:', chartErr)
+        const deliverBox  = bodyEl.querySelector('#chart-deliver')
+        const audienceBox = bodyEl.querySelector('#chart-audience')
+        if (deliverBox)  deliverBox.innerHTML  = `<div class="history-empty">${iconHtml('alert-triangle')} Chart konnte nicht geladen werden.</div>`
+        if (audienceBox) audienceBox.innerHTML = `<div class="history-empty">${iconHtml('alert-triangle')} Chart konnte nicht geladen werden.</div>`
+      }
 
       // ── form state ──
       const state = { audience: 'all', title: '', body: '', deepLink: '' }
@@ -469,7 +493,8 @@ export default {
       }
       linkInput.oninput = () => { state.deepLink = linkInput.value }
 
-      // ── Test an mich ──
+      // ── Test an Beta-User ──
+      // The RPC has no single-user mode; beta is the smallest real audience segment.
       btnTest.onclick = async () => {
         if (!state.title.trim() || !state.body.trim()) {
           toast('Titel und Nachricht ausfüllen', 'warn')
@@ -479,8 +504,6 @@ export default {
         const origLabel = btnTest.innerHTML
         btnTest.innerHTML = `${iconHtml('loader')} Sende…`
         try {
-          // Send to 'beta' audience as a proxy for "self" test
-          // The RPC doesn't support single-user mode; beta is the smallest real audience
           await doSendBroadcast({
             title:    '[TEST] ' + state.title,
             body:     state.body,
@@ -502,12 +525,12 @@ export default {
           toast('Titel und Nachricht sind Pflichtfelder', 'warn')
           return
         }
-        const ok = await confirmDialog({
-          title:        'Broadcast versenden?',
-          message:      `Push wird an <strong>${fmtNumber(target)}</strong> User (Audience: „${audienceLabel(state.audience)}") zugestellt. Diese Aktion lässt sich nicht rückgängig machen.`,
-          confirmText:  'Jetzt senden',
-          confirmStyle: 'primary'
-        })
+        const ok = await confirmDialog(
+          'Broadcast versenden?',
+          `Push wird an ${fmtNumber(target)} User (Audience: „${audienceLabel(state.audience)}") zugestellt. Diese Aktion lässt sich nicht rückgängig machen.`,
+          'Jetzt senden',
+          false
+        )
         if (!ok) return
 
         const origLabel = btnSend.innerHTML

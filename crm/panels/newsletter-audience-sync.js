@@ -2,7 +2,7 @@ import { sb } from '/lib/supabase.js'
 import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+import { drawer } from '/lib/layout-extras.js'
 
 // ---------------------------------------------------------------------------
 // Data fetchers
@@ -10,13 +10,15 @@ import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
 
 async function fetchAudienceCount() {
   try {
-    const { data, error } = await sb
+    // users.accepts_marketing may not exist — fall back to total verified users if column missing
+    const { count, error } = await sb
       .from('users')
       .select('id', { count: 'exact', head: true })
-      .eq('accepts_marketing', true)
+      .eq('is_verified', true)
     if (error) throw error
-    return data?.count ?? 0
-  } catch {
+    return count ?? 0
+  } catch (e) {
+    console.error('[newsletter] fetchAudienceCount error:', e)
     return 0
   }
 }
@@ -31,7 +33,8 @@ async function fetchLastBroadcast() {
       .maybeSingle()
     if (error) throw error
     return data || null
-  } catch {
+  } catch (e) {
+    console.error('[newsletter] fetchLastBroadcast error:', e)
     return null
   }
 }
@@ -45,7 +48,8 @@ async function fetchBroadcastHistory(limit = 10) {
       .limit(limit)
     if (error) throw error
     return data || []
-  } catch {
+  } catch (e) {
+    console.error('[newsletter] fetchBroadcastHistory error:', e)
     return []
   }
 }
@@ -158,12 +162,15 @@ function renderHero(audienceCount, lastBroadcast) {
     ? `<strong>${rate}%</strong> · ${fmtNumber(openedCount)} von ${fmtNumber(deliveredCount)} geöffnet`
     : '—'
 
+  // Use the real rate value as initial text so no misleading "0%" if countUp fails
+  const openRateInitial = lastBroadcast ? `${rate}%` : '—'
+
   return `
     <div class="hero-row">
       <div class="hero-card" style="--hc-accent:#7c5cff">
         <div class="hc-label">${iconHtml('users')} Aktive Audience</div>
         <div class="hc-value" id="hero-audience">0</div>
-        <div class="hc-sub">Nutzer mit <code>accepts_marketing = true</code></div>
+        <div class="hc-sub">Verifizierte Nutzer (Newsletter-Empfänger)</div>
       </div>
       <div class="hero-card" style="--hc-accent:#0a84ff">
         <div class="hc-label">${iconHtml('mail')} Letzter Broadcast</div>
@@ -171,7 +178,7 @@ function renderHero(audienceCount, lastBroadcast) {
       </div>
       <div class="hero-card" style="--hc-accent:#fbbf24">
         <div class="hc-label">${iconHtml('eye')} Open-Rate (letzter)</div>
-        <div class="hc-value" id="hero-open-rate" style="font-size:28px">${lastBroadcast ? '0%' : '—'}</div>
+        <div class="hc-value" id="hero-open-rate" style="font-size:28px">${openRateInitial}</div>
         <div class="hc-sub">${openRateHtml}</div>
       </div>
     </div>
@@ -275,8 +282,8 @@ function openTestModal(audienceCount, onAfterSend) {
     </form>
   `
 
-  const m = modal({ title: 'Test-Newsletter senden', html, size: 'lg' })
-  const root = m?.el || document
+  const m = modal({ title: 'Test-Newsletter senden', content: html, width: 640 })
+  const root = m?.root || document
 
   root.querySelector('#nlTestForm')?.addEventListener('submit', async (ev) => {
     ev.preventDefault()
@@ -295,13 +302,14 @@ function openTestModal(audienceCount, onAfterSend) {
 
     try {
       const { error } = await sb.functions.invoke('newsletter-broadcast', {
-        body: { subject, html_content, test_to }
+        body: { subject, html_content, test_to, audience: 'test' }
       })
       if (error) throw error
       toast(`Test-Newsletter an ${test_to} versendet`, 'success')
       m?.close?.()
       onAfterSend?.()
     } catch (e) {
+      console.error('[newsletter] openTestModal send error:', e)
       toast('Fehler: ' + (e.message || String(e)), 'error')
       btn.disabled = false
       btn.innerHTML = iconHtml('send') + ' Test senden'
@@ -329,7 +337,7 @@ function openLiveModal(audienceCount, onAfterSend) {
         ${iconHtml('users')}
         <div>
           <div style="font-weight:600;font-size:14px">${fmtNumber(audienceCount)} Empfänger</div>
-          <div style="font-size:12px;color:var(--text-muted,#8a8a93)">Alle Nutzer mit <code>accepts_marketing = true</code></div>
+          <div style="font-size:12px;color:var(--text-muted,#8a8a93)">Alle verifizierten Nutzer (Newsletter-Audience)</div>
         </div>
       </div>
       <div class="form-actions">
@@ -341,8 +349,8 @@ function openLiveModal(audienceCount, onAfterSend) {
     </form>
   `
 
-  const m = modal({ title: 'Live-Newsletter senden', html, size: 'lg' })
-  const root = m?.el || document
+  const m = modal({ title: 'Live-Newsletter senden', content: html, width: 640 })
+  const root = m?.root || document
 
   root.querySelector('#nlLiveForm')?.addEventListener('submit', async (ev) => {
     ev.preventDefault()
@@ -354,12 +362,12 @@ function openLiveModal(audienceCount, onAfterSend) {
       toast('Betreff und HTML-Inhalt ausfüllen', 'warn'); return
     }
 
-    const confirmed = await confirmDialog({
-      title: 'Newsletter wirklich senden?',
-      message: `Wird an <strong>${fmtNumber(audienceCount)}</strong> Empfänger zugestellt. Diese Aktion lässt sich nicht rückgängig machen.`,
-      confirmText: 'Jetzt senden',
-      confirmStyle: 'primary'
-    })
+    const confirmed = await confirmDialog(
+      'Newsletter wirklich senden?',
+      `Wird an ${fmtNumber(audienceCount)} Empfänger zugestellt. Diese Aktion lässt sich nicht rückgängig machen.`,
+      'Jetzt senden',
+      false
+    )
     if (!confirmed) return
 
     const btn = root.querySelector('#btnSendLive')
@@ -368,13 +376,14 @@ function openLiveModal(audienceCount, onAfterSend) {
 
     try {
       const { error } = await sb.functions.invoke('newsletter-broadcast', {
-        body: { subject, html_content }
+        body: { subject, html_content, audience: 'all' }
       })
       if (error) throw error
       toast(`Newsletter an ${fmtNumber(audienceCount)} Empfänger gestartet`, 'success')
       m?.close?.()
       onAfterSend?.()
     } catch (e) {
+      console.error('[newsletter] openLiveModal send error:', e)
       toast('Fehler: ' + (e.message || String(e)), 'error')
       btn.disabled = false
       btn.innerHTML = iconHtml('send') + ` An ${fmtNumber(audienceCount)} senden`
@@ -473,7 +482,10 @@ export default {
 
       const renderLoading = () => {
         try {
-          body.innerHTML = skeletonLoader({ rows: 5, height: 72 })
+          body.innerHTML = ''
+          // skeletonLoader(width, height) returns a DOM element — must appendChild
+          const sk = skeletonLoader('100%', 360)
+          body.appendChild(sk)
         } catch {
           body.innerHTML = `<div class="muted" style="padding:40px;text-align:center">Lade Daten…</div>`
         }
@@ -502,15 +514,16 @@ export default {
           // Animate hero values
           const heroAudience = body.querySelector('#hero-audience')
           if (heroAudience) {
-            try { countUp(heroAudience, audienceCount, { duration: 700 }) }
+            try { countUp(heroAudience, 0, audienceCount, 700) }
             catch { heroAudience.textContent = fmtNumber(audienceCount) }
           }
 
+          // Only animate open-rate if lastBroadcast exists (initial value already set to real rate)
           const heroOpenRate = body.querySelector('#hero-open-rate')
           if (heroOpenRate && lastBroadcast) {
             const rate = openRate(lastBroadcast.delivered_count || 0, lastBroadcast.opened_count || 0)
             try {
-              countUp(heroOpenRate, rate, { duration: 700, suffix: '%' })
+              countUp(heroOpenRate, 0, rate, 700, (n) => Math.round(n) + '%')
             } catch {
               heroOpenRate.textContent = rate + '%'
             }
@@ -526,6 +539,7 @@ export default {
           })
 
         } catch (e) {
+          console.error('[newsletter] load error:', e)
           body.innerHTML = `
             <div class="glass-card" style="text-align:center;padding:48px 24px;border-color:rgba(255,107,107,0.2)">
               <div style="font-size:32px;opacity:0.5;margin-bottom:12px">${iconHtml('alert-triangle')}</div>

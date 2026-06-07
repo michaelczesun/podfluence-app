@@ -22,10 +22,11 @@ let state = {
   range: '7d',
   rows: [],
   labels: [],
-  activeMetric: 'posts',
+  activeMetric: 'listens',
   loading: false,
   error: null,
-  missingTables: []
+  // tracks which proxy sources were actually missing (for banner)
+  missingProxies: []
 }
 
 function isoDay(d) { return d.toISOString().slice(0, 10) }
@@ -42,14 +43,14 @@ function buildDayLabels(days) {
   return labels
 }
 
-// episode_listening_pulses: use * (column layout unknown from inventory)
+// FIX #3: throw on error so load() catch-block triggers error state instead of silently returning []
 async function fetchListeningPulses(sinceIso) {
   const { data, error } = await sb
     .from('episode_listening_pulses')
     .select('*')
     .gte('created_at', sinceIso)
     .limit(50000)
-  if (error) return []
+  if (error) throw error
   return data || []
 }
 
@@ -61,29 +62,67 @@ async function fetchData(range) {
   const sinceIso = since.toISOString()
   const labels = buildDayLabels(days)
 
-  const missing = []
+  const missingProxies = []
 
-  // posts — Tabelle existiert nicht im Schema
-  missing.push('posts')
-  const safePosts = []
+  // FIX #1: posts proxy — use `updates` table (user_id + created_at available)
+  let safePosts = []
+  {
+    const { data, error } = await sb
+      .from('updates')
+      .select('user_id, created_at')
+      .gte('created_at', sinceIso)
+      .limit(50000)
+    if (error) {
+      missingProxies.push('posts (updates)')
+    } else {
+      safePosts = data || []
+    }
+  }
 
-  // episodes — Tabelle existiert nicht im Schema
-  missing.push('episodes')
-  const safeEpisodes = []
+  // FIX #1: episodes proxy — use `podcasts` table (user_id + created_at available)
+  let safeEpisodes = []
+  {
+    const { data, error } = await sb
+      .from('podcasts')
+      .select('user_id, created_at')
+      .gte('created_at', sinceIso)
+      .limit(50000)
+    if (error) {
+      missingProxies.push('episodes (podcasts)')
+    } else {
+      safeEpisodes = data || []
+    }
+  }
 
-  // post_likes — Tabelle existiert nicht im Schema
-  missing.push('post_likes')
-  const safeLikes = []
+  // FIX #1: likes proxy — use `episode_vibes` (user_id + created_at available)
+  let safeLikes = []
+  {
+    const { data, error } = await sb
+      .from('episode_vibes')
+      .select('user_id, created_at')
+      .gte('created_at', sinceIso)
+      .limit(50000)
+    if (error) {
+      missingProxies.push('likes (episode_vibes)')
+    } else {
+      safeLikes = data || []
+    }
+  }
 
   // episode_listening_pulses — existiert (ersetzt episode_listens)
+  // FIX #3: throws on error (propagates to load() catch)
   const listensRaw = await fetchListeningPulses(sinceIso)
-  // normalize: pulse rows may have user_id or episode_user_id
   const safeListens = listensRaw.map(r => ({
     episode_user_id: r.episode_user_id || r.user_id || null,
     created_at: r.created_at
   })).filter(r => r.episode_user_id)
 
-  state.missingTables = missing
+  state.missingProxies = missingProxies
+
+  // FIX #2: score formula adapts when proxy sources are missing — only weight what exists
+  const hasPostsData    = missingProxies.every(m => !m.startsWith('posts'))
+  const hasEpisodesData = missingProxies.every(m => !m.startsWith('episodes'))
+  const hasLikesData    = missingProxies.every(m => !m.startsWith('likes'))
 
   const agg = new Map()
   const ensure = (uid) => {
@@ -114,8 +153,9 @@ async function fetchData(range) {
     const i = idxFor(r.created_at); if (i >= 0) a.series.episodes[i]++
   }
   for (const r of safeLikes) {
-    if (!r.post_user_id) continue
-    const a = ensure(r.post_user_id); a.likes++
+    // episode_vibes rows use user_id (the liker)
+    if (!r.user_id) continue
+    const a = ensure(r.user_id); a.likes++
     const i = idxFor(r.created_at); if (i >= 0) a.series.likes[i]++
   }
   for (const r of safeListens) {
@@ -124,9 +164,13 @@ async function fetchData(range) {
     const i = idxFor(r.created_at); if (i >= 0) a.series.listens[i]++
   }
 
+  // FIX #2: score adapts to available data
   const scored = Array.from(agg.values()).map(a => ({
     ...a,
-    total: a.posts * 2 + a.episodes * 5 + a.likes * 1 + a.listens * 0.5
+    total: (hasPostsData    ? a.posts    * 2   : 0)
+         + (hasEpisodesData ? a.episodes * 5   : 0)
+         + (hasLikesData    ? a.likes    * 1   : 0)
+         + a.listens * 0.5
   }))
   scored.sort((a, b) => b.total - a.total)
   const top = scored.slice(0, 5)
@@ -149,12 +193,22 @@ async function fetchData(range) {
   return { rows: top, labels, days }
 }
 
-function missingTablesBanner(tables) {
-  if (!tables || !tables.length) return ''
-  return tables.map(t => `
+// FIX #2: single consolidated banner instead of 3 separate banners + null columns
+function missingDataBanner(missingProxies) {
+  if (!missingProxies || !missingProxies.length) return ''
+  const allThreeMissing = missingProxies.length >= 3
+  if (allThreeMissing) {
+    return `
+      <div class="glass-card" style="padding:16px 20px;display:flex;align-items:center;gap:12px;margin-bottom:12px">
+        ${iconHtml('info')}
+        <span>Score basiert aktuell nur auf <strong>Listens</strong> — Posts, Episodes und Likes werden ergänzt sobald die Proxy-Quellen verfügbar sind.</span>
+      </div>
+    `
+  }
+  return missingProxies.map(t => `
     <div class="glass-card" style="padding:16px 20px;display:flex;align-items:center;gap:12px;margin-bottom:12px">
       ${iconHtml('alert')}
-      <span>Daten kommen sobald die Tabelle <strong>${htmlEscape(t)}</strong> angelegt ist.</span>
+      <span>Proxy-Quelle für <strong>${htmlEscape(t)}</strong> nicht verfügbar — Metrik wird nicht gewichtet.</span>
     </div>
   `).join('')
 }
@@ -247,13 +301,17 @@ function tableHtml(rows) {
   `
 }
 
-function emptyState() {
+function emptyState(currentRange) {
+  // FIX low #8: only show switch-to-30d button when not already on 30d
+  const switchBtn = currentRange === '7d'
+    ? `<button class="btn btn-secondary" data-act="switch-30">30 Tage anzeigen</button>`
+    : `<p class="muted">Auch im 30-Tage-Fenster keine Aktivität gefunden.</p>`
   return `
     <div class="empty-state">
       <div class="empty-icon">${iconHtml('mic')}</div>
       <h3>Keine aktiven Podcaster im Zeitraum</h3>
       <p>Im gewählten Fenster gibt es noch keine Posts, Episodes, Listens oder Likes.</p>
-      <button class="btn btn-secondary" data-act="switch-30">30 Tage anzeigen</button>
+      ${switchBtn}
     </div>
   `
 }
@@ -269,6 +327,7 @@ function errorState(msg) {
   `
 }
 
+// FIX #4: sendBroadcastPush expects `audience` not `user_ids`
 async function massThankYou(rows) {
   if (!rows.length) { toast('Keine Top-5 vorhanden.', 'warn'); return }
   const names = rows.map(r => r.name).join(', ')
@@ -280,14 +339,14 @@ async function massThankYou(rows) {
   })
   if (!ok) return
   try {
-    const ids = rows.map(r => r.user_id)
+    const audience = rows.map(r => r.user_id)
     await sendBroadcastPush({
-      user_ids: ids,
+      audience,
       title: 'Danke! 🎙️',
       body: 'Du gehörst diese Woche zu den Top-5 Podcastern auf Podfluence. Wir feiern dich!',
       data: { kind: 'mass_thanks', source: 'crm' }
     })
-    toast(`Push an ${ids.length} Podcaster gesendet.`, 'success')
+    toast(`Push an ${audience.length} Podcaster gesendet.`, 'success')
   } catch (e) {
     toast('Push fehlgeschlagen: ' + (e?.message || e), 'error')
   }
@@ -334,10 +393,11 @@ function openDrawer(row) {
   d.el.querySelector('[data-act="open-user"]')?.addEventListener('click', () => {
     showUserDetailModal(row.user_id)
   })
+  // FIX #4: use audience instead of user_ids
   d.el.querySelector('[data-act="thanks-one"]')?.addEventListener('click', async () => {
     try {
       await sendBroadcastPush({
-        user_ids: [row.user_id],
+        audience: [row.user_id],
         title: 'Danke! 🎙️',
         body: `Hey ${row.name}, danke für dein Engagement diese Woche!`,
         data: { kind: 'thanks_single', source: 'crm' }
@@ -354,6 +414,9 @@ async function load(container) {
   if (!body) return
   state.loading = true
   state.error = null
+  // FIX low #5: clear rows/labels/error on each load to avoid stale state on re-mount
+  state.rows = []
+  state.labels = []
   try {
     body.innerHTML = skeletonLoader({ lines: 6, withChart: true })
   } catch (_) {
@@ -383,7 +446,7 @@ function render(container) {
   }, { posts:0, episodes:0, listens:0, likes:0 })
 
   body.innerHTML = `
-    ${missingTablesBanner(state.missingTables)}
+    ${missingDataBanner(state.missingProxies)}
 
     <div class="hero-row" id="hero"></div>
 
@@ -404,7 +467,7 @@ function render(container) {
         <button class="btn btn-primary" id="mass-thanks">${iconHtml('heart')} Mass-Thank-You an Top-5</button>
       </div>
       <div id="list-area">
-        ${state.rows.length ? tableHtml(state.rows) : emptyState()}
+        ${state.rows.length ? tableHtml(state.rows) : emptyState(state.range)}
       </div>
     </div>
   `
@@ -445,11 +508,12 @@ function render(container) {
     tr.querySelector('[data-act="detail"]')?.addEventListener('click', (e) => {
       e.stopPropagation(); showUserDetailModal(uid)
     })
+    // FIX #4: use audience instead of user_ids
     tr.querySelector('[data-act="thanks"]')?.addEventListener('click', async (e) => {
       e.stopPropagation()
       try {
         await sendBroadcastPush({
-          user_ids: [uid],
+          audience: [uid],
           title: 'Danke! 🎙️',
           body: `Hey ${row.name}, danke für dein Engagement!`,
           data: { kind: 'thanks_single', source: 'crm' }

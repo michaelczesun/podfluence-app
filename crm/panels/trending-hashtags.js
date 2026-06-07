@@ -3,7 +3,7 @@ import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } 
 import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, glassCard, statHero } from '/lib/layout-extras.js'
+import { drawer, statHero } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const PALETTE = ['#7c5cff', '#22c1c3', '#fdbb2d', '#ff5e7e', '#3ee8a3', '#ffa057', '#5d9cff', '#c97bff']
@@ -180,12 +180,10 @@ async function openTagDrawer(tag) {
   const body = document.getElementById('tag-drawer-body')
   if (!body) return
   if (!posts.length) {
-    body.innerHTML = glassCard({
-      content: `<div class="empty-state" style="padding:24px;text-align:center">
-        <div class="empty-icon">${iconHtml('hash')}</div>
-        <p>Keine Posts mit <strong>#${htmlEscape(tag)}</strong> in den letzten 30 Tagen gefunden.</p>
-      </div>`
-    })
+    body.innerHTML = `<div class="glass-card" style="padding:24px;text-align:center">
+      <div class="empty-icon">${iconHtml('hash')}</div>
+      <p>Keine Posts mit <strong>#${htmlEscape(tag)}</strong> in den letzten 30 Tagen gefunden.</p>
+    </div>`
     return
   }
   body.innerHTML = `
@@ -305,36 +303,31 @@ export default {
           </div>
 
           <div class="grid-2">
-            ${glassCard({
-              title: 'Hashtag-Cloud',
-              subtitle: 'Größe = Nutzungsanzahl · Klick = Posts anzeigen',
-              content: `<div id="cloud">${bubbleCloud(items)}</div>`
-            })}
-            ${glassCard({
-              title: 'Top 10 Verteilung',
-              subtitle: 'Anteil an Top-Verwendungen',
-              content: `<div id="chart-donut" style="height:280px"></div>`
-            })}
+            <div class="glass-card">
+              <div class="card-header"><h3>Hashtag-Cloud</h3><p class="card-sub">Größe = Nutzungsanzahl · Klick = Posts anzeigen</p></div>
+              <div id="cloud">${bubbleCloud(items)}</div>
+            </div>
+            <div class="glass-card">
+              <div class="card-header"><h3>Top 10 Verteilung</h3><p class="card-sub">Anteil an Top-Verwendungen</p></div>
+              <div id="chart-donut" style="height:280px"></div>
+            </div>
           </div>
 
           <div class="grid-2">
-            ${glassCard({
-              title: 'Top 15 nach Anzahl',
-              subtitle: 'Posts insgesamt pro Tag',
-              content: `<div id="chart-bar" style="height:300px"></div>`
-            })}
-            ${glassCard({
-              title: 'Top-Tags nach 24h-Posts',
-              subtitle: 'Neue Posts mit Top-Tags in den letzten 24h',
-              content: `<div id="chart-area" style="height:300px"></div>`
-            })}
+            <div class="glass-card">
+              <div class="card-header"><h3>Top 15 nach Anzahl</h3><p class="card-sub">Posts insgesamt pro Tag</p></div>
+              <div id="chart-bar" style="height:300px"></div>
+            </div>
+            <div class="glass-card">
+              <div class="card-header"><h3>Top-Tags nach 24h-Posts</h3><p class="card-sub">Neue Posts mit Top-Tags in den letzten 24h</p></div>
+              <div id="chart-area" style="height:300px"></div>
+            </div>
           </div>
 
-          ${glassCard({
-            title: 'Ranking',
-            subtitle: 'Sortiert nach Verwendungsanzahl · Zeile klicken für Drilldown',
-            content: `<div id="rank-list">${rankList(items)}</div>`
-          })}
+          <div class="glass-card">
+            <div class="card-header"><h3>Ranking</h3><p class="card-sub">Sortiert nach Verwendungsanzahl · Zeile klicken für Drilldown</p></div>
+            <div id="rank-list">${rankList(items)}</div>
+          </div>
         `
 
         try { countUp(body.querySelector('#hero-tags'), uniqueTags) } catch (_) {}

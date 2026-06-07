@@ -1,6 +1,6 @@
 import { sb } from '/lib/supabase.js'
 import { toast, modal, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
-import { makeBarChart, makeDonutChart } from '/lib/charts.js'
+import { makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
 import { drawer, glassCard, statHero } from '/lib/layout-extras.js'
@@ -49,32 +49,25 @@ function regionOf(code) {
   return 'Sonstige'
 }
 
+// FIX HIGH #1: Query users table directly and aggregate client-side.
+// The view 'users_by_country' does not exist in the DB schema.
 async function fetchCountries() {
   const { data, error } = await sb
-    .from('users_by_country')
-    .select('*')
-    .limit(50000)
+    .from('users')
+    .select('country_code, created_at')
   if (error) throw error
   const byCode = new Map()
+  const now = Date.now()
   for (const row of (data || [])) {
-    const raw = (row.country_code || row.country || '').toString().trim()
+    const raw = (row.country_code || '').toString().trim()
     if (!raw) continue
     const code = raw.length === 2 ? raw.toUpperCase() : raw
     const entry = byCode.get(code) || { code, count: 0, recent: 0 }
-    entry.count += (row.count || row.user_count || 1)
-    if (row.created_at && (Date.now() - new Date(row.created_at).getTime()) < 30 * 86400000) entry.recent++
+    entry.count++
+    if (row.created_at && (now - new Date(row.created_at).getTime()) < 30 * 86400000) entry.recent++
     byCode.set(code, entry)
   }
   return Array.from(byCode.values()).sort((a, b) => b.count - a.count)
-}
-
-function renderUsersFromCountryEmptyState() {
-  return `
-    <div class="glass-card" style="padding:24px 20px;text-align:center;display:flex;flex-direction:column;align-items:center;gap:10px">
-      ${iconHtml('alert')}
-      <div style="font-size:.9rem;color:var(--text-muted,#9aa0a6)">Daten kommen sobald die Tabelle <strong>profiles</strong> angelegt ist</div>
-    </div>
-  `
 }
 
 function renderToolbar() {
@@ -409,15 +402,16 @@ export default {
 
     async function openCountryDrawer(code) {
       const title = `${flagFromCode(code)} ${countryName(code)}`
-      let dr
+      let drawerEl
       try {
-        dr = drawer({
+        drawerEl = drawer({
           title,
           width: 460,
           content: `<div id="cd-body"><div class="muted">Lade User…</div></div>`
         })
       } catch (_) {
-        modal({ title, body: `<div id="cd-body"><div class="muted">Lade User…</div></div>` })
+        // FIX MED #4: modal() uses 'content', not 'body'
+        modal({ title, content: `<div id="cd-body"><div class="muted">Lade User…</div></div>` })
       }
       const body = document.querySelector('#cd-body')
       if (!body) return
@@ -431,15 +425,22 @@ export default {
           </div>
           <div id="country-users-list"><div class="muted" style="padding:20px;text-align:center">Lade User…</div></div>
         `
+        // FIX HIGH #2: Query users table directly filtered by country_code.
+        // Using RPC admin_users_list_full with p_limit:50 and client-side filter would silently
+        // truncate results for large countries — a country with 200 users might show 0-50.
         try {
-          const { data: users } = await sb.rpc('admin_users_list_full', { p_limit: 50, p_offset: 0, p_search: '' })
-          const filtered = (users || []).filter(u => (u.country || '').toUpperCase() === code)
+          const { data: users, error: usersErr } = await sb
+            .from('users')
+            .select('id, username, full_name, is_verified, is_premium, type')
+            .eq('country_code', code)
+            .limit(200)
+          if (usersErr) throw usersErr
           const listEl = body.querySelector('#country-users-list')
           if (!listEl) return
-          if (!filtered.length) {
+          if (!users || !users.length) {
             listEl.innerHTML = '<div class="muted" style="padding:20px;text-align:center">Keine User für dieses Land gefunden.</div>'
           } else {
-            listEl.innerHTML = filtered.map(u => `
+            listEl.innerHTML = users.map(u => `
               <div class="drawer-user-row" data-uid="${htmlEscape(u.id)}">
                 <div class="drawer-avatar">${htmlEscape((u.username || u.full_name || '?')[0].toUpperCase())}</div>
                 <div class="drawer-user-meta">
@@ -470,7 +471,7 @@ export default {
             <div class="error-state glass-card">
               <div class="error-icon">!</div>
               <div class="error-title">Panel konnte nicht geladen werden</div>
-              <div class="error-sub">${(mountErr && mountErr.message) ? mountErr.message.replace(/[<>&]/g, '') : 'Unbekannter Fehler'}</div>
+              <div class="error-sub">${htmlEscape(mountErr?.message || 'Unbekannter Fehler')}</div>
             </div>
           </div>
         `

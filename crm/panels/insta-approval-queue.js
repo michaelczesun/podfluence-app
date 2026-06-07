@@ -1316,9 +1316,18 @@ function renderQueueCard(item, refresh) {
       const { error: updErr } = await sb.from('insta_posts_queue').update({ status: 'approved' }).eq('id', item.id)
       if (updErr) throw updErr
       const { error } = await sb.functions.invoke('insta-publish', { body: { queue_id: item.id } })
-      if (error) toast('Publish-Fehler: ' + error.message, 'error')
-      else toast('Erfolgreich gepostet ✓', 'success')
+      if (error) {
+        // Rollback: Publish fehlgeschlagen → Status zurück auf 'ready' damit der Post nicht verschwindet
+        await sb.from('insta_posts_queue').update({ status: 'ready' }).eq('id', item.id)
+        toast('Publish-Fehler: ' + error.message + ' — Status zurückgesetzt', 'error')
+        approveBtn.disabled = false
+        approveBtn.innerHTML = '✓ Approven & jetzt posten'
+        return
+      }
+      toast('Erfolgreich gepostet ✓', 'success')
     } catch (e) {
+      // Rollback: Exception während Publish → Status zurück auf 'ready'
+      try { await sb.from('insta_posts_queue').update({ status: 'ready' }).eq('id', item.id) } catch {}
       toast('Fehler: ' + (e?.message || 'unbekannt'), 'error')
       approveBtn.disabled = false
       approveBtn.innerHTML = '✓ Approven & jetzt posten'
@@ -1412,7 +1421,9 @@ function renderHistoryRow(item) {
           </div>
         `,
       })
-    } catch {}
+    } catch (e) {
+      toast('Detail-Ansicht nicht verfügbar', 'error')
+    }
   })
   return row
 }
@@ -1452,13 +1463,14 @@ function openInsightsModal(item, onSaved) {
     const saveBtn = overlay.querySelector('.ins-save-btn')
     saveBtn.disabled = true
     saveBtn.innerHTML = '⏳ Speichert…'
-    const insights = {
+    const insightsObj = {
       reach: Number(overlay.querySelector('#ins-reach').value) || 0,
       likes: Number(overlay.querySelector('#ins-likes').value) || 0,
       saves: Number(overlay.querySelector('#ins-saves').value) || 0,
       comments: Number(overlay.querySelector('#ins-comments').value) || 0,
     }
-    const { error } = await sb.from('insta_posts_queue').update({ insights }).eq('id', item.id)
+    // Speichere als JSON-String (kompatibel mit text- und jsonb-Spalte)
+    const { error } = await sb.from('insta_posts_queue').update({ insights: JSON.stringify(insightsObj) }).eq('id', item.id)
     if (error) {
       toast('Fehler: ' + error.message, 'error')
       saveBtn.disabled = false
@@ -1606,6 +1618,7 @@ export default {
           tabBar.innerHTML = `
             <button class="tab-btn${activeTab === 'queue' ? ' active' : ''}" data-tab="queue">📥 Warteschlange <span style="opacity:.7">(${queue.length})</span></button>
             <button class="tab-btn${activeTab === 'insights' ? ' active' : ''}" data-tab="insights">📊 Insights <span style="opacity:.7">(${posted.length})</span></button>
+            <button class="tab-btn${activeTab === 'verlauf' ? ' active' : ''}" data-tab="verlauf">📋 Verlauf <span style="opacity:.7">(${posted.length})</span></button>
           `
           tabBar.querySelectorAll('.tab-btn').forEach(btn => {
             btn.addEventListener('click', () => switchTab(btn.dataset.tab))
@@ -1681,6 +1694,31 @@ export default {
           }
           insightsPane.appendChild(insSection)
           body.appendChild(insightsPane)
+
+          // ─── Verlauf-Tab (renderHistoryRow) ──────────────────────────────
+          const verlaufPane = document.createElement('div')
+          verlaufPane.className = `tab-pane${activeTab === 'verlauf' ? ' active' : ''}`
+          verlaufPane.dataset.pane = 'verlauf'
+          const verlaufSection = document.createElement('div')
+          verlaufSection.className = 'glass-card'
+          const verlaufHead = document.createElement('h3')
+          verlaufHead.className = 'insta-section-title'
+          verlaufHead.innerHTML = `📋 Verlauf — veröffentlichte Posts <span class="count-badge">${posted.length}</span>`
+          verlaufSection.appendChild(verlaufHead)
+          if (posted.length === 0) {
+            const emptyV = document.createElement('div')
+            emptyV.className = 'empty-state'
+            emptyV.innerHTML = `
+              <div class="empty-icon">📭</div>
+              <div class="empty-title">Noch keine Veröffentlichungen</div>
+              <div class="empty-sub">Alle genehmigten Posts erscheinen hier im Verlauf.</div>
+            `
+            verlaufSection.appendChild(emptyV)
+          } else {
+            posted.forEach(it => verlaufSection.appendChild(renderHistoryRow(it)))
+          }
+          verlaufPane.appendChild(verlaufSection)
+          body.appendChild(verlaufPane)
 
           try { fadeIn(body) } catch {}
         } catch (e) {

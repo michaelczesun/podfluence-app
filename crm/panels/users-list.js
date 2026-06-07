@@ -2,7 +2,7 @@ import { sb } from '/lib/supabase.js'
 import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
 import { makeAreaChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { countUp, fadeIn } from '/lib/animations.js'
 import { drawer, statHero } from '/lib/layout-extras.js'
 // FIX #6: added unverifyUser import; FIX #7: added unbanUser import
 import { showUserDetailModal, verifyUser, unverifyUser, banUser, unbanUser, grantPremium } from '/lib/panel-actions.js'
@@ -157,7 +157,7 @@ export default {
             </div>
           </div>
           <div class="panel-body" id="ul-body">
-            ${skeletonLoader({ rows: 8 })}
+            <div class="pf-skeleton" style="width:100%;height:320px;"></div>
           </div>
         </div>
       `
@@ -197,7 +197,7 @@ async function loadAll(container) {
   _allRows = null
   _allRowsInflight = null
   state.loading = true
-  body.innerHTML = skeletonLoader({ rows: 8 })
+  body.innerHTML = '<div class="pf-skeleton" style="width:100%;height:320px;"></div>'
 
   try {
     await _loadAllRows()  // single fetch — all three helpers will reuse the cache
@@ -518,7 +518,7 @@ function wireBulk(body, container) {
   })
   bar.querySelector('[data-bulk="verify"]')?.addEventListener('click', async () => {
     const ids = Array.from(state.selected)
-    const ok = await confirmDialog({ title: `${ids.length} Nutzer verifizieren?`, message: 'Diese Nutzer werden als verifiziert markiert.' })
+    const ok = await confirmDialog(`${ids.length} Nutzer verifizieren?`, 'Diese Nutzer werden als verifiziert markiert.')
     if (!ok) return
     try {
       // FIX #4: correct RPC param name is uids[] not user_ids
@@ -535,7 +535,7 @@ function wireBulk(body, container) {
   })
   bar.querySelector('[data-bulk="premium"]')?.addEventListener('click', async () => {
     const ids = Array.from(state.selected)
-    const ok = await confirmDialog({ title: `${ids.length} × Premium freischalten?` })
+    const ok = await confirmDialog(`${ids.length} × Premium freischalten?`)
     if (!ok) return
     let n = 0
     const errs = []
@@ -557,7 +557,7 @@ function wireBulk(body, container) {
     openBulkPushModal(ids, body, container)
   })
   bar.querySelector('[data-bulk="ban"]')?.addEventListener('click', async () => {
-    const ok = await confirmDialog({ title: `${state.selected.size} Nutzer bannen?`, message: 'Diese Aktion sperrt die Accounts.', danger: true })
+    const ok = await confirmDialog(`${state.selected.size} Nutzer bannen?`, 'Diese Aktion sperrt die Accounts.', 'Bannen', true)
     if (!ok) return
     let n = 0
     for (const id of state.selected) { try { await banUser(id); n++ } catch (e) { console.warn('ban failed', id, e) } }
@@ -567,7 +567,7 @@ function wireBulk(body, container) {
   })
   bar.querySelector('[data-bulk="export"]')?.addEventListener('click', () => {
     const rows = state.rows.filter(r => state.selected.has(r.id))
-    exportCsv(`nutzer-auswahl-${Date.now()}.csv`, rows.map(toCsvRow))
+    exportCsv(rows.map(toCsvRow), [], `nutzer-auswahl-${Date.now()}.csv`)
     toast('Export gestartet', 'success')
   })
 }
@@ -610,7 +610,7 @@ function openActionMenu(anchor, userId, body, container) {
   menu.querySelector('[data-a="view"]')?.addEventListener('click', () => { close(); openUserDrawer(userId, container) })
   menu.querySelector('[data-a="verify"]')?.addEventListener('click', async () => {
     close()
-    const ok = await confirmDialog({ title: 'Nutzer verifizieren?' })
+    const ok = await confirmDialog('Nutzer verifizieren?')
     if (!ok) return
     try { await verifyUser(userId); toast('Verifiziert', 'success'); await loadAll(container) }
     catch (e) { toast(e?.message || 'Fehler', 'error') }
@@ -618,21 +618,21 @@ function openActionMenu(anchor, userId, body, container) {
   // FIX #6: wire unverify action
   menu.querySelector('[data-a="unverify"]')?.addEventListener('click', async () => {
     close()
-    const ok = await confirmDialog({ title: 'Verifizierung entziehen?', danger: true })
+    const ok = await confirmDialog('Verifizierung entziehen?', '', 'Entziehen', true)
     if (!ok) return
     try { await unverifyUser(userId); toast('Verifizierung entzogen', 'warning'); await loadAll(container) }
     catch (e) { toast(e?.message || 'Fehler', 'error') }
   })
   menu.querySelector('[data-a="premium"]')?.addEventListener('click', async () => {
     close()
-    const ok = await confirmDialog({ title: 'Premium gewähren?' })
+    const ok = await confirmDialog('Premium gewähren?')
     if (!ok) return
     try { await grantPremium(userId); toast('Premium aktiviert', 'success'); await loadAll(container) }
     catch (e) { toast(e?.message || 'Fehler', 'error') }
   })
   menu.querySelector('[data-a="ban"]')?.addEventListener('click', async () => {
     close()
-    const ok = await confirmDialog({ title: 'Nutzer bannen?', danger: true })
+    const ok = await confirmDialog('Nutzer bannen?', '', 'Bannen', true)
     if (!ok) return
     try { await banUser(userId); toast('Gebannt', 'warning'); await loadAll(container) }
     catch (e) { toast(e?.message || 'Fehler', 'error') }
@@ -640,7 +640,7 @@ function openActionMenu(anchor, userId, body, container) {
   // FIX #7: wire unban action
   menu.querySelector('[data-a="unban"]')?.addEventListener('click', async () => {
     close()
-    const ok = await confirmDialog({ title: 'Nutzer entbannen?' })
+    const ok = await confirmDialog('Nutzer entbannen?')
     if (!ok) return
     try { await unbanUser(userId); toast('Entbannt', 'success'); await loadAll(container) }
     catch (e) { toast(e?.message || 'Fehler', 'error') }
@@ -652,11 +652,9 @@ function openUserDrawer(userId, container) {
     const host = drawer({
       title: 'Nutzer-Details',
       width: 540,
-      content: `<div id="ul-drawer-host">${skeletonLoader({ rows: 6 })}</div>`
+      content: `<div id="ul-drawer-host"><div class="pf-skeleton" style="width:100%;height:240px;"></div></div>`
     })
-    const target = host?.querySelector?.('#ul-drawer-host') || null
-    if (target) showUserDetailModal(userId, { mount: target })
-    else showUserDetailModal(userId)
+    showUserDetailModal(userId)
   } catch (e) {
     try { showUserDetailModal(userId) } catch (err) {
       toast(err?.message || 'Details konnten nicht geöffnet werden', 'error')
@@ -742,7 +740,7 @@ function toCsvRow(r) {
 }
 
 function exportCurrentCsv() {
-  exportCsv(`nutzer-liste-${Date.now()}.csv`, state.rows.map(toCsvRow))
+  exportCsv(state.rows.map(toCsvRow), [], `nutzer-liste-${Date.now()}.csv`)
   toast('CSV exportiert', 'success')
 }
 

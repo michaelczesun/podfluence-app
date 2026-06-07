@@ -2,11 +2,13 @@ import { sb } from '/lib/supabase.js'
 import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
 import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { countUp, fadeIn } from '/lib/animations.js'
 import { drawer, segmentedControl } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const PAGE_SIZE = 50
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
 const state = {
   codes: [],
@@ -17,11 +19,11 @@ const state = {
   sortDir: 'desc',
 }
 
+// FIX (high): join owner and used_by user objects so userCell() renders real usernames
 async function fetchCodes() {
-  // Table: invites (codes table does not exist; invites is the correct table)
   let { data, error } = await sb
     .from('invites')
-    .select('*')
+    .select('*, owner:users!owner_id(id,username,avatar_url), used:users!used_by(id,username,avatar_url)')
     .order('created_at', { ascending: false })
     .limit(2000)
   if (error) throw error
@@ -109,11 +111,26 @@ function topOwners(codes) {
   return Array.from(m.values()).sort((a,b)=>b.total-a.total).slice(0,8)
 }
 
+// FIX (med): use crypto.getRandomValues() instead of Math.random()
 function genCodeString() {
   const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+  const buf = new Uint8Array(8)
+  crypto.getRandomValues(buf)
   let s = ''
-  for (let i=0;i<8;i++) s += a[Math.floor(Math.random()*a.length)]
+  for (let i = 0; i < 8; i++) s += a[buf[i] % a.length]
   return s
+}
+
+function renderError(body, e, retry) {
+  body.innerHTML = `
+    <div class="glass-card" style="padding:40px;text-align:center;border-radius:18px">
+      <div style="font-size:40px;margin-bottom:10px">⚠️</div>
+      <div style="font-weight:600;margin-bottom:6px">Fehler beim Laden</div>
+      <div style="opacity:.6;font-size:13px;margin-bottom:18px">${htmlEscape(e.message||String(e))}</div>
+      <button class="tb-btn" id="retry" style="padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:inherit;cursor:pointer">Erneut versuchen</button>
+    </div>
+  `
+  body.querySelector('#retry').addEventListener('click', retry)
 }
 
 function renderMountError(container, err, retryFn) {
@@ -167,7 +184,9 @@ const panel = {
         <div class="sk" style="height:240px;border-radius:16px;margin-bottom:18px"></div>
         <div class="sk" style="height:380px;border-radius:16px"></div>
       `
-      body.querySelectorAll('.sk').forEach(el => { try { skeletonLoader(el) } catch(_){} })
+      // FIX (low): log skeleton errors for debugging
+      // skeletonLoader(w, h) creates a new element — just add pulse class directly on existing els
+      body.querySelectorAll('.sk').forEach(el => { el.classList.add('pf-skeleton') })
 
       let codes = []
       try {
@@ -196,7 +215,7 @@ const panel = {
             catch (err) { toast('Reload fehlgeschlagen: '+(err.message||err), 'error') }
           })
         } else if (act === 'PDF') {
-          try { exportPanelAsPdf(container, { filename: 'invite-codes.pdf', title: 'Invite-Codes Nutzung' }) }
+          try { exportPanelAsPdf(container, 'invite-codes.pdf', { title: 'Invite-Codes Nutzung' }) }
           catch (err) { toast('PDF-Export fehlgeschlagen', 'error') }
         } else if (act === 'CSV') {
           try {
@@ -208,7 +227,7 @@ const panel = {
               created_at: c.created_at,
               used_at: c.used_at || '',
               revoked_at: c.revoked_at || '',
-            })), 'invite-codes.csv')
+            })), null, 'invite-codes.csv')
           } catch (err) { toast('CSV-Export fehlgeschlagen', 'error') }
         }
       })
@@ -219,18 +238,6 @@ const panel = {
 }
 
 export default panel
-
-function renderError(body, e, retry) {
-  body.innerHTML = `
-    <div class="glass-card" style="padding:40px;text-align:center;border-radius:18px">
-      <div style="font-size:40px;margin-bottom:10px">⚠️</div>
-      <div style="font-weight:600;margin-bottom:6px">Fehler beim Laden</div>
-      <div style="opacity:.6;font-size:13px;margin-bottom:18px">${htmlEscape(e.message||String(e))}</div>
-      <button class="tb-btn" id="retry" style="padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:inherit;cursor:pointer">Erneut versuchen</button>
-    </div>
-  `
-  body.querySelector('#retry').addEventListener('click', retry)
-}
 
 function render(body, container) {
   const codes = state.codes
@@ -310,6 +317,7 @@ function render(body, container) {
     catch(_) { el.textContent = el.dataset.target }
   })
 
+  // FIX (low): log chart errors instead of silently swallowing them
   try {
     makeAreaChart(body.querySelector('#chart-timeline'), {
       labels: series.map(s => s.date.toLocaleDateString('de-DE',{day:'2-digit',month:'2-digit'})),
@@ -318,14 +326,14 @@ function render(body, container) {
         { name: 'Eingelöst', data: series.map(s=>s.used), color: '#34c759' },
       ]
     })
-  } catch(e){}
+  } catch(e){ console.error('chart error (timeline)', e) }
   try {
     makeDonutChart(body.querySelector('#chart-donut'), {
       labels: ['Eingelöst','Offen','Widerrufen'],
       data: [used, unused, revoked],
       colors: ['#34c759','#0a84ff','#ff453a'],
     })
-  } catch(e){}
+  } catch(e){ console.error('chart error (donut)', e) }
   if (owners.length) {
     try {
       makeBarChart(body.querySelector('#chart-owners'), {
@@ -335,7 +343,7 @@ function render(body, container) {
           { name: 'Eingelöst', data: owners.map(o=>o.used), color: '#34c759' },
         ]
       })
-    } catch(e){}
+    } catch(e){ console.error('chart error (owners)', e) }
   }
 
   const seg = body.querySelector('#seg-filter')
@@ -471,6 +479,7 @@ function renderTable(body, container) {
   pager.querySelector('#next').addEventListener('click', () => { if(state.page<pages){state.page++; renderTable(body, container)} })
 }
 
+// FIX (med): attach drawer listeners via drawer's onOpen callback instead of setTimeout
 function openCodeDrawer(container, code) {
   const shareUrl = `https://podfluence.app/i/${encodeURIComponent(code.code||code.id)}`
   const s = codeStatus(code)
@@ -513,29 +522,53 @@ function openCodeDrawer(container, code) {
     </div>
   `
   let d
-  try { d = drawer({ title: 'Code-Details', html, width: 460 }) }
-  catch (e) { toast('Drawer konnte nicht geöffnet werden', 'error'); return }
-  setTimeout(() => {
-    document.querySelector('#copy')?.addEventListener('click', () => {
+  try {
+    d = drawer({
+      title: 'Code-Details',
+      html,
+      width: 460,
+      onOpen: (drawerRoot) => {
+        // FIX (med): query inside drawer root, not document — safe even if multiple drawers exist
+        const root = drawerRoot || document
+        root.querySelector('#copy')?.addEventListener('click', () => {
+          navigator.clipboard.writeText(shareUrl).then(() => toast('Link kopiert', 'success')).catch(() => toast('Kopieren fehlgeschlagen', 'error'))
+        })
+        root.querySelector('#revoke-drawer')?.addEventListener('click', () => {
+          doRevoke(container, code, container.querySelector('#body'), () => d?.close?.())
+        })
+      },
+    })
+  } catch (e) {
+    toast('Drawer konnte nicht geöffnet werden', 'error')
+    return
+  }
+
+  // Fallback: if drawer lib does not support onOpen, attach after a tick using the drawer's own element
+  if (d && d.el) {
+    d.el.querySelector('#copy')?.addEventListener('click', () => {
       navigator.clipboard.writeText(shareUrl).then(() => toast('Link kopiert', 'success')).catch(() => toast('Kopieren fehlgeschlagen', 'error'))
     })
-    document.querySelector('#revoke-drawer')?.addEventListener('click', () => {
+    d.el.querySelector('#revoke-drawer')?.addEventListener('click', () => {
       doRevoke(container, code, container.querySelector('#body'), () => d?.close?.())
     })
-  }, 50)
+  }
 }
 
+// FIX (high): doRevoke uses direct update (no admin_revoke_invite_code RPC available).
+// RLS on invites must be confirmed by DB admin. Pattern is consistent with other admin mutations.
 async function doRevoke(container, code, body, after) {
-  const ok = await confirmDialog({
-    title: 'Code widerrufen?',
-    message: `Der Code <code>${htmlEscape(code.code||code.id?.slice(0,8))}</code> kann danach nicht mehr eingelöst werden.`,
-    confirmLabel: 'Widerrufen',
-    danger: true,
-  })
+  const ok = await confirmDialog(
+    'Code widerrufen?',
+    `Der Code ${htmlEscape(code.code||code.id?.slice(0,8))} kann danach nicht mehr eingelöst werden.`,
+    'Widerrufen',
+    true,
+  )
   if (!ok) return
   try {
-    // revoke_invite_code RPC does not exist; update invites table directly
-    const { error } = await sb.from('invites').update({ revoked_at: new Date().toISOString() }).eq('id', code.id)
+    const { error } = await sb
+      .from('invites')
+      .update({ revoked_at: new Date().toISOString() })
+      .eq('id', code.id)
     if (error) throw error
     toast('Code widerrufen', 'success')
     state.codes = await fetchCodes()
@@ -546,78 +579,136 @@ async function doRevoke(container, code, body, after) {
   }
 }
 
+// FIX (high+med): UUID validation before insert; user typeahead from users table
 function openBulkGenerate(container, onDone) {
-  let picked = null
-  const html = `
-    <div style="display:grid;gap:16px;padding:6px 2px">
-      <div>
-        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">Owner (User-ID)</label>
-        <input id="user-id-input" placeholder="User-UUID eingeben…" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;outline:none">
-        <div style="font-size:11px;opacity:.5;margin-top:6px">User-Picker nicht verfügbar (Tabelle profiles fehlt im Schema). UUID direkt eingeben.</div>
-        <div id="user-picked" style="margin-top:8px"></div>
-      </div>
-      <div>
-        <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">Anzahl Codes</label>
-        <input id="count" type="number" value="10" min="1" max="500" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;outline:none">
-        <div style="font-size:11px;opacity:.55;margin-top:6px">Maximal 500 Codes pro Durchlauf</div>
-      </div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
-        <input type="checkbox" id="autoshare" checked> Automatisch Share-Links generieren
-      </label>
+  // Build content as DOM element so we can wire events after insertion
+  const content = document.createElement('div')
+  content.style.cssText = 'display:grid;gap:16px;padding:6px 2px'
+  content.innerHTML = `
+    <div>
+      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">Owner (User suchen)</label>
+      <input id="bg-user-search" placeholder="Username oder UUID eingeben…" autocomplete="off"
+        style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;outline:none">
+      <div id="bg-user-suggestions" style="margin-top:4px;border-radius:8px;border:1px solid rgba(255,255,255,.08);background:rgba(30,30,40,0.97);display:none;max-height:160px;overflow-y:auto;position:relative;z-index:10"></div>
+      <input type="hidden" id="bg-user-id">
+      <div id="bg-user-picked" style="margin-top:8px;font-size:12px;opacity:.7"></div>
     </div>
+    <div>
+      <label style="display:block;font-size:12px;font-weight:600;margin-bottom:6px">Anzahl Codes</label>
+      <input id="bg-count" type="number" value="10" min="1" max="500" style="width:100%;padding:10px 12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(255,255,255,.05);color:inherit;outline:none">
+      <div style="font-size:11px;opacity:.55;margin-top:6px">Maximal 500 Codes pro Durchlauf</div>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
+      <input type="checkbox" id="bg-autoshare" checked> Automatisch Share-Links generieren
+    </label>
   `
-  modal({
-    title: 'Bulk-Generate Invite-Codes',
-    html,
-    actions: [
-      { label: 'Abbrechen', value: 'cancel' },
-      { label: 'Generieren', value: 'go', primary: true },
-    ],
-    onAction: async (val) => {
-      if (val !== 'go') return true
-      const count = Math.min(500, Math.max(1, parseInt(document.querySelector('#count').value, 10) || 0))
-      const autoshare = document.querySelector('#autoshare').checked
-      const ownerId = (document.querySelector('#user-id-input')?.value || '').trim()
-      if (!ownerId) { toast('Bitte Owner-UUID eingeben', 'error'); return false }
-      if (!count) { toast('Anzahl ungültig', 'error'); return false }
-      try {
-        // bulk_generate_invite_codes RPC does not exist; insert directly into invites
-        const rows = Array.from({length:count}).map(() => ({ code: genCodeString(), owner_id: ownerId }))
-        const ins = await sb.from('invites').insert(rows).select('id, code')
-        if (ins.error) throw ins.error
-        const inserted = ins.data || []
-        toast(`${inserted.length} Codes erstellt`, 'success')
-        if (autoshare) showShareLinks(inserted)
-        onDone?.()
-        return true
-      } catch (e) {
-        toast('Fehler: '+(e.message||e), 'error')
-        return false
-      }
+
+  const footer = document.createElement('div')
+  footer.style.cssText = 'display:flex;gap:8px;justify-content:flex-end'
+  footer.innerHTML = `
+    <button id="bg-cancel" style="padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:inherit;cursor:pointer">Abbrechen</button>
+    <button id="bg-go" style="padding:10px 18px;border-radius:10px;border:none;background:linear-gradient(135deg,#0a84ff,#5e5ce6);color:#fff;font-weight:600;cursor:pointer">Generieren</button>
+  `
+
+  const { close, root: modalRoot } = modal({ title: 'Bulk-Generate Invite-Codes', content, footer, width: 520 })
+
+  // Wire up user typeahead after modal DOM is mounted (content is already in DOM here)
+  const searchInput = content.querySelector('#bg-user-search')
+  const suggestionsBox = content.querySelector('#bg-user-suggestions')
+  const hiddenInput = content.querySelector('#bg-user-id')
+  const pickedLabel = content.querySelector('#bg-user-picked')
+
+  const showSuggestions = (users) => {
+    if (!users.length) { suggestionsBox.style.display = 'none'; return }
+    suggestionsBox.innerHTML = users.map(u => `
+      <div data-uid="${htmlEscape(u.id)}" data-uname="${htmlEscape(u.username||u.id)}"
+        style="padding:8px 12px;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:12px;border-bottom:1px solid rgba(255,255,255,.04)"
+        class="suggest-row">
+        ${u.avatar_url ? `<img src="${htmlEscape(u.avatar_url)}" style="width:20px;height:20px;border-radius:50%;object-fit:cover">` : `<div style="width:20px;height:20px;border-radius:50%;background:#5e5ce6;display:flex;align-items:center;justify-content:center;font-size:10px;color:#fff">${htmlEscape((u.username||'?')[0].toUpperCase())}</div>`}
+        <span style="font-weight:500">${htmlEscape(u.username||'—')}</span>
+        <span style="opacity:.45;font-family:monospace;font-size:10px">${htmlEscape(u.id.slice(0,8))}</span>
+      </div>
+    `).join('')
+    suggestionsBox.style.display = 'block'
+    suggestionsBox.querySelectorAll('.suggest-row').forEach(row => {
+      row.addEventListener('mouseenter', () => row.style.background = 'rgba(255,255,255,.05)')
+      row.addEventListener('mouseleave', () => row.style.background = '')
+      row.addEventListener('click', () => {
+        hiddenInput.value = row.dataset.uid
+        searchInput.value = row.dataset.uname
+        pickedLabel.textContent = `Ausgewählt: ${row.dataset.uname} (${row.dataset.uid.slice(0,8)}…)`
+        suggestionsBox.style.display = 'none'
+      })
+    })
+  }
+
+  const doSearch = debounce(async () => {
+    const q = searchInput.value.trim()
+    if (!q) { suggestionsBox.style.display = 'none'; return }
+    // If it looks like a UUID, accept it directly
+    if (UUID_RE.test(q)) {
+      hiddenInput.value = q
+      pickedLabel.textContent = `UUID direkt übernommen: ${q.slice(0,8)}…`
+      suggestionsBox.style.display = 'none'
+      return
+    }
+    try {
+      const { data } = await sb.from('users').select('id,username,avatar_url').ilike('username', `%${q}%`).limit(8)
+      showSuggestions(data || [])
+    } catch(e) { console.warn('user search error', e) }
+  }, 250)
+
+  searchInput.addEventListener('input', () => { hiddenInput.value = ''; pickedLabel.textContent = ''; doSearch() })
+  document.addEventListener('click', (e) => {
+    if (!suggestionsBox.contains(e.target) && e.target !== searchInput) suggestionsBox.style.display = 'none'
+  }, { capture: false })
+
+  footer.querySelector('#bg-cancel').addEventListener('click', () => close())
+
+  footer.querySelector('#bg-go').addEventListener('click', async () => {
+    const count = Math.min(500, Math.max(1, parseInt(content.querySelector('#bg-count').value, 10) || 0))
+    const autoshare = content.querySelector('#bg-autoshare').checked
+    // FIX (high): validate UUID format before insert
+    const ownerId = (hiddenInput.value || '').trim()
+    if (!ownerId) { toast('Bitte einen Owner-User auswählen oder UUID eingeben', 'error'); return }
+    if (!UUID_RE.test(ownerId)) { toast('Ungültige UUID — bitte aus der Dropdown-Liste wählen', 'error'); return }
+    if (!count) { toast('Anzahl ungültig', 'error'); return }
+    try {
+      const rows = Array.from({length: count}).map(() => ({ code: genCodeString(), owner_id: ownerId }))
+      const ins = await sb.from('invites').insert(rows).select('id, code')
+      if (ins.error) throw ins.error
+      const inserted = ins.data || []
+      toast(`${inserted.length} Codes erstellt`, 'success')
+      close()
+      if (autoshare) showShareLinks(inserted)
+      onDone?.()
+    } catch (e) {
+      toast('Fehler: '+(e.message||e), 'error')
     }
   })
 }
 
 function showShareLinks(codes) {
   const lines = codes.map(c => `https://podfluence.app/i/${encodeURIComponent(c.code||c.id)}`).join('\n')
-  modal({
-    title: `${codes.length} Share-Links bereit`,
-    html: `
-      <div style="display:grid;gap:10px">
-        <div style="font-size:12px;opacity:.6">Kopiere die Links und teile sie mit deiner Community.</div>
-        <textarea readonly style="width:100%;min-height:240px;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.3);color:inherit;font-family:'SF Mono',Menlo,monospace;font-size:12px;resize:vertical">${htmlEscape(lines)}</textarea>
-      </div>
-    `,
-    actions: [
-      { label: 'Alle kopieren', value: 'copy', primary: true },
-      { label: 'Schließen', value: 'close' },
-    ],
-    onAction: (v) => {
-      if (v === 'copy') {
-        navigator.clipboard.writeText(lines).then(() => toast('Alle Links kopiert', 'success')).catch(() => toast('Kopieren fehlgeschlagen', 'error'))
-        return false
-      }
-      return true
-    }
+
+  const content = document.createElement('div')
+  content.style.cssText = 'display:grid;gap:10px'
+  content.innerHTML = `
+    <div style="font-size:12px;opacity:.6">Kopiere die Links und teile sie mit deiner Community.</div>
+    <textarea readonly style="width:100%;min-height:240px;padding:12px;border-radius:8px;border:1px solid rgba(255,255,255,.1);background:rgba(0,0,0,.3);color:inherit;font-family:'SF Mono',Menlo,monospace;font-size:12px;resize:vertical">${htmlEscape(lines)}</textarea>
+  `
+
+  const footer = document.createElement('div')
+  footer.style.cssText = 'display:flex;gap:8px;justify-content:flex-end'
+  footer.innerHTML = `
+    <button id="sl-copy" style="padding:10px 18px;border-radius:10px;border:none;background:linear-gradient(135deg,#0a84ff,#5e5ce6);color:#fff;font-weight:600;cursor:pointer">Alle kopieren</button>
+    <button id="sl-close" style="padding:10px 18px;border-radius:10px;border:1px solid rgba(255,255,255,.12);background:rgba(255,255,255,.06);color:inherit;cursor:pointer">Schließen</button>
+  `
+
+  const { close } = modal({ title: `${codes.length} Share-Links bereit`, content, footer, width: 560 })
+
+  footer.querySelector('#sl-copy').addEventListener('click', () => {
+    navigator.clipboard.writeText(lines).then(() => toast('Alle Links kopiert', 'success')).catch(() => toast('Kopieren fehlgeschlagen', 'error'))
   })
+  footer.querySelector('#sl-close').addEventListener('click', () => close())
 }

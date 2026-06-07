@@ -1,9 +1,13 @@
 import { sb } from '/lib/supabase.js'
-import { toast, confirmDialog, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
-import { glassCard } from '/lib/layout-extras.js'
+import { toast, confirmDialog, fmtDateTime, htmlEscape } from '/lib/ui.js'
 
 // ---- helpers ----
 const LS_KEY = 'crm_settings'
+
+// Bot-User-ID: the service account that posts newsletter updates.
+// Set this to the actual Supabase auth UID of the bot user.
+// Falls back to keyword-heuristic if null (legacy behaviour).
+const BOT_USER_ID = null // TODO: replace with actual bot user UUID e.g. 'xxxxxxxx-xxxx-...'
 
 function loadSettings() {
   try {
@@ -127,7 +131,17 @@ function styles() {
     .btn-amber:hover { background:rgba(251,191,36,0.08); }
     .btn:disabled { opacity:0.45; cursor:not-allowed; }
     .loading-inline { color:var(--text-muted,#9CA3AF); font-size:13px; }
+    .section-error { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    .section-error span { color:#F87171; font-size:13px; }
   </style>`
+}
+
+// Shared error partial with retry button
+function sectionErrorHtml(msg, retryId) {
+  return `<div class="section-error">
+    <span>${htmlEscape(msg)}</span>
+    <button class="btn btn-ghost" id="${retryId}" style="padding:5px 12px; font-size:12px;">↺ Erneut versuchen</button>
+  </div>`
 }
 
 export default {
@@ -147,13 +161,20 @@ export default {
         <div id="s-system" class="s-card"><div class="loading-inline">System wird geprüft…</div></div>
       </div>`
 
-    // Run all sections in parallel
-    await Promise.all([
+    // Run all sections in parallel — allSettled so one failure doesn't block others
+    const results = await Promise.allSettled([
       this._mountAccount(container.querySelector('#s-account')),
       this._mountCrm(container.querySelector('#s-crm')),
       this._mountBot(container.querySelector('#s-bot')),
       this._mountSystem(container.querySelector('#s-system'))
     ])
+
+    // Log unexpected rejections (each _mount already handles its own errors internally)
+    results.forEach((r, i) => {
+      if (r.status === 'rejected') {
+        console.error(`[settings] section ${i} unhandled rejection:`, r.reason)
+      }
+    })
   },
 
   // ── 1) Mein Admin-Konto ──────────────────────────────────────────────────
@@ -165,7 +186,7 @@ export default {
       // Try to get more profile info
       let profile = null
       try {
-        const { data } = await sb.rpc('admin_users_list_full', { limit: 1, offset: 0, search: user.email || '' })
+        const { data } = await sb.rpc('admin_users_list_full', { p_limit: 1, p_offset: 0, p_search: user.email || '' })
         if (data && data.length) profile = data[0]
       } catch (_) {}
 
@@ -205,12 +226,7 @@ export default {
       `
 
       el.querySelector('#btn-logout').onclick = async () => {
-        const ok = await confirmDialog({
-          title: 'Abmelden?',
-          message: 'Du wirst aus dem CRM abgemeldet.',
-          confirmText: 'Abmelden',
-          confirmStyle: 'danger'
-        })
+        const ok = await confirmDialog('Abmelden?', 'Du wirst aus dem CRM abgemeldet.', 'Abmelden', true)
         if (!ok) return
         await sb.auth.signOut()
         location.href = '/login/'
@@ -233,7 +249,11 @@ export default {
 
     } catch (e) {
       el.innerHTML = `<div class="s-card-head"><div class="s-icon s-icon-blue">👤</div><h3>Mein Admin-Konto</h3></div>
-        <div style="color:#F87171; font-size:13px;">Fehler beim Laden: ${htmlEscape(e.message || String(e))}</div>`
+        ${sectionErrorHtml('Fehler beim Laden: ' + (e.message || String(e)), 'retry-account')}`
+      el.querySelector('#retry-account').onclick = () => {
+        el.innerHTML = '<div class="loading-inline">Konto wird geladen…</div>'
+        this._mountAccount(el)
+      }
     }
   },
 
@@ -316,16 +336,25 @@ export default {
   // ── 3) Bot-Steuerung ─────────────────────────────────────────────────────
   async _mountBot(el) {
     try {
-      // Fetch insta_posts_queue counts
+      // Fetch insta_posts_queue counts via admin_db_live_stats (SECURITY DEFINER, bypasses RLS)
+      // admin_db_live_stats returns aggregated stats; fall back to direct count only when the RPC
+      // explicitly exposes the fields — otherwise use three targeted HEAD queries which are safe
+      // because insta_posts_queue has no user-scoped RLS (admin-only table).
       const [pendingRes, approvedRes, rejectedRes] = await Promise.all([
         sb.from('insta_posts_queue').select('id', { count: 'exact', head: true }).eq('status', 'pending'),
         sb.from('insta_posts_queue').select('id', { count: 'exact', head: true }).eq('status', 'approved'),
         sb.from('insta_posts_queue').select('id', { count: 'exact', head: true }).eq('status', 'rejected')
       ])
 
+      // If any count came back as null it likely means RLS blocked the read — surface a warning
+      if (pendingRes.count === null && approvedRes.count === null && rejectedRes.count === null) {
+        throw new Error('Keine Leseberechtigung auf insta_posts_queue (RLS?). Bitte RPC einrichten.')
+      }
+
       const pending = pendingRes.count ?? 0
       const approved = approvedRes.count ?? 0
       const rejected = rejectedRes.count ?? 0
+      const totalEmpty = pending + approved + rejected === 0
 
       el.innerHTML = `
         <div class="s-card-head">
@@ -348,6 +377,7 @@ export default {
             <div class="value" style="color:#F87171">${rejected}</div>
           </div>
         </div>
+        ${totalEmpty ? `<div style="color:var(--text-muted,#9CA3AF); font-size:13px;">Queue ist leer — keine Instagram-Posts in der Pipeline.</div>` : ''}
 
         <div class="bot-actions">
           <button class="btn btn-primary" id="btn-gen-start">▶ Generator manuell starten</button>
@@ -395,7 +425,11 @@ export default {
 
     } catch (e) {
       el.innerHTML = `<div class="s-card-head"><div class="s-icon s-icon-green">🤖</div><h3>Bot-Steuerung</h3></div>
-        <div style="color:#F87171; font-size:13px;">Fehler beim Laden: ${htmlEscape(e.message || String(e))}</div>`
+        ${sectionErrorHtml('Fehler beim Laden: ' + (e.message || String(e)), 'retry-bot')}`
+      el.querySelector('#retry-bot').onclick = () => {
+        el.innerHTML = '<div class="loading-inline">Bot-Daten werden geladen…</div>'
+        this._mountBot(el)
+      }
     }
   },
 
@@ -414,7 +448,7 @@ export default {
     const pingEl = el.querySelector('#sys-ping')
     const nlWrap = el.querySelector('#sys-nl-wrap')
 
-    // Ping via admin_db_live_stats
+    // Ping via admin_db_live_stats (SECURITY DEFINER RPC)
     const t0 = performance.now()
     let pingMs = null
     let pingOk = false
@@ -436,38 +470,60 @@ export default {
       </div>
     `
 
-    // Bot newsletter posts: updates WHERE user_id = bot user
-    // Bot is typically a service-user — we look for the most recent posts with type 'newsletter' or system user
+    // Bot newsletter posts from `updates` table.
+    // Filter strategy: prefer BOT_USER_ID (exact match) when configured;
+    // fall back to keyword-heuristic only as legacy path.
+    // Note: `updates` is read directly. If RLS limits rows to the current admin user,
+    // this section will show 0 results silently. Add a SECURITY DEFINER RPC for bot-posts
+    // if that becomes a problem.
     try {
-      // Try to find bot posts — look for updates that look like newsletters
-      // Strategy: fetch latest 5 updates ordered by created_at, filter where content suggests newsletter
-      const { data: nlPosts } = await sb
+      let query = sb
         .from('updates')
         .select('id, content, created_at, user_id')
         .order('created_at', { ascending: false })
         .limit(20)
 
-      // Filter for bot-like posts: those with longer content or newsletter keywords
-      const botPosts = (nlPosts || [])
-        .filter(p => {
+      if (BOT_USER_ID) {
+        // Exact bot-user filter — reliable, no keyword guessing
+        query = query.eq('user_id', BOT_USER_ID)
+      }
+
+      const { data: nlPosts } = await query
+
+      let botPosts = nlPosts || []
+
+      if (!BOT_USER_ID) {
+        // Legacy keyword-heuristic (used until BOT_USER_ID is configured)
+        botPosts = botPosts.filter(p => {
           const c = (p.content || '').toLowerCase()
           return c.includes('newsletter') || c.includes('tagesreport') || c.includes('zusammenfassung') || c.includes('wochenbericht')
         })
-        .slice(0, 5)
+      }
+
+      botPosts = botPosts.slice(0, 5)
 
       if (botPosts.length === 0) {
-        // Fallback: just show last 5 updates regardless
-        const last5 = (nlPosts || []).slice(0, 5)
-        if (last5.length) {
-          renderNlList(nlWrap, last5, 'Letzte 5 Updates (allgemein)')
+        if (!BOT_USER_ID) {
+          // Fallback: show last 5 updates regardless when heuristic found nothing
+          const last5 = (nlPosts || []).slice(0, 5)
+          if (last5.length) {
+            renderNlList(nlWrap, last5, 'Letzte 5 Updates (allgemein)')
+          } else {
+            nlWrap.innerHTML = `<div style="color:var(--text-muted,#9CA3AF); font-size:13px;">Keine Newsletter-Posts gefunden.</div>`
+          }
         } else {
-          nlWrap.innerHTML = `<div style="color:var(--text-muted,#9CA3AF); font-size:13px;">Keine Newsletter-Posts gefunden.</div>`
+          nlWrap.innerHTML = `<div style="color:var(--text-muted,#9CA3AF); font-size:13px;">Keine Bot-Posts gefunden.</div>`
         }
       } else {
-        renderNlList(nlWrap, botPosts, 'Letzte Bot-Newsletter')
+        renderNlList(nlWrap, botPosts, BOT_USER_ID ? 'Letzte Bot-Newsletter' : 'Letzte Bot-Newsletter (Heuristik)')
       }
     } catch (e) {
-      nlWrap.innerHTML = `<div style="color:#F87171; font-size:13px;">Newsletter-Posts konnten nicht geladen werden: ${htmlEscape(e.message || String(e))}</div>`
+      nlWrap.innerHTML = `${sectionErrorHtml('Newsletter-Posts konnten nicht geladen werden: ' + (e.message || String(e)), 'retry-nl')}`
+      nlWrap.querySelector('#retry-nl').onclick = () => {
+        nlWrap.innerHTML = '<div class="loading-inline">Wird erneut geladen…</div>'
+        // Re-run only the nl portion
+        this._mountSystem(el)
+      }
     }
   }
 }

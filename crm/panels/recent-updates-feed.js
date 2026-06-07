@@ -37,7 +37,7 @@ async function fetchData() {
   const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
   const { data: posts, error } = await sb
     .from('updates')
-    .select('id, user_id, content, image_url, type, kind, poll_id, likes_count, comments_count, created_at, users:user_id(id, username, full_name, is_verified)')
+    .select('id, user_id, content, image_url, type, kind, poll_id, likes_count, comments_count, created_at, users:user_id(id, username, full_name, is_verified, avatar_url)')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -67,16 +67,13 @@ function renderHeros(root) {
 
   const wrap = root.querySelector('#heros')
   if (!wrap) return
+  // statHero animates via opts.value internally (rAF countUp). Pass real totals directly.
   wrap.innerHTML = `
-    ${statHero({ label: 'Posts (7 Tage)', value: 0, dataValue: total, icon: '📝', accent: 'primary' })}
-    ${statHero({ label: 'Likes gesamt', value: 0, dataValue: totalLikes, icon: '❤️', accent: 'pink' })}
-    ${statHero({ label: 'Kommentare', value: 0, dataValue: totalComments, icon: '💬', accent: 'blue' })}
-    ${statHero({ label: 'Mit Bild', value: 0, dataValue: withImg, icon: '🖼️', accent: 'amber' })}
+    ${statHero({ label: 'Posts (7 Tage)', value: total, icon: '📝', accent: 'primary' })}
+    ${statHero({ label: 'Likes gesamt', value: totalLikes, icon: '❤️', accent: 'pink' })}
+    ${statHero({ label: 'Kommentare', value: totalComments, icon: '💬', accent: 'blue' })}
+    ${statHero({ label: 'Mit Bild', value: withImg, icon: '🖼️', accent: 'amber' })}
   `
-  wrap.querySelectorAll('[data-value]').forEach(el => {
-    const v = parseInt(el.dataset.value, 10) || 0
-    try { countUp(el, v, { duration: 900 }) } catch (_) { el.textContent = String(v) }
-  })
 }
 
 function renderCharts(root) {
@@ -245,12 +242,8 @@ function editPost(post) {
 async function deletePostFlow(post) {
   // FIX: capture panelRoot before async gap to guard against unmount() during await
   const root = panelRoot
-  const ok = await confirmDialog({
-    title: 'Post löschen?',
-    text: 'Diese Aktion kann nicht rückgängig gemacht werden.',
-    danger: true,
-    confirmText: 'Löschen'
-  })
+  // confirmDialog(title, message, confirmLabel, danger) — positional, not object
+  const ok = await confirmDialog('Post löschen?', 'Diese Aktion kann nicht rückgängig gemacht werden.', 'Löschen', true)
   if (!ok) return
   try {
     if (typeof deletePost === 'function') {

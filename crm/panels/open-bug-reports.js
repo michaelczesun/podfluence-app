@@ -367,17 +367,9 @@ export default {
       const pdfBtn = container.querySelector('#obr-pdf')
       if (pdfBtn) pdfBtn.addEventListener('click', async () => {
         try {
-          await exportPanelAsPdf({
-            title: 'Offene Bug-Reports',
-            subtitle: `Stand: ${fmtDateTime(new Date().toISOString())} · ${state.open.length} offen`,
-            element: container.querySelector('#obr-shell'),
-            rows: state.open.map(r => ({
-              Status: r.status || '',
-              Beschreibung: (r.description || '').slice(0, 120),
-              Gemeldet: fmtDateTime(r.created_at),
-              'Admin-Notiz': r.admin_note || ''
-            }))
-          })
+          const el = container.querySelector('#obr-shell')
+          const filename = `open-bug-reports-${new Date().toISOString().slice(0, 10)}.pdf`
+          await exportPanelAsPdf(el, filename, { panelTitle: 'Offene Bug-Reports' })
           toast('PDF erstellt.', 'success')
         } catch (err) {
           toast('PDF-Fehler: ' + (err.message || err), 'error')
@@ -386,18 +378,17 @@ export default {
       const csvBtn = container.querySelector('#obr-csv')
       if (csvBtn) csvBtn.addEventListener('click', () => {
         try {
-          exportCsv({
-            filename: `open-bug-reports-${new Date().toISOString().slice(0, 10)}.csv`,
-            rows: state.open.map(r => ({
-              id: r.id,
-              status: r.status,
-              description: r.description,
-              user_id: r.user_id,
-              created_at: r.created_at,
-              admin_note: r.admin_note || '',
-              resolved_at: r.resolved_at || ''
-            }))
-          })
+          const csvRows = state.open.map(r => ({
+            id: r.id,
+            status: r.status,
+            description: r.description,
+            user_id: r.user_id,
+            created_at: r.created_at,
+            admin_note: r.admin_note || '',
+            resolved_at: r.resolved_at || ''
+          }))
+          const csvFilename = `open-bug-reports-${new Date().toISOString().slice(0, 10)}.csv`
+          exportCsv(csvRows, [], csvFilename)
           toast('CSV exportiert.', 'success')
         } catch (err) {
           toast('CSV-Fehler: ' + (err.message || err), 'error')

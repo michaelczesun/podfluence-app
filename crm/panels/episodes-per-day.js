@@ -1,8 +1,8 @@
 import { sb } from '/lib/supabase.js'
-import { toast, htmlEscape, iconHtml, fmtDateTime } from '/lib/ui.js'
+import { toast, htmlEscape, iconHtml } from '/lib/ui.js'
 import { makeBarChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { countUp, fadeIn } from '/lib/animations.js'
 import { drawer } from '/lib/layout-extras.js'
 
 const DAYS = 30
@@ -83,14 +83,14 @@ export default {
               <button class="btn btn-ghost" data-act="csv">${iconHtml('download')} CSV</button>
             </div>
           </div>
-          <div class="panel-body" id="body">${skeletonLoader({ rows: 4, height: 80 })}</div>
+          <div class="panel-body" id="body"><div class="pf-skeleton" style="width:100%;height:320px"></div></div>
         </div>`
 
       const body = container.querySelector('#body')
       fadeIn(container)
 
       const render = async () => {
-        body.innerHTML = skeletonLoader({ rows: 4, height: 80 })
+        body.innerHTML = '<div class="pf-skeleton" style="width:100%;height:320px"></div>'
         let series
         try {
           series = await fetchSeries()
@@ -162,7 +162,7 @@ export default {
       })
       container.querySelector('[data-act="pdf"]').addEventListener('click', () => {
         try {
-          exportPanelAsPdf(container, { filename: 'episoden-pro-tag.pdf', title: 'Neue Episoden pro Tag' })
+          exportPanelAsPdf(container, 'episoden-pro-tag.pdf', { title: 'Neue Episoden pro Tag' })
         } catch (e) {
           toast('PDF-Export fehlgeschlagen: ' + (e.message || ''), 'error')
         }
@@ -172,7 +172,7 @@ export default {
         try {
           const s = cachedSeries
           if (!s) { toast('Daten noch nicht geladen', 'error'); return }
-          exportCsv(s.map(b => ({ Tag: b.day, Episoden: b.count })), 'episoden-pro-tag.csv')
+          exportCsv(s.map(b => ({ Tag: b.day, Episoden: b.count })), ['Tag', 'Episoden'], 'episoden-pro-tag.csv')
         } catch (e) { toast('CSV-Export fehlgeschlagen: ' + (e.message || ''), 'error') }
       })
 

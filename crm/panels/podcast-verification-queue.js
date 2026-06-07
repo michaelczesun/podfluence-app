@@ -18,24 +18,12 @@ const STATUS_COLORS = {
   verified: '#10b981'
 }
 
-async function fetchPodcasts(filter) {
-  let q = sb
+// Fetches ALL podcasts (no filter) for stats — no limit so counts are accurate.
+async function fetchAllPodcasts() {
+  const { data, error } = await sb
     .from('podcasts')
     .select('id, title, rss_url, cover_url, verification_status, owner_email, rejection_reason, verify_token_sent_at, created_at')
     .order('created_at', { ascending: false })
-    .limit(200)
-  if (filter && filter !== 'all') q = q.eq('verification_status', filter)
-  const { data, error } = await q
-  if (error) throw error
-  return data || []
-}
-
-async function fetchStats() {
-  const { data, error } = await sb
-    .from('podcasts')
-    .select('id, verification_status, created_at')
-    .order('created_at', { ascending: false })
-    .limit(2000)
   if (error) throw error
   return data || []
 }
@@ -155,8 +143,8 @@ export default {
   async mount(container) {
     try {
       let currentFilter = 'pending'
-      let podcasts = []
-      let stats = []
+      // allPodcasts holds the full unfiltered dataset for stats + client-side filtering.
+      let allPodcasts = []
 
       container.innerHTML = `
         <div class="panel-shell" style="display:flex;flex-direction:column;gap:18px;padding:20px;">
@@ -192,33 +180,33 @@ export default {
       `
 
       const filterRow = container.querySelector('#filter-row')
-      segmentedControl(filterRow, {
-        options: [
-          { value: 'pending', label: 'Ausstehend' },
-          { value: 'rejected', label: 'Abgelehnt' },
-          { value: 'all', label: 'Alle' }
+      // segmentedControl(container, options[], activeKey, onChange) — positional args
+      segmentedControl(
+        filterRow,
+        [
+          { key: 'pending', label: 'Ausstehend' },
+          { key: 'rejected', label: 'Abgelehnt' },
+          { key: 'all', label: 'Alle' }
         ],
-        value: currentFilter,
-        onChange: (v) => {
+        currentFilter,
+        (v) => {
           currentFilter = v
+          // Filter-toggle: re-render from local data only, no new fetch.
           renderGrid()
         }
-      })
+      )
 
       const grid = container.querySelector('#grid')
       const countLabel = container.querySelector('#count-label')
       const heroRow = container.querySelector('#hero-row')
       const chartRow = container.querySelector('#chart-row')
 
+      // loadAll fetches once and populates allPodcasts. renderGrid/renderHero/renderCharts
+      // all operate on that local array — no secondary fetches.
       async function loadAll() {
         try {
           grid.innerHTML = skeletonLoader({ rows: 4, height: 180 })
-          const [pods, st] = await Promise.all([
-            fetchPodcasts(currentFilter === 'all' ? 'all' : currentFilter),
-            fetchStats()
-          ])
-          podcasts = pods
-          stats = st
+          allPodcasts = await fetchAllPodcasts()
           renderHero()
           renderCharts()
           renderGrid()
@@ -231,10 +219,10 @@ export default {
       }
 
       function renderHero() {
-        const totalPending = stats.filter(s => s.verification_status === 'pending').length
-        const totalRejected = stats.filter(s => s.verification_status === 'rejected').length
-        const totalVerified = stats.filter(s => s.verification_status === 'verified').length
-        const last7 = stats.filter(s => s.created_at && (Date.now() - new Date(s.created_at).getTime()) < 7 * 86400000).length
+        const totalPending = allPodcasts.filter(s => s.verification_status === 'pending').length
+        const totalRejected = allPodcasts.filter(s => s.verification_status === 'rejected').length
+        const totalVerified = allPodcasts.filter(s => s.verification_status === 'verified').length
+        const last7 = allPodcasts.filter(s => s.created_at && (Date.now() - new Date(s.created_at).getTime()) < 7 * 86400000).length
 
         heroRow.innerHTML = `
           <div class="glass-card hero-stat" style="padding:18px;border-radius:14px;border-left:3px solid #f59e0b;">
@@ -268,7 +256,7 @@ export default {
           const k = d.toISOString().slice(0, 10)
           buckets[k] = 0
         }
-        stats.forEach(s => {
+        allPodcasts.forEach(s => {
           if (!s.created_at) return
           const k = s.created_at.slice(0, 10)
           if (k in buckets) buckets[k]++
@@ -276,16 +264,16 @@ export default {
         const series = Object.entries(buckets).sort((a, b) => a[0].localeCompare(b[0]))
 
         const counts = {
-          pending: stats.filter(s => s.verification_status === 'pending').length,
-          verified: stats.filter(s => s.verification_status === 'verified').length,
-          rejected: stats.filter(s => s.verification_status === 'rejected').length
+          pending: allPodcasts.filter(s => s.verification_status === 'pending').length,
+          verified: allPodcasts.filter(s => s.verification_status === 'verified').length,
+          rejected: allPodcasts.filter(s => s.verification_status === 'rejected').length
         }
 
         chartRow.innerHTML = `
           <div class="glass-card" style="padding:16px;border-radius:14px;">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
               <h3 style="margin:0;font-size:14px;color:#ccc;font-weight:600;">Anmeldungen letzte 30 Tage</h3>
-              <span style="font-size:11px;color:#666;">${fmtNumber(stats.length)} gesamt</span>
+              <span style="font-size:11px;color:#666;">${fmtNumber(allPodcasts.length)} gesamt</span>
             </div>
             <div id="area-chart" style="height:200px;"></div>
           </div>
@@ -312,24 +300,21 @@ export default {
         } catch (e) { console.warn('chart', e) }
       }
 
-      async function renderGrid() {
-        try {
-          grid.innerHTML = skeletonLoader({ rows: 2, height: 180 })
-          const pods = await fetchPodcasts(currentFilter)
-          podcasts = pods
-          countLabel.textContent = `${fmtNumber(pods.length)} Einträge`
+      // renderGrid filters allPodcasts client-side — no Supabase call.
+      function renderGrid() {
+        const pods = currentFilter === 'all'
+          ? allPodcasts
+          : allPodcasts.filter(p => p.verification_status === currentFilter)
 
-          if (!pods.length) {
-            grid.innerHTML = tableEmptyState()
-            return
-          }
-          grid.innerHTML = pods.map(cardHtml).join('')
-          wireCards()
-          try { fadeIn(grid, { duration: 300 }) } catch (_) {}
-        } catch (e) {
-          console.error(e)
-          grid.innerHTML = errorState(e.message || 'Konnte Podcasts nicht laden', renderGrid)
+        countLabel.textContent = `${fmtNumber(pods.length)} Einträge`
+
+        if (!pods.length) {
+          grid.innerHTML = tableEmptyState()
+          return
         }
+        grid.innerHTML = pods.map(cardHtml).join('')
+        wireCards()
+        try { fadeIn(grid, { duration: 300 }) } catch (_) {}
       }
 
       function wireCards() {
@@ -340,14 +325,15 @@ export default {
       }
 
       async function sendVerifyMail(id) {
-        const p = podcasts.find(x => x.id === id)
+        const p = allPodcasts.find(x => x.id === id)
         if (!p) return
-        const ok = await confirmDialog({
-          title: 'Verify-Mail senden?',
-          message: `An <b>${htmlEscape(p.owner_email || '—')}</b> für Podcast „${htmlEscape(p.title || '')}" senden?`,
-          confirmLabel: 'Senden',
-          confirmStyle: 'primary'
-        })
+        // confirmDialog(title, message, confirmLabel, danger) — positional
+        const ok = await confirmDialog(
+          'Verify-Mail senden?',
+          `An ${htmlEscape(p.owner_email || '—')} für Podcast „${htmlEscape(p.title || '')}" senden?`,
+          'Senden',
+          false
+        )
         if (!ok) return
         try {
           const { error } = await sb.functions.invoke('send-podcast-verification', { body: { p_id: id } })
@@ -355,22 +341,24 @@ export default {
           toast('Verify-Mail gesendet', { type: 'success' })
           loadAll()
         } catch (e) {
-          toast('Fehler: ' + (e.message || 'unbekannt'), { type: 'error' })
+          toast('Fehler beim Senden: ' + (e.message || 'unbekannt'), { type: 'error' })
         }
       }
 
       async function doForceVerify(id) {
-        const p = podcasts.find(x => x.id === id)
+        const p = allPodcasts.find(x => x.id === id)
         if (!p) return
-        const ok = await confirmDialog({
-          title: 'Manuell verifizieren?',
-          message: `<b>${htmlEscape(p.title || '')}</b> ohne E-Mail-Bestätigung freischalten. Diese Aktion wird im Audit-Log vermerkt.`,
-          confirmLabel: 'Verifizieren',
-          confirmStyle: 'success'
-        })
+        // confirmDialog(title, message, confirmLabel, danger) — positional
+        const ok = await confirmDialog(
+          'Manuell verifizieren?',
+          `${htmlEscape(p.title || '')} ohne E-Mail-Bestätigung freischalten. Diese Aktion wird im Audit-Log vermerkt.`,
+          'Verifizieren',
+          false
+        )
         if (!ok) return
         try {
-          const { error } = await sb.rpc('admin_force_verify_podcast', { id })
+          // FIX H1: Use podcast_id as parameter key (SECURITY DEFINER RPC admin_force_verify_podcast).
+          const { error } = await sb.rpc('admin_force_verify_podcast', { podcast_id: id })
           if (error) throw error
           toast('Podcast verifiziert', { type: 'success' })
           loadAll()
@@ -380,7 +368,7 @@ export default {
       }
 
       async function doReject(id) {
-        const p = podcasts.find(x => x.id === id)
+        const p = allPodcasts.find(x => x.id === id)
         if (!p) return
         modal({
           title: 'Podcast ablehnen',
@@ -401,16 +389,25 @@ export default {
           ],
           onAction: async (val, m) => {
             if (!val) { m.close(); return }
-            const reason = document.querySelector('#reject-reason')?.value?.trim() || ''
+            // FIX M3: Scope querySelector to modal container (m.el) to avoid hitting wrong textarea
+            // when multiple modals/panels coexist in the DOM.
+            const reason = (m.el ? m.el.querySelector('#reject-reason') : document.querySelector('#reject-reason'))?.value?.trim() || ''
             try {
-              const { error } = await sb.from('podcasts').update({
-                verification_status: 'rejected',
-                rejection_reason: reason || null
-              }).eq('id', id)
+              // FIX H2: Use SECURITY DEFINER RPC instead of direct .update() which is blocked by RLS.
+              // Requires DB function: admin_reject_podcast(p_id uuid, p_reason text) SECURITY DEFINER
+              const { error } = await sb.rpc('admin_reject_podcast', { p_id: id, p_reason: reason || null })
               if (error) throw error
+              // FIX M6: Surface mail-send errors instead of silently swallowing them.
               try {
-                await sb.functions.invoke('send-podcast-verification', { body: { p_id: id, action: 'reject', reason } })
-              } catch (_) {}
+                const { error: mailErr } = await sb.functions.invoke('send-podcast-verification', { body: { p_id: id, action: 'reject', reason } })
+                if (mailErr) {
+                  console.warn('Ablehnungsmail Fehler:', mailErr)
+                  toast('Ablehnung gespeichert, aber Ablehnungsmail konnte nicht gesendet werden', { type: 'warning' })
+                }
+              } catch (mailEx) {
+                console.warn('Ablehnungsmail Exception:', mailEx)
+                toast('Ablehnung gespeichert, aber Ablehnungsmail konnte nicht gesendet werden', { type: 'warning' })
+              }
               toast('Podcast abgelehnt', { type: 'success' })
               m.close()
               loadAll()
@@ -422,7 +419,7 @@ export default {
       }
 
       function showDetails(id) {
-        const p = podcasts.find(x => x.id === id)
+        const p = allPodcasts.find(x => x.id === id)
         if (!p) return
         drawer({
           title: p.title || 'Podcast',
@@ -477,7 +474,7 @@ export default {
       container.querySelector('#btn-refresh').onclick = () => { toast('Aktualisiere…'); loadAll() }
       container.querySelector('#btn-csv').onclick = () => {
         try {
-          exportCsv(podcasts.map(p => ({
+          exportCsv(allPodcasts.map(p => ({
             title: p.title,
             rss_url: p.rss_url,
             owner_email: p.owner_email,

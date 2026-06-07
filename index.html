@@ -665,16 +665,28 @@
     text-transform: uppercase; letter-spacing: 0.18em;
     text-align: center;
   }
+  .sp-podcasts-row.is-empty { display: none; }
   .sp-podcast-bubbles {
-    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+    display: flex; gap: 12px; justify-content: flex-start; align-items: center;
+    overflow-x: auto; overflow-y: hidden;
+    padding: 8px 4px 12px;
+    max-width: 100%;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
+    -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 24px, #000 calc(100% - 24px), transparent 100%);
   }
+  .sp-podcast-bubbles::-webkit-scrollbar { display: none; }
   .sp-pbubble {
-    width: 60px; height: 60px; border-radius: 50%;
+    width: 64px; height: 64px; border-radius: 50%;
     overflow: hidden; border: 2px solid rgba(139,92,246,0.35);
     background: linear-gradient(135deg, rgba(139,92,246,0.2), rgba(236,72,153,0.1));
     display: flex; align-items: center; justify-content: center;
     font-size: 24px;
     flex-shrink: 0;
+    scroll-snap-align: start;
+    cursor: pointer;
     transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), border-color 0.2s, box-shadow 0.3s;
     box-shadow: 0 4px 16px rgba(139,92,246,0.15);
   }
@@ -2242,43 +2254,59 @@
       });
     });
 
-    // ===== Social-Proof: Featured Podcasts Bubbles =====
-    // Fetch verified podcasts, render cover-bubble imgs, replace placeholders
-    fetch(SUPABASE_URL + '/rest/v1/podcasts?select=title,cover_url&cover_url=not.is.null&archived_at=is.null&order=followers_count.desc.nullslast&limit=8', {
-      headers: {
-        'apikey': SUPABASE_KEY,
-        'Accept': 'application/json'
-      },
-      cache: 'no-cache'
-    })
-    .then(function(r) { return r.json(); })
-    .then(function(items) {
-      if (!Array.isArray(items) || items.length === 0) return;
+    // ===== Social-Proof: Featured Podcasts (horizontal scroll) =====
+    // Liest aus public-stats Edge-Function (umgeht RLS via SERVICE_ROLE).
+    // Bei 0 echten Podcasts: ganze Section ausblenden statt Emoji-Platzhalter.
+    function renderFeaturedPodcasts(items) {
+      var row = document.getElementById('sp-podcasts-row');
       var container = document.getElementById('sp-podcast-bubbles');
-      if (!container) return;
-      // Clear placeholder bubbles
+      if (!row || !container) return;
+      if (!Array.isArray(items) || items.length === 0) {
+        row.classList.add('is-empty');
+        return;
+      }
+      row.classList.remove('is-empty');
       container.innerHTML = '';
-      items.forEach(function(pod, i) {
+      items.forEach(function(pod) {
         var div = document.createElement('div');
         div.className = 'sp-pbubble';
         div.title = pod.title || '';
+        div.setAttribute('role', 'button');
+        div.setAttribute('tabindex', '0');
+        div.setAttribute('aria-label', pod.title ? (pod.title + ' — in der Beta beitreten') : 'Podcast');
         if (pod.cover_url) {
           var img = document.createElement('img');
           img.src = pod.cover_url;
           img.alt = pod.title || 'Podcast-Cover';
           img.loading = 'lazy';
-          img.onerror = function() {
-            div.removeChild(img);
-            div.textContent = '🎙';
-          };
+          img.onerror = function() { div.removeChild(img); div.textContent = '🎙'; };
           div.appendChild(img);
         } else {
           div.textContent = '🎙';
         }
+        var goCta = function() {
+          var cta = document.querySelector('.cta-row, #cta, .sticky-cta');
+          if (cta && cta.scrollIntoView) cta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        };
+        div.addEventListener('click', goCta);
+        div.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goCta(); }
+        });
         container.appendChild(div);
       });
-    })
-    .catch(function() { /* keep placeholder bubbles */ });
+    }
+    // Daten kommen via public-stats fetch oben — hook dort an d.featured_podcasts an:
+    (function bridgeFeatured() {
+      var origFetch = window.fetch;
+      // einfacher Re-Fetch statt Hook: public-stats ist gecached (60s), kein DB-Hit.
+      fetch(SUPABASE_URL + '/functions/v1/public-stats', {
+        headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
+        cache: 'no-cache'
+      })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { renderFeaturedPodcasts((d && d.featured_podcasts) || []); })
+        .catch(function() { renderFeaturedPodcasts([]); });
+    })();
 
     // ===== Recent-Activity: Live-users feed (auto-refresh 30s) =====
     // Fetches last 5 new users from REST API and could power a live-activity ticker.

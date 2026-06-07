@@ -1,6 +1,8 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce, drawer, glassCard, statHero } from '/lib/ui.js'
+import { toast, modal, fmtDateTime, htmlEscape } from '/lib/ui.js'
+import { drawer } from '/lib/layout-extras.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
+import { skeletonLoader } from '/lib/animations.js'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -10,6 +12,8 @@ const STATUS_COLS = [
   { key: 'resolved',    label: 'Erledigt',    icon: '✅', accent: '#10b981' },
   { key: 'wontfix',     label: 'Kein Fix',    icon: '🚫', accent: '#6b7280' },
 ]
+
+const FETCH_LIMIT = 500
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
@@ -41,11 +45,13 @@ function passesFilters(r, f) {
 // ─── DB / RPC ────────────────────────────────────────────────────────────────
 
 async function fetchReports() {
+  // Direct query — RLS on bug_reports must allow SELECT for the admin role.
+  // If a SECURITY DEFINER RPC admin_bug_reports_list is added later, swap here.
   const { data, error } = await sb
     .from('bug_reports')
     .select('id, user_id, description, status, admin_note, created_at, resolved_at')
     .order('created_at', { ascending: false })
-    .limit(500)
+    .limit(FETCH_LIMIT)
   if (error) throw error
   return data || []
 }
@@ -105,7 +111,7 @@ function pill(group, val, label, active) {
   return `<button class="pill ${active ? 'pill-on' : ''}" data-g="${group}" data-v="${htmlEscape(String(val))}">${htmlEscape(label)}</button>`
 }
 
-function filterBarHtml() {
+function filterBarHtml(truncated) {
   const { platform, age } = state.filters
   return `
     <div class="filter-bar">
@@ -113,7 +119,8 @@ function filterBarHtml() {
       ${[['alle','Alle'],['ios','iOS'],['android','Android'],['web','Web']].map(([v,l]) => pill('platform', v, l, platform === v)).join('')}
       <span class="fl" style="margin-left:12px">Alter</span>
       ${[['alle','Alle'],['heute','Heute'],['7t','7 Tage'],['30t','30 Tage']].map(([v,l]) => pill('age', v, l, age === v)).join('')}
-    </div>`
+    </div>
+    ${truncated ? `<div class="brt-truncate-warn">⚠️ Es werden nur die ${FETCH_LIMIT} neuesten Reports angezeigt. Ältere Tickets sind nicht sichtbar.</div>` : ''}`
 }
 
 // ─── Detail drawer ───────────────────────────────────────────────────────────
@@ -160,6 +167,7 @@ function openDetail(r, refresh) {
     modal({ title: `Bug #${String(r.id).slice(0,8)}`, content: html })
   }
 
+  // Use 150ms to reduce race condition risk when drawer render is slow
   setTimeout(() => {
     const host = document.querySelector('.drawer-content, .drawer, .modal-content, .modal') || document
     const ta   = host.querySelector('#note-ta')
@@ -178,7 +186,7 @@ function openDetail(r, refresh) {
 
     host.querySelector('#bd-save')?.addEventListener('click', () => save())
     host.querySelector('#bd-resolve')?.addEventListener('click', () => save('resolved'))
-  }, 80)
+  }, 150)
 }
 
 // ─── Drag & Drop ─────────────────────────────────────────────────────────────
@@ -239,6 +247,7 @@ function injectStyles() {
     .pill{background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.1);color:inherit;padding:4px 11px;border-radius:999px;font-size:12px;cursor:pointer;transition:all .15s}
     .pill:hover{background:rgba(255,255,255,.1)}
     .pill-on{background:rgba(99,102,241,.25);border-color:rgba(99,102,241,.6);color:#a5b4fc}
+    .brt-truncate-warn{padding:8px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:9px;font-size:12px;color:#fcd34d}
     .k-board{display:grid;grid-template-columns:repeat(4,1fr);gap:13px}
     @media(max-width:1100px){.k-board{grid-template-columns:repeat(2,1fr)}}
     @media(max-width:680px){.k-board{grid-template-columns:1fr}}
@@ -307,9 +316,10 @@ export default {
 
       const render = () => {
         const filtered = state.reports.filter(r => passesFilters(r, state.filters))
+        const truncated = state.reports.length >= FETCH_LIMIT
 
         body.innerHTML = `
-          ${filterBarHtml()}
+          ${filterBarHtml(truncated)}
           <div class="k-board" style="margin-top:14px">
             ${STATUS_COLS.map(c => columnHtml(c, filtered)).join('')}
           </div>`
@@ -325,7 +335,8 @@ export default {
       }
 
       const refresh = async () => {
-        body.innerHTML = `<div style="padding:40px;text-align:center;opacity:.5;font-size:13px">Lade Bug-Reports…</div>`
+        body.innerHTML = ''
+        body.appendChild(skeletonLoader('100%', 280))
         try {
           state.reports = await fetchReports()
           render()

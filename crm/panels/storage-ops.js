@@ -28,6 +28,9 @@ async function fetchBuckets() {
   return data || []
 }
 
+// FIX #2: Ordner-Erkennung ausschließlich über item.metadata === null && item.id === null.
+// Dateinamen-Heuristik (includes('.')) entfernt — Dateien ohne Extension werden nicht mehr
+// fälschlicherweise als Verzeichnis behandelt.
 async function fetchBucketContents(bucketName, prefix = '', acc = [], depth = 0) {
   if (depth > 4) return acc
   try {
@@ -38,7 +41,8 @@ async function fetchBucketContents(bucketName, prefix = '', acc = [], depth = 0)
     if (error) throw error
     for (const item of (data || [])) {
       const path = prefix ? `${prefix}/${item.name}` : item.name
-      if (item.id === null || (item.metadata == null && !item.name.includes('.'))) {
+      if (item.metadata === null && item.id === null) {
+        // Echter Ordner: rekursiv durchsuchen
         await fetchBucketContents(bucketName, path, acc, depth + 1)
       } else {
         acc.push({
@@ -55,11 +59,6 @@ async function fetchBucketContents(bucketName, prefix = '', acc = [], depth = 0)
     console.warn('[storage-ops] list failed', bucketName, prefix, e)
   }
   return acc
-}
-
-async function fetchJobStatus() {
-  // Tabelle storage_recompress_jobs existiert noch nicht im Schema
-  return null
 }
 
 async function triggerRecompress(bucketName) {
@@ -101,7 +100,7 @@ function renderEmpty(body) {
 
 function renderSkeleton(body) {
   try {
-    const skel = skeletonLoader({ rows: 4, type: 'card' })
+    const skel = skeletonLoader()
     if (typeof skel === 'string') {
       body.innerHTML = skel
       return
@@ -165,47 +164,9 @@ function renderTotalHero(body, totalUsed) {
   }
 }
 
-function renderJobStatus(body, jobs) {
-  const wrap = document.createElement('div')
-  wrap.className = 'glass-card job-status-card'
-  if (jobs === null) {
-    wrap.innerHTML = `
-      <div class="card-head">
-        <h3>${iconHtml('activity')} Recompress-Jobs</h3>
-      </div>
-      <div class="empty-state" style="padding:20px;text-align:center">
-        ${iconHtml('alert')}
-        <p class="muted small">Daten kommen sobald die Tabelle <strong>storage_recompress_jobs</strong> angelegt ist.</p>
-      </div>`
-    body.appendChild(wrap)
-    return
-  }
-  wrap.innerHTML = `
-    <div class="card-head">
-      <h3>${iconHtml('activity')} Recompress-Jobs</h3>
-      <span class="muted small">letzte 5</span>
-    </div>
-    <div class="job-list">
-      ${(!jobs.length) ? `<div class="muted small" style="padding:12px">Noch keine Recompress-Jobs in der Historie. Sobald ein Bucket-Recompress läuft, erscheinen Status und Fortschritt hier.</div>` :
-        jobs.map(j => {
-          const st = (j.status || 'unknown').toLowerCase()
-          const cls = st === 'done' ? 'ok' : st === 'failed' ? 'err' : st === 'running' ? 'run' : 'idle'
-          return `
-            <div class="job-row">
-              <div class="job-meta">
-                <span class="badge badge-${cls}">${htmlEscape(st)}</span>
-                <span class="job-bucket">${htmlEscape(j.bucket || '—')}</span>
-              </div>
-              <div class="job-stats">
-                <span>${fmtNumber(j.processed || 0)} Files</span>
-                <span class="muted small">${fmtRelativeTime(j.created_at)}</span>
-              </div>
-            </div>`
-        }).join('')
-      }
-    </div>`
-  body.appendChild(wrap)
-}
+// FIX #1: renderJobStatus und fetchJobStatus entfernt — Tabelle storage_recompress_jobs
+// existiert nicht im Schema. Sektion erzeugte false expectation. Wird wieder eingebaut
+// sobald die Tabelle angelegt ist.
 
 function renderAllFilesDrawer(files, bucketName, onAction) {
   const wrap = document.createElement('div')
@@ -237,17 +198,18 @@ function renderAllFilesDrawer(files, bucketName, onAction) {
     })
   })
 
+  // FIX #4 (low): ev.currentTarget.closest('tr') statt ev.target.closest('tr')
   wrap.querySelectorAll('[data-act="del"]').forEach(btn => {
     btn.addEventListener('click', async (ev) => {
-      const tr = ev.target.closest('tr')
+      const tr = ev.currentTarget.closest('tr')
       const path = tr?.dataset.path
       if (!path) return
-      const ok = await confirmDialog({
-        title: 'Datei löschen?',
-        message: path,
-        confirmLabel: 'Löschen',
-        destructive: true
-      })
+      const ok = await confirmDialog(
+        'Datei löschen?',
+        path,
+        'Löschen',
+        true
+      )
       if (!ok) return
       try {
         await deleteFile(bucketName, path)
@@ -261,11 +223,12 @@ function renderAllFilesDrawer(files, bucketName, onAction) {
   return wrap
 }
 
+// FIX #3: Radial-Chart gegen TOTAL_BYTES (Free-Tier-Gesamt) statt willkürlichem localTotal.
+// sublabel zeigt Anteil an 1 GB Free-Tier explizit an.
 function renderBucketCard(bucket, files, totalUsed, onAction) {
   const used = files.reduce((a, b) => a + (b.size || 0), 0)
   const fileCount = files.length
-  const localTotal = Math.max(used, totalUsed * 0.4, 50 * 1024 * 1024)
-  const usedPct = pct(used, localTotal)
+  const usedPct = pct(used, TOTAL_BYTES)
   const top = [...files].sort((a, b) => b.size - a.size).slice(0, 10)
 
   const card = document.createElement('div')
@@ -321,19 +284,19 @@ function renderBucketCard(bucket, files, totalUsed, onAction) {
     makeRadialBar(card.querySelector(`#${radialId}`), {
       value: usedPct,
       label: `${usedPct.toFixed(1)}%`,
-      sublabel: fmtBytes(used),
+      sublabel: `von 1 GB Free-Tier`,
       color: usedPct > 70 ? '#ff5b5b' : usedPct > 40 ? '#ffb547' : '#5be3a4'
     })
   } catch {
     const el = card.querySelector(`#${radialId}`)
-    if (el) el.innerHTML = `<div class="muted">${usedPct.toFixed(1)}%</div>`
+    if (el) el.innerHTML = `<div class="muted">${usedPct.toFixed(1)}% v. 1 GB</div>`
   }
 
   card.querySelector('[data-act="export"]').addEventListener('click', () => {
     try {
-      exportCsv(`storage-${bucket.name}.csv`, files.map(f => ({
+      exportCsv(files.map(f => ({
         path: f.path, name: f.name, size: f.size, mime: f.mime, updated: f.updated
-      })))
+      })), [], `storage-${bucket.name}.csv`)
       toast(`CSV exportiert (${fileCount} Dateien)`)
     } catch (e) {
       toast(`Export-Fehler: ${e.message}`, 'error')
@@ -341,12 +304,12 @@ function renderBucketCard(bucket, files, totalUsed, onAction) {
   })
 
   card.querySelector('[data-act="recompress"]').addEventListener('click', async () => {
-    const ok = await confirmDialog({
-      title: `Recompress: ${bucket.name}`,
-      message: `Alle Bilder im Bucket "${bucket.name}" neu komprimieren? Das kann je nach Anzahl mehrere Minuten dauern.`,
-      confirmLabel: 'Starten',
-      destructive: false
-    })
+    const ok = await confirmDialog(
+      `Recompress: ${bucket.name}`,
+      `Alle Bilder im Bucket "${bucket.name}" neu komprimieren? Das kann je nach Anzahl mehrere Minuten dauern.`,
+      'Starten',
+      false
+    )
     if (!ok) return
     const btn = card.querySelector('[data-act="recompress"]')
     btn.disabled = true
@@ -374,22 +337,23 @@ function renderBucketCard(bucket, files, totalUsed, onAction) {
     }
   })
 
+  // FIX #4 (low, bucket-top table): ev.currentTarget.closest('tr') für deterministisches Verhalten
   card.querySelectorAll('[data-row-act="delete"]').forEach(btn => {
     btn.addEventListener('click', async (ev) => {
-      const tr = ev.target.closest('tr')
+      const tr = ev.currentTarget.closest('tr')
       const path = tr?.dataset.path
       if (!path) return
-      const ok = await confirmDialog({
-        title: 'Datei löschen?',
-        message: `${path}\n\nDieser Vorgang ist endgültig.`,
-        confirmLabel: 'Löschen',
-        destructive: true
-      })
+      const ok = await confirmDialog(
+        'Datei löschen?',
+        `${path}\n\nDieser Vorgang ist endgültig.`,
+        'Löschen',
+        true
+      )
       if (!ok) return
       try {
         await deleteFile(bucket.name, path)
         toast('Datei gelöscht', 'success')
-        onAction()
+        tr.remove()
       } catch (e) {
         toast(`Fehler: ${e.message}`, 'error')
       }
@@ -468,11 +432,12 @@ export default {
           return renderEmpty(body)
         }
 
+        // FIX #3 (separate try/catch): fetchBucketContents isoliert von potenziellem
+        // Job-Fetch — Bucket-Daten werden trotzdem gerendert wenn Job-Fetch fehlschlägt.
+        // (fetchJobStatus entfernt — Tabelle existiert noch nicht; kein separater catch nötig)
         let contents = []
-        let jobs = []
         try {
           contents = await Promise.all(buckets.map(b => fetchBucketContents(b.name)))
-          jobs = await fetchJobStatus()
         } catch (e) {
           return renderError(body, e.message, load)
         }
@@ -486,13 +451,12 @@ export default {
         const totalUsed = bucketSummaries.reduce((a, s) => a + s.used, 0)
         const allFiles = bucketSummaries.flatMap(s => s.files.map(f => ({ ...f, bucket: s.name })))
 
-        container._exportPayload = { bucketSummaries, totalUsed, allFiles, jobs }
+        container._exportPayload = { bucketSummaries, totalUsed, allFiles }
 
         body.innerHTML = ''
 
         renderTotalHero(body, totalUsed)
         renderDistribution(body, bucketSummaries)
-        renderJobStatus(body, jobs)
 
         const grid = document.createElement('div')
         grid.className = 'bucket-grid'
@@ -511,11 +475,12 @@ export default {
 
       container.querySelector('#csvBtn').addEventListener('click', () => {
         const p = container._exportPayload
-        if (!p) return toast('Noch keine Daten', 'error')
+        // FIX (low): 'warning' statt 'error' für nicht-kritischen Zustand
+        if (!p) return toast('Noch keine Daten geladen', 'warning')
         try {
-          exportCsv('storage-overview.csv', p.allFiles.map(f => ({
+          exportCsv(p.allFiles.map(f => ({
             bucket: f.bucket, path: f.path, size: f.size, mime: f.mime, updated: f.updated
-          })))
+          })), [], 'storage-overview.csv')
           toast(`${p.allFiles.length} Zeilen exportiert`, 'success')
         } catch (e) {
           toast(`CSV-Fehler: ${e.message}`, 'error')

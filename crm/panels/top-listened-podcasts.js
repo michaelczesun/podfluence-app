@@ -140,10 +140,11 @@ export default {
       `
 
       const body = container.querySelector('#body')
-      body.innerHTML = skeletonLoader({ rows: 8, height: 64 })
+      body.appendChild(skeletonLoader('100%', 64))
 
       async function load() {
-        body.innerHTML = skeletonLoader({ rows: 8, height: 64 })
+        body.innerHTML = ''
+        body.appendChild(skeletonLoader('100%', 64))
         try {
           rawRows = await fetchSessions(7)
           aggregated = aggregatePodcasts(rawRows)
@@ -452,7 +453,7 @@ export default {
             'Hörminuten (7T)': p.totalMinutes,
             Plays: p.totalPlays,
             Episoden: p.episodeCount
-          })), `top-podcasts-7t.csv`)
+          })), null, `top-podcasts-7t.csv`)
         } catch (e) {
           toast(`CSV-Export fehlgeschlagen: ${e.message || e}`, 'error')
         }

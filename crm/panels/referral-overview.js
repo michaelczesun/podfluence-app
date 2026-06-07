@@ -7,10 +7,11 @@ import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const RANGES = {
-  '7d': { label: '7 Tage', days: 7 },
+  '7d':  { label: '7 Tage',  days: 7 },
   '30d': { label: '30 Tage', days: 30 },
   '90d': { label: '90 Tage', days: 90 },
-  'all': { label: 'Gesamt', days: 365 }
+  // FIX(med): use a fixed epoch start instead of relative 365 days to avoid silently capping data
+  'all': { label: 'Gesamt',  since: '2020-01-01' }
 }
 
 let state = {
@@ -21,17 +22,99 @@ let state = {
   recentSignups: []
 }
 
-// referral_codes und referral_signups existieren nicht im Schema.
-// referrals-Tabelle existiert, aber ohne code/signup-Struktur.
-// Daher: Empty-State zurückgeben bis Tabellen angelegt sind.
+// FIX(high): replace hardcoded stub with real DB query against the `referrals` table.
+// Schema: referrals(id, referrer_id, referred_id, created_at)
+// We derive funnel-like metrics from this table:
+//   generated  = users who have ever referred someone (distinct referrer_id count)
+//   used       = total referral rows (codes used)
+//   signedUp   = distinct new users who came via referral
+//   shared     = approximated as same as generated (no share-tracking column exists)
 async function loadData(range) {
-  return {
-    _missingTables: ['referral_codes', 'referral_signups'],
-    funnel: { generated: 0, shared: 0, used: 0, signedUp: 0 },
-    trend: [],
-    topReferrers: [],
-    recentSignups: []
+  const cfg = RANGES[range] || RANGES['30d']
+  let since
+  if (cfg.since) {
+    since = cfg.since
+  } else {
+    const d = new Date()
+    d.setDate(d.getDate() - cfg.days)
+    since = d.toISOString().slice(0, 10)
   }
+
+  // Fetch referral rows in the time window
+  const { data: rows, error } = await sb
+    .from('referrals')
+    .select('id, referrer_id, referred_id, created_at')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+
+  if (error) throw new Error(error.message)
+
+  const total = rows.length
+  const uniqueReferrers = new Set(rows.map(r => r.referrer_id)).size
+  const uniqueReferred  = new Set(rows.map(r => r.referred_id)).size
+
+  const funnel = {
+    generated: uniqueReferrers, // users who referred at least once
+    shared:    uniqueReferrers, // no separate share-tracking; same as generated
+    used:      total,           // each row = a referral code used
+    signedUp:  uniqueReferred   // distinct users who joined via referral
+  }
+
+  // Daily trend: group by date → { date, generated, signups, rate }
+  const byDate = {}
+  rows.forEach(r => {
+    const day = r.created_at.slice(0, 10)
+    if (!byDate[day]) byDate[day] = { date: day, generated: 0, signups: 0 }
+    byDate[day].signups++
+    byDate[day].generated++
+  })
+  const trend = Object.values(byDate)
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map(d => ({ ...d, rate: d.generated ? (d.signups / d.generated) * 100 : 0 }))
+
+  // Top referrers: count by referrer_id, fetch profiles
+  const countMap = {}
+  rows.forEach(r => { countMap[r.referrer_id] = (countMap[r.referrer_id] || 0) + 1 })
+  const sortedReferrers = Object.entries(countMap)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 10)
+
+  let topReferrers = []
+  if (sortedReferrers.length) {
+    const ids = sortedReferrers.map(([id]) => id)
+    const { data: profiles } = await sb
+      .from('users')
+      .select('id, display_name, username, avatar_url')
+      .in('id', ids)
+    const profileMap = {}
+    ;(profiles || []).forEach(p => { profileMap[p.id] = p })
+    topReferrers = sortedReferrers.map(([id, count]) => ({
+      id,
+      count,
+      profile: profileMap[id] || null
+    }))
+  }
+
+  // Recent signups: last 50 rows with referrer+referred profile
+  const recent50 = rows.slice(0, 50)
+  let recentSignups = []
+  if (recent50.length) {
+    const allIds = [...new Set(recent50.flatMap(r => [r.referrer_id, r.referred_id]).filter(Boolean))]
+    const { data: profiles2 } = await sb
+      .from('users')
+      .select('id, display_name, username, avatar_url')
+      .in('id', allIds)
+    const pmap = {}
+    ;(profiles2 || []).forEach(p => { pmap[p.id] = p })
+    recentSignups = recent50.map(r => ({
+      ...r,
+      new_user_id: r.referred_id,
+      referrer: pmap[r.referrer_id] || null,
+      newUser:  pmap[r.referred_id] || null
+    }))
+  }
+
+  return { funnel, trend, topReferrers, recentSignups }
 }
 
 function pct(num, denom) {
@@ -207,20 +290,11 @@ function buildToolbar() {
   `
 }
 
-function renderMissingTablesState(body, tables) {
-  body.innerHTML = `
-    ${panelStyles()}
-    <div class="glass-card" style="padding:40px 24px;text-align:center">
-      <div style="width:56px;height:56px;margin:0 auto 16px;border-radius:14px;background:rgba(245,158,11,0.12);display:flex;align-items:center;justify-content:center;color:#f59e0b">${iconHtml('alert')}</div>
-      <h3 style="margin:0 0 8px;font-size:16px">Daten kommen sobald die Tabellen angelegt sind</h3>
-      <p style="color:var(--text-muted,#94a3b8);font-size:13px;margin:0">${tables.map(t => `<code>${t}</code>`).join(', ')}</p>
-    </div>
-  `
-}
-
 function renderBody(body, data) {
   const overallConv = pct(data.funnel.signedUp, data.funnel.generated)
   const avgConv = data.trend.length ? data.trend.reduce((s, t) => s + t.rate, 0) / data.trend.length : 0
+  // FIX(med): pre-format conversion string since statHero.countUp does not support suffix/decimals params
+  const convStr = overallConv.toFixed(1) + '%'
 
   body.innerHTML = `
     ${panelStyles()}
@@ -279,7 +353,8 @@ function renderBody(body, data) {
     hero.appendChild(statHero({ label: 'Codes generiert', value: data.funnel.generated, icon: 'zap', accent: '#6366f1' }))
     hero.appendChild(statHero({ label: 'Codes verwendet', value: data.funnel.used, icon: 'mouse-pointer-click', accent: '#ec4899' }))
     hero.appendChild(statHero({ label: 'Neue User', value: data.funnel.signedUp, icon: 'user-check', accent: '#10b981' }))
-    hero.appendChild(statHero({ label: 'Conversion', value: overallConv, suffix: '%', icon: 'target', accent: '#f59e0b', decimals: 1 }))
+    // FIX(med): statHero.countUp derives format from the value; pass pre-formatted string so it renders as "14.3%"
+    hero.appendChild(statHero({ label: 'Conversion', value: convStr, icon: 'target', accent: '#f59e0b' }))
   } catch (e) {
     console.warn('[referral-overview] statHero failed', e)
   }
@@ -375,61 +450,9 @@ export default {
       // Initial skeleton SOFORT zeigen, bevor irgendein await läuft
       try { skeletonLoader(body, { rows: 6, height: 80 }) } catch (_) {}
 
-      const rangeSlot = container.querySelector('#range-picker')
-      try {
-        rangeSlot.appendChild(segmentedControl({
-          options: Object.entries(RANGES).map(([k, v]) => ({ value: k, label: v.label })),
-          value: state.range,
-          onChange: (val) => { state.range = val; refresh() }
-        }))
-      } catch (e) {
-        console.warn('[referral-overview] segmentedControl failed', e)
-      }
-
-      try { fadeIn(container, 250) } catch (_) {}
-
-      const refresh = async () => {
-        body.innerHTML = ''
-        try { skeletonLoader(body, { rows: 6, height: 80 }) } catch (_) {}
-        try {
-          const data = await loadData(state.range)
-          state.funnel = data.funnel
-          state.trend = data.trend
-          state.topReferrers = data.topReferrers
-          state.recentSignups = data.recentSignups
-
-          if (data._missingTables) {
-            renderMissingTablesState(body, data._missingTables)
-            return
-          }
-
-          if (data.funnel.generated === 0 && data.funnel.signedUp === 0) {
-            renderEmpty(body)
-            return
-          }
-          renderBody(body, data)
-          wireBody(body)
-        } catch (err) {
-          console.error('[referral-overview] load failed', err)
-          renderError(body, err, refresh)
-        }
-      }
-
-      const wireBody = (root) => {
-        root.querySelectorAll('[data-action="user"]').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const id = btn.dataset.id
-            if (id) showUserDetailModal(id)
-          })
-        })
-        root.querySelectorAll('.referrer-row').forEach(row => {
-          row.addEventListener('click', () => {
-            const uid = row.dataset.user
-            if (uid) openReferrerDrawer(uid)
-          })
-        })
-        root.querySelector('[data-tb="view-all"]')?.addEventListener('click', openAllSignupsDrawer)
-      }
+      // FIX(high): openReferrerDrawer and openAllSignupsDrawer must be declared before wireBody
+      // which references them, and wireBody must be declared before refresh which calls it.
+      // All three must be declared before segmentedControl instantiation to avoid TDZ.
 
       const openReferrerDrawer = (userId) => {
         const ref = state.topReferrers.find(r => r.id === userId)
@@ -483,6 +506,60 @@ export default {
         }
       }
 
+      const wireBody = (root) => {
+        root.querySelectorAll('[data-action="user"]').forEach(btn => {
+          btn.addEventListener('click', () => {
+            const id = btn.dataset.id
+            if (id) showUserDetailModal(id)
+          })
+        })
+        root.querySelectorAll('.referrer-row').forEach(row => {
+          row.addEventListener('click', () => {
+            const uid = row.dataset.user
+            if (uid) openReferrerDrawer(uid)
+          })
+        })
+        root.querySelector('[data-tb="view-all"]')?.addEventListener('click', openAllSignupsDrawer)
+      }
+
+      // FIX(high): refresh declared after wireBody/openReferrerDrawer/openAllSignupsDrawer
+      // so all captured references are fully assigned before segmentedControl onChange can call refresh
+      const refresh = async () => {
+        body.innerHTML = ''
+        try { skeletonLoader(body, { rows: 6, height: 80 }) } catch (_) {}
+        try {
+          const data = await loadData(state.range)
+          state.funnel = data.funnel
+          state.trend = data.trend
+          state.topReferrers = data.topReferrers
+          state.recentSignups = data.recentSignups
+
+          if (data.funnel.generated === 0 && data.funnel.signedUp === 0) {
+            renderEmpty(body)
+            return
+          }
+          renderBody(body, data)
+          wireBody(body)
+        } catch (err) {
+          console.error('[referral-overview] load failed', err)
+          renderError(body, err, refresh)
+        }
+      }
+
+      // segmentedControl instantiated AFTER refresh is defined — no TDZ risk
+      const rangeSlot = container.querySelector('#range-picker')
+      try {
+        rangeSlot.appendChild(segmentedControl({
+          options: Object.entries(RANGES).map(([k, v]) => ({ value: k, label: v.label })),
+          value: state.range,
+          onChange: (val) => { state.range = val; refresh() }
+        }))
+      } catch (e) {
+        console.warn('[referral-overview] segmentedControl failed', e)
+      }
+
+      try { fadeIn(container, 250) } catch (_) {}
+
       container.querySelector('[data-tb="refresh"]')?.addEventListener('click', () => {
         refresh().then(() => toast('Daten aktualisiert', 'success'))
       })
@@ -513,11 +590,12 @@ export default {
       await refresh()
     } catch (mountErr) {
       console.error('[referral-overview] mount failed', mountErr)
+      // FIX(low): use htmlEscape consistently instead of inline regex sanitization
       container.innerHTML = `
         <div style="padding:48px 24px;text-align:center">
           <div style="width:56px;height:56px;margin:0 auto 14px;border-radius:14px;background:rgba(239,68,68,0.12);display:flex;align-items:center;justify-content:center;color:#ef4444">!</div>
           <h3 style="margin:0 0 6px">Panel konnte nicht geladen werden</h3>
-          <p style="color:#94a3b8;font-size:13px;margin:0">Fehler: ${(mountErr && mountErr.message) ? String(mountErr.message).replace(/[<>&]/g, '') : 'Unbekannter Mount-Fehler'}</p>
+          <p style="color:#94a3b8;font-size:13px;margin:0">Fehler: ${htmlEscape(mountErr?.message || 'Unbekannter Mount-Fehler')}</p>
         </div>
       `
     }

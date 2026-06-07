@@ -28,9 +28,11 @@ const state = {
   error: null,
 }
 
+// FIX #1: Echter Supabase-Aufruf via RPC crm_trending_podcasters
 async function fetchTrending(days) {
-  // RPC crm_trending_podcasters existiert noch nicht im Schema
-  return []
+  const { data, error } = await sb.rpc('crm_trending_podcasters', { days })
+  if (error) throw new Error(error.message || String(error))
+  return data || []
 }
 
 function sortRows(rows, sort) {
@@ -75,6 +77,9 @@ function podcasterCard(r) {
        <div class="tp-cover-fallback" style="display:none">${htmlEscape(initials)}</div>`
     : `<div class="tp-cover-fallback">${htmlEscape(initials)}</div>`
 
+  // FIX #8: Sparkline-Daten ohne htmlEscape schreiben (verhindert doppelt-escaped JSON)
+  const sparkJson = JSON.stringify(r.spark || [])
+
   return `
     <article class="tp-card glass-card" data-id="${htmlEscape(r.id)}">
       <div class="tp-card-head">
@@ -86,7 +91,7 @@ function podcasterCard(r) {
         ${r.is_featured ? '<span class="tp-feat-pill" title="Auf Discover gefeatured">⭐</span>' : ''}
       </div>
 
-      <div class="tp-spark" data-spark='${htmlEscape(JSON.stringify(r.spark || []))}'></div>
+      <div class="tp-spark" data-spark='${sparkJson}'></div>
 
       <div class="tp-stats">
         <div class="tp-stat">
@@ -210,6 +215,7 @@ function injectStyles() {
     .tp-drawer-stat .l{font-size:11px;opacity:.6;text-transform:uppercase;letter-spacing:.5px;margin-top:2px}
     .tp-drawer-chart{height:200px}
     .tp-drawer-actions{display:flex;gap:8px;flex-wrap:wrap}
+    @media(max-width:640px){#tp-charts{grid-template-columns:1fr}}
   `
   document.head.appendChild(s)
 }
@@ -326,22 +332,24 @@ function paintSparklines(root) {
   })
 }
 
+// FIX #2: Echter Schreibpfad via podcasts-Tabelle (kein RPC notwendig)
 async function toggleFeature(id, on, rowRef) {
   try {
-    const ok = await confirmDialog({
-      title: on ? 'Auf Discover featuren?' : 'Feature entfernen?',
-      message: on
+    const ok = await confirmDialog(
+      on ? 'Auf Discover featuren?' : 'Feature entfernen?',
+      on
         ? `${rowRef?.display_name || 'Podcaster'} wird sofort auf dem Discover-Tab prominent angezeigt.`
         : `${rowRef?.display_name || 'Podcaster'} wird vom Discover-Feature entfernt.`,
-      confirmLabel: on ? 'Featuren' : 'Entfernen',
-      destructive: !on,
-    })
+      on ? 'Featuren' : 'Entfernen',
+      !on,
+    )
     if (!ok) return false
-    // RPC crm_set_podcaster_featured existiert noch nicht im Schema
-    toast({ message: 'Feature-Funktion steht bereit sobald das RPC crm_set_podcaster_featured angelegt ist', type: 'error' })
-    return false
+    const { error } = await sb.from('podcasts').update({ is_featured: on }).eq('user_id', id)
+    if (error) throw new Error(error.message || String(error))
+    toast(on ? 'Podcaster wird jetzt gefeatured' : 'Feature entfernt', 'success')
+    return true
   } catch (e) {
-    toast({ message: 'Konnte Feature-Status nicht setzen: ' + (e.message || e), type: 'error' })
+    toast('Konnte Feature-Status nicht setzen: ' + (e.message || e), 'error')
     return false
   }
 }
@@ -390,10 +398,16 @@ function openProfileDrawer(row, onChange) {
     </div>
   `
 
+  // FIX #11: Drawer-Fallback mit sichtbarer Fehlermeldung
   try {
     drawer({ title: 'Podcaster-Profil', content: body, width: 460 })
-  } catch (e) {
-    try { modal({ title: 'Podcaster-Profil', content: body }) } catch {}
+  } catch {
+    try {
+      modal({ title: 'Podcaster-Profil', content: body })
+    } catch {
+      toast('Profil konnte nicht geöffnet werden', 'error')
+      return
+    }
   }
 
   const chartEl = body.querySelector('#tp-drawer-chart')
@@ -425,11 +439,11 @@ function openProfileDrawer(row, onChange) {
   })
 
   body.querySelector('[data-act="profile"]')?.addEventListener('click', () => {
-    try { showUserDetailModal(row.id) } catch (e) { toast({ message: 'Profil nicht verfügbar', type: 'error' }) }
+    try { showUserDetailModal(row.id) } catch (e) { toast('Profil nicht verfügbar', 'error') }
   })
   body.querySelector('[data-act="copy-id"]')?.addEventListener('click', async () => {
-    try { await navigator.clipboard.writeText(row.id); toast({ message: 'ID kopiert', type: 'success' }) }
-    catch { toast({ message: 'Konnte ID nicht kopieren', type: 'error' }) }
+    try { await navigator.clipboard.writeText(row.id); toast('ID kopiert', 'success') }
+    catch { toast('Konnte ID nicht kopieren', 'error') }
   })
 }
 
@@ -443,7 +457,7 @@ function renderSkeletonGrid(el) {
     c.className = 'tp-card glass-card'
     c.style.minHeight = '210px'
     grid.appendChild(c)
-    try { skeletonLoader(c, { lines: 5 }) } catch { c.innerHTML = '<div style="opacity:.4;padding:12px">Lade…</div>' }
+    try { const sk = skeletonLoader('100%', 210); c.appendChild(sk) } catch { c.innerHTML = '<div style="opacity:.4;padding:12px">Lade…</div>' }
   }
 }
 
@@ -453,6 +467,8 @@ export default {
   category: 'engagement',
 
   async mount(container) {
+    // FIX #4: self-Referenz für retry-Handler, damit `this` nicht verloren geht
+    const self = this
     try {
       injectStyles()
 
@@ -528,8 +544,8 @@ export default {
         const act = btn.dataset.act
         if (act === 'refresh') return load()
         if (act === 'pdf') {
-          try { await exportPanelAsPdf(container, { title: 'Trending Podcaster' }); toast({ message: 'PDF erstellt', type: 'success' }) }
-          catch (err) { toast({ message: 'PDF-Export fehlgeschlagen: ' + (err.message || err), type: 'error' }) }
+          try { await exportPanelAsPdf(container, 'trending-podcasters.pdf'); toast('PDF erstellt', 'success') }
+          catch (err) { toast('PDF-Export fehlgeschlagen: ' + (err.message || err), 'error') }
           return
         }
         if (act === 'csv') {
@@ -544,16 +560,17 @@ export default {
             plays: r.plays || 0,
             is_featured: !!r.is_featured,
           }))
-          try { exportCsv(data, { columns: cols, filename: `trending-podcasters-${state.range}.csv` }); toast({ message: 'CSV exportiert', type: 'success' }) }
-          catch (err) { toast({ message: 'CSV-Export fehlgeschlagen: ' + (err.message || err), type: 'error' }) }
+          try { exportCsv(data, cols, `trending-podcasters-${state.range}.csv`); toast('CSV exportiert', 'success') }
+          catch (err) { toast('CSV-Export fehlgeschlagen: ' + (err.message || err), 'error') }
         }
       })
 
+      // FIX #5: Click-Guard auf .tp-feature-toggle entfernt — change-Handler reicht
       body.addEventListener('click', async e => {
         const retryBtn = e.target.closest('[data-act="retry"], [data-act="refresh"]')
         if (retryBtn) return load()
 
-        if (e.target.closest('.tp-feat-cb') || e.target.closest('.tp-feature-toggle')) {
+        if (e.target.closest('.tp-feat-cb')) {
           e.stopPropagation()
           return
         }
@@ -567,6 +584,7 @@ export default {
 
       body.addEventListener('change', async e => {
         const cb = e.target.closest('.tp-feat-cb'); if (!cb) return
+        e.stopPropagation()
         const id = cb.dataset.id
         const row = state.rows.find(r => String(r.id) === String(id))
         const desired = cb.checked
@@ -586,9 +604,12 @@ export default {
         const sorted = sortRows(filtered, state.sort)
 
         if (!sorted.length) {
-          body.innerHTML = state.rows.length === 0 && !state.error
-            ? rpcMissingState('crm_trending_podcasters')
-            : emptyState()
+          // FIX #3: Korrekte Bedingung — error zuerst prüfen, dann rpcMissingState
+          body.innerHTML = state.error
+            ? errorState(state.error)
+            : state.rows.length === 0
+              ? rpcMissingState('crm_trending_podcasters')
+              : emptyState()
           return
         }
         const grid = document.createElement('div')
@@ -597,7 +618,7 @@ export default {
         body.innerHTML = ''
         body.appendChild(grid)
         paintSparklines(grid)
-        try { fadeIn(grid, { duration: 220 }) } catch {}
+        try { fadeIn(grid, 220) } catch {}
       }
 
       async function load() {
@@ -631,8 +652,9 @@ export default {
       console.error('[trending-podcasters] mount failed:', mountErr)
       mountErrorState(container, mountErr?.message || String(mountErr))
       const retry = container.querySelector('[data-act="reload-panel"]')
+      // FIX #4: Arrow-Function + self-Referenz statt `this` im normalen function-Scope
       retry?.addEventListener('click', () => {
-        try { this.mount(container) } catch {}
+        self.mount(container).catch(e => console.error('[trending-podcasters] remount failed:', e))
       })
     }
   }

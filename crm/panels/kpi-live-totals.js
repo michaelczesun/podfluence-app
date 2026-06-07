@@ -282,7 +282,7 @@ async function renderDrilldown(def, totals, onClose) {
     else if (drawerResult && typeof drawerResult.close === 'function') closeDrawer = drawerResult.close.bind(drawerResult)
     if (onClose) onClose(closeDrawer)
   }
-  catch (e) { toast({ type: 'error', message: 'Drawer konnte nicht geöffnet werden' }); return }
+  catch (e) { toast('Drawer konnte nicht geöffnet werden', 'error'); return }
 
   let series = []
   try { series = await fetchTimeSeries(def.key, 30) }
@@ -330,8 +330,8 @@ async function renderDrilldown(def, totals, onClose) {
     }
   }
   body.querySelector('#drill-csv')?.addEventListener('click', () => {
-    try { exportCsv(`${def.key}_30d.csv`, series.map(s => ({ date: s.date, value: s.value }))) }
-    catch (_) { toast({ type: 'error', message: 'CSV-Export fehlgeschlagen' }) }
+    try { exportCsv(series.map(s => ({ date: s.date, value: s.value })), ['date','value'], `${def.key}_30d.csv`) }
+    catch (_) { toast('CSV-Export fehlgeschlagen', 'error') }
   })
 }
 
@@ -454,7 +454,7 @@ export default {
           console.error('[kpi-live-totals]', err)
           if (isInitial) renderError(err)
           else {
-            try { toast({ type: 'error', message: 'Aktualisierung fehlgeschlagen' }) } catch (_) {}
+            try { toast('Aktualisierung fehlgeschlagen', 'error') } catch (_) {}
           }
         } finally {
           if (btnRefresh) btnRefresh.disabled = false
@@ -464,24 +464,24 @@ export default {
       // FIX(low): debounce refresh button to prevent parallel fetches on rapid clicks
       const debouncedRefresh = debounce(async () => {
         await load(false)
-        try { toast({ type: 'success', message: 'Kennzahlen aktualisiert' }) } catch (_) {}
+        try { toast('Kennzahlen aktualisiert', 'success') } catch (_) {}
       }, 300)
 
       container.querySelector('#btn-refresh')?.addEventListener('click', debouncedRefresh)
       container.querySelector('#btn-pdf')?.addEventListener('click', () => {
         try { exportPanelAsPdf(container, 'Live-Kennzahlen.pdf') }
-        catch (_) { toast({ type: 'error', message: 'PDF-Export nicht verfügbar' }) }
+        catch (_) { toast('PDF-Export nicht verfügbar', 'error') }
       })
       container.querySelector('#btn-csv')?.addEventListener('click', () => {
-        if (!currentTotals) { toast({ type: 'info', message: 'Keine Daten zum Exportieren' }); return }
+        if (!currentTotals) { toast('Keine Daten zum Exportieren', 'info'); return }
         const rows = KPI_DEFS.map(d => ({
           kpi: d.label,
           value: currentTotals[d.key].value,
           previous: currentTotals[d.key].prev,
           change_pct: pctChange(currentTotals[d.key].value, currentTotals[d.key].prev).toFixed(2)
         }))
-        try { exportCsv('live-kennzahlen.csv', rows) }
-        catch (_) { toast({ type: 'error', message: 'CSV-Export fehlgeschlagen' }) }
+        try { exportCsv(rows, ['kpi','value','previous','change_pct'], 'live-kennzahlen.csv') }
+        catch (_) { toast('CSV-Export fehlgeschlagen', 'error') }
       })
 
       await load(true)

@@ -125,10 +125,10 @@ export default {
       `
 
       const body = container.querySelector('#body')
-      body.innerHTML = skeletonLoader({ rows: 6, height: 56 })
+      body.innerHTML = skeletonLoader(400, 56).outerHTML
 
       async function load() {
-        body.innerHTML = skeletonLoader({ rows: 6, height: 56 })
+        body.innerHTML = skeletonLoader(400, 56).outerHTML
         try {
           rawRows = await fetchDaily(days)
           // FIX med: render() wrapped in its own try/catch so chart errors
@@ -205,19 +205,19 @@ export default {
         const heroRow = body.querySelector('#heroRow')
         heroRow.appendChild(statHero({
           label: 'Plays gesamt',
-          value: '0',
+          value: totalPlays,
           accent: 'violet',
           icon: 'play'
         }))
         heroRow.appendChild(statHero({
           label: 'Stunden gesamt',
-          value: '0',
+          value: Math.round(totalHours),
           accent: 'cyan',
           icon: 'clock'
         }))
         heroRow.appendChild(statHero({
           label: 'Ø pro Tag',
-          value: '0',
+          value: Math.round(avgPerDay),
           accent: 'amber',
           icon: 'trending-up'
         }))
@@ -229,20 +229,11 @@ export default {
           icon: 'star'
         }))
 
-        const heroValues = heroRow.querySelectorAll('.stat-hero-value')
-        if (heroValues[0]) countUp(heroValues[0], totalPlays, { duration: 900 })
-        if (heroValues[1]) countUp(heroValues[1], Math.round(totalHours), { duration: 900 })
-        if (heroValues[2]) countUp(heroValues[2], Math.round(avgPerDay), { duration: 900 })
-
         const toggleHost = body.querySelector('#modeToggle')
-        toggleHost.appendChild(segmentedControl({
-          options: [
-            { value: 'plays', label: 'Plays' },
-            { value: 'hours', label: 'Stunden' }
-          ],
-          value: mode,
-          onChange: v => { mode = v; drawLine() }
-        }))
+        segmentedControl(toggleHost, [
+          { key: 'plays', label: 'Plays' },
+          { key: 'hours', label: 'Stunden' }
+        ], mode, v => { mode = v; drawLine() })
 
         function drawLine() {
           const chartHost = body.querySelector('#lineChart')
@@ -309,13 +300,11 @@ export default {
         const d = drawer({
           title: `${WEEKDAYS[weekday]} · ${String(hour).padStart(2, '0')}:00–${String(hour + 1).padStart(2, '0')}:00`,
           subtitle: `${fmtNumber(plays || 0)} Plays in diesem Zeitfenster`,
-          content: `<div id="hourLoading">${spinnerHtml()} Top-Episoden werden geladen…</div>`
+          contentHtml: `<div id="hourLoading">${spinnerHtml()} Top-Episoden werden geladen…</div>`
         })
-        // drawer() returns an object with .contentEl as the live DOM node.
-        const contentEl = d.contentEl
+        // drawer() returns { close, root, setContent } — use setContent to update content.
         try {
           const eps = await fetchTopEpisodesForHour(weekday, hour, rawRows)
-          const loading = contentEl?.querySelector?.('#hourLoading')
           const html = eps.length === 0
             ? `<div class="empty-state"><div class="empty-icon">${iconHtml('headphones')}</div><h4>Keine Episoden in dieser Stunde</h4><p class="muted">Im gewählten Zeitraum wurde hier nichts gehört.</p></div>`
             : `
@@ -331,11 +320,7 @@ export default {
                     </tr>`).join('')}
                 </tbody>
               </table>`
-          if (loading) {
-            loading.outerHTML = html
-          } else if (contentEl) {
-            contentEl.innerHTML = html
-          }
+          d.setContent(html)
         } catch (err) {
           toast(`Fehler beim Laden: ${err.message || err}`, 'error')
         }
@@ -347,7 +332,7 @@ export default {
       })
       toolbar.querySelector('[data-act="pdf"]').addEventListener('click', () => {
         try {
-          exportPanelAsPdf(container, { title: 'Listens pro Tag', filename: `listens-pro-tag-${days}d.pdf` })
+          exportPanelAsPdf(container, `listens-pro-tag-${days}d.pdf`, { panelTitle: 'Listens pro Tag' })
         } catch (err) {
           toast(`PDF-Export fehlgeschlagen: ${err.message || err}`, 'error')
         }
@@ -363,7 +348,7 @@ export default {
             Datum: d.date,
             Plays: d.plays,
             Stunden: Math.round((d.seconds / 3600) * 100) / 100
-          })), `listens-pro-tag-${days}d.csv`)
+          })), null, `listens-pro-tag-${days}d.csv`)
         } catch (err) {
           toast(`CSV-Export fehlgeschlagen: ${err.message || err}`, 'error')
         }
