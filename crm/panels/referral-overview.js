@@ -509,7 +509,7 @@ export default {
             title: 'Alle Referral-Signups',
             subtitle: `${fmtNumber(state.recentSignups.length)} im Zeitraum`,
             width: 720,
-            html: `<div style="padding:16px">${renderRecentTable(state.recentSignups)}</div>`,
+            contentHtml: `<div style="padding:16px">${renderRecentTable(state.recentSignups)}</div>`,
             onMount: (el) => {
               el.querySelectorAll('[data-action="user"]').forEach(btn => {
                 btn.addEventListener('click', () => {

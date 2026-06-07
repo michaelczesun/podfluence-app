@@ -455,7 +455,10 @@ const panel = {
         .ppd-layout{display:flex;flex-direction:column;gap:16px}
         .ppd-layout .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
         @media(max-width:900px){.ppd-layout .row2{grid-template-columns:1fr}}
-        .glass-card{padding:18px;border-radius:16px}
+        .glass-card{padding:18px;border-radius:16px;background:var(--bg-glass,rgba(15,23,42,.6));border:1px solid var(--border,#1f2937);color:var(--fg,#e2e8f0)}
+        .ppd-panel #hero{display:flex;flex-direction:column;gap:8px}
+        .ppd-panel .hero-sub{font-size:12px;color:var(--muted,#94a3b8)}
+        .ppd-panel .hero-sub b{color:var(--fg,#e2e8f0)}
         .chart-card .card-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
         .chart-card .card-hint{font-size:12px;color:var(--muted,#94a3b8)}
         .card-head h3{margin:0 0 12px;font-size:15px;font-weight:600}
