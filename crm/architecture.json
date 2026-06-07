@@ -1,0 +1,203 @@
+{
+  "version": "2.0",
+  "topLevel": [
+    {
+      "key": "pulse",
+      "label": "Pulse",
+      "icon": "📊",
+      "subTabs": [
+        {
+          "key": "now",
+          "label": "Now",
+          "panels": ["kpi-live-totals", "admin-home"]
+        },
+        {
+          "key": "today",
+          "label": "Today",
+          "panels": ["new-signups-7d", "posts-per-day", "episodes-per-day", "listens-per-day"]
+        },
+        {
+          "key": "alerts",
+          "label": "Alerts",
+          "panels": ["crash-rate", "open-bug-reports"]
+        },
+        {
+          "key": "activity",
+          "label": "Activity-Stream",
+          "panels": ["recent-updates-feed"]
+        }
+      ]
+    },
+    {
+      "key": "people",
+      "label": "People",
+      "icon": "👥",
+      "subTabs": [
+        {
+          "key": "users",
+          "label": "Users",
+          "panels": ["users-list", "user-type-split", "verified-premium-flags", "client-build-versions"]
+        },
+        {
+          "key": "leads",
+          "label": "Leads",
+          "panels": ["leads-pipeline"]
+        },
+        {
+          "key": "team",
+          "label": "Team",
+          "panels": ["team-management"]
+        },
+        {
+          "key": "segments",
+          "label": "Segments",
+          "panels": ["top-listeners", "users-by-country"],
+          "new": true
+        }
+      ]
+    },
+    {
+      "key": "growth",
+      "label": "Growth",
+      "icon": "📈",
+      "subTabs": [
+        {
+          "key": "funnel",
+          "label": "Funnel",
+          "panels": ["onboarding-funnel", "invite-codes-usage"]
+        },
+        {
+          "key": "cohorts",
+          "label": "Cohorts",
+          "panels": [],
+          "new": true
+        },
+        {
+          "key": "retention",
+          "label": "Retention",
+          "panels": ["achievements-unlocks"],
+          "new": true
+        },
+        {
+          "key": "forecast",
+          "label": "Forecast",
+          "panels": [],
+          "new": true
+        },
+        {
+          "key": "dau",
+          "label": "DAU",
+          "panels": ["dau-trend", "referral-leaderboard", "referral-overview"]
+        }
+      ]
+    },
+    {
+      "key": "content",
+      "label": "Content",
+      "icon": "💬",
+      "subTabs": [
+        {
+          "key": "posts",
+          "label": "Posts",
+          "panels": ["recent-updates-feed", "trending-hashtags"]
+        },
+        {
+          "key": "podcasts",
+          "label": "Podcasts",
+          "panels": ["trending-podcasters", "podcast-verification-queue", "top-listened-podcasts", "podcaster-engagement-7d", "vibe-distribution"]
+        },
+        {
+          "key": "comments",
+          "label": "Comments",
+          "panels": ["active-polls"]
+        },
+        {
+          "key": "reports",
+          "label": "Reports",
+          "panels": ["open-bug-reports", "bug-reports-triage"]
+        },
+        {
+          "key": "bot",
+          "label": "Bot",
+          "panels": ["insta-approval-queue", "insta-post-type-scores", "newsletter-audience-sync"]
+        }
+      ]
+    },
+    {
+      "key": "system",
+      "label": "System",
+      "icon": "⚙️",
+      "subTabs": [
+        {
+          "key": "settings",
+          "label": "Settings",
+          "panels": ["app-settings", "settings"]
+        },
+        {
+          "key": "tasks",
+          "label": "Tasks",
+          "panels": ["tasks-inbox", "push-broadcast"]
+        },
+        {
+          "key": "audit",
+          "label": "Audit",
+          "panels": ["audit-log"]
+        },
+        {
+          "key": "api-health",
+          "label": "API-Health",
+          "panels": [],
+          "new": true
+        },
+        {
+          "key": "backups",
+          "label": "Backups",
+          "panels": ["storage-ops"],
+          "new": true
+        }
+      ]
+    }
+  ],
+  "panelMigration": {
+    "admin-home": "pulse/now",
+    "kpi-live-totals": "pulse/now",
+    "dau-trend": "growth/dau",
+    "new-signups-7d": "pulse/today",
+    "crash-rate": "pulse/alerts",
+    "open-bug-reports": "content/reports",
+    "users-list": "people/users",
+    "user-type-split": "people/users",
+    "verified-premium-flags": "people/users",
+    "onboarding-funnel": "growth/funnel",
+    "client-build-versions": "people/users",
+    "recent-updates-feed": "content/posts",
+    "posts-per-day": "pulse/today",
+    "trending-hashtags": "content/posts",
+    "active-polls": "content/comments",
+    "episodes-per-day": "pulse/today",
+    "listens-per-day": "pulse/today",
+    "top-listened-podcasts": "content/podcasts",
+    "vibe-distribution": "content/podcasts",
+    "top-listeners": "people/segments",
+    "users-by-country": "people/segments",
+    "referral-leaderboard": "growth/dau",
+    "referral-overview": "growth/dau",
+    "invite-codes-usage": "growth/funnel",
+    "podcaster-engagement-7d": "content/podcasts",
+    "trending-podcasters": "content/podcasts",
+    "achievements-unlocks": "growth/retention",
+    "insta-approval-queue": "content/bot",
+    "insta-post-type-scores": "content/bot",
+    "newsletter-audience-sync": "content/bot",
+    "audit-log": "system/audit",
+    "leads-pipeline": "people/leads",
+    "bug-reports-triage": "content/reports",
+    "push-broadcast": "system/tasks",
+    "storage-ops": "system/backups",
+    "podcast-verification-queue": "content/podcasts",
+    "tasks-inbox": "system/tasks",
+    "team-management": "people/team",
+    "app-settings": "system/settings",
+    "settings": "system/settings"
+  }
+}

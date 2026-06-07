@@ -1,0 +1,200 @@
+{
+  "$schema": "permissions-matrix-v2",
+  "version": 2,
+  "updated": "2026-06-07",
+  "roles": ["owner", "admin", "manager", "support", "mod", "marketing"],
+  "nullRoleAccess": false,
+  "denyMessage": "CRM-Zugriff verweigert. Bitte mit Admin-Konto anmelden.",
+  "tabs": {
+    "pulse": {
+      "label": "Pulse",
+      "access": {
+        "owner": "rw",
+        "admin": "rw",
+        "manager": "rw",
+        "support": "rw",
+        "mod": "rw",
+        "marketing": "rw"
+      },
+      "subtabs": {
+        "overview": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "rw",
+          "support": "rw",
+          "mod": "rw",
+          "marketing": "rw"
+        },
+        "live": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "rw",
+          "support": "rw",
+          "mod": "rw",
+          "marketing": "rw"
+        },
+        "alerts": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "rw",
+          "support": "rw",
+          "mod": "rw",
+          "marketing": "rw"
+        }
+      }
+    },
+    "people": {
+      "label": "People",
+      "access": {
+        "owner": "rw",
+        "admin": "rw",
+        "manager": "rw",
+        "support": "rw",
+        "mod": "rw",
+        "marketing": "rw"
+      },
+      "subtabs": {
+        "users": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "rw",
+          "support": "rw",
+          "mod": "deny",
+          "marketing": "rw"
+        },
+        "team": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "deny",
+          "support": "deny",
+          "mod": "deny",
+          "marketing": "deny"
+        },
+        "reports": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "rw",
+          "support": "rw",
+          "mod": "rw",
+          "marketing": "rw"
+        }
+      }
+    },
+    "growth": {
+      "label": "Growth",
+      "access": {
+        "owner": "rw",
+        "admin": "rw",
+        "manager": "rw",
+        "support": "rw",
+        "mod": "deny",
+        "marketing": "rw"
+      },
+      "subtabs": {
+        "funnels": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "rw",
+          "support": "r",
+          "mod": "deny",
+          "marketing": "rw"
+        },
+        "campaigns": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "rw",
+          "support": "r",
+          "mod": "deny",
+          "marketing": "rw"
+        },
+        "retention": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "rw",
+          "support": "r",
+          "mod": "deny",
+          "marketing": "rw"
+        }
+      }
+    },
+    "content": {
+      "label": "Content",
+      "access": {
+        "owner": "rw",
+        "admin": "rw",
+        "manager": "rw",
+        "support": "rw",
+        "mod": "rw",
+        "marketing": "rw"
+      },
+      "subtabs": {
+        "reports": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "rw",
+          "support": "rw",
+          "mod": "rw",
+          "marketing": "rw"
+        },
+        "bot": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "deny",
+          "support": "deny",
+          "mod": "deny",
+          "marketing": "rw"
+        },
+        "podcasts": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "rw",
+          "support": "r",
+          "mod": "rw",
+          "marketing": "r"
+        }
+      }
+    },
+    "system": {
+      "label": "System",
+      "access": {
+        "owner": "rw",
+        "admin": "rw",
+        "manager": "r",
+        "support": "r",
+        "mod": "r",
+        "marketing": "r"
+      },
+      "subtabs": {
+        "settings": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "deny",
+          "support": "deny",
+          "mod": "deny",
+          "marketing": "deny"
+        },
+        "audit": {
+          "owner": "rw",
+          "admin": "r",
+          "manager": "r",
+          "support": "r",
+          "mod": "r",
+          "marketing": "r"
+        },
+        "flags": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "deny",
+          "support": "deny",
+          "mod": "deny",
+          "marketing": "deny"
+        }
+      }
+    }
+  },
+  "accessLevels": {
+    "rw": "Lesen + Schreiben",
+    "r": "Nur Lesen",
+    "deny": "Kein Zugriff (Tab ausgeblendet)"
+  }
+}
