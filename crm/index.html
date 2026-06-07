@@ -435,7 +435,7 @@ try {
   }
   const { data: profile, error: profileError } = await sb
     .from('users')
-    .select('is_app_admin')
+    .select('is_app_admin, admin_role')
     .eq('id', session.user.id)
     .maybeSingle()
   if (profileError) throw profileError
@@ -443,6 +443,8 @@ try {
     location.replace('/app/')
     throw new Error('not admin — redirecting')
   }
+  // Role für Sidebar-Filter — Fallback 'admin' falls Spalte noch leer ist
+  window.__CRM_ROLE__ = (profile?.admin_role || 'admin').toLowerCase()
 } catch (authErr) {
   mountEl.innerHTML = `<div class="panel-shell"><div class="empty" style="color:#F87171">Auth-Fehler: ${authErr?.message || authErr}<br><br><a href="/login/" style="color:#A78BFA">Erneut anmelden</a></div></div>`
   throw authErr
@@ -508,10 +510,27 @@ const CATEGORIES = [
   { key: 'admin_actions', label: 'Admin-Aktionen',  icon: '⚙️' }
 ]
 
+// ---- Role-Based Panel Visibility ----
+const ROLE_PANEL_VISIBILITY = {
+  owner: '*',
+  admin: '*',
+  manager: panels => panels.filter(p => !['team-management','app-settings'].includes(p.id)),
+  support: panels => panels.filter(p => ['users-list','user-type-split','verified-premium-flags','bug-reports-triage','open-bug-reports','tasks-inbox','audit-log'].includes(p.id)),
+  mod: panels => panels.filter(p => ['recent-updates-feed','posts-per-day','bug-reports-triage','open-bug-reports','active-polls'].includes(p.id)),
+  marketing: panels => panels.filter(p => ['insta-approval-queue','insta-post-type-scores','newsletter-audience-sync','push-broadcast','kpi-live-totals','dau-trend'].includes(p.id)),
+}
+
+const role = window.__CRM_ROLE__ || 'admin'
+const roleFilter = ROLE_PANEL_VISIBILITY[role]
+const VISIBLE_PANELS = (roleFilter === '*' || !roleFilter)
+  ? PANELS
+  : roleFilter(PANELS)
+const VISIBLE_IDS = new Set(VISIBLE_PANELS.map(p => p.id))
+
 // ---- Sidebar rendern ----
 const sidebar = document.getElementById('sidebar')
 const sidebarHtml = CATEGORIES.map(cat => {
-  const items = PANELS.filter(p => p.category === cat.key)
+  const items = VISIBLE_PANELS.filter(p => p.category === cat.key)
   if (!items.length) return ''
   return `<div class="cat" data-cat="${cat.key}">
     <div class="cat-head"><span class="ic">${cat.icon}</span><span class="lbl">${cat.label}</span><span class="caret">▼</span></div>
@@ -588,7 +607,7 @@ let qsUserResults = []
 
 function buildQuickSearchItems(query) {
   const q = (query || '').trim().toLowerCase()
-  const panels = PANELS.map(p => {
+  const panels = VISIBLE_PANELS.map(p => {
     const cat = CATEGORIES.find(c => c.key === p.category)
     return {
       type: 'panel',
@@ -786,7 +805,13 @@ const mount = document.getElementById('panel-mount')
 async function loadPanel() {
   const hashRaw = location.hash.replace(/^#/, '').trim()
   const [hash] = hashRaw.split('?')
-  const id = hash || PANELS.find(p => p.category === 'overview').id
+  const fallback = (VISIBLE_PANELS.find(p => p.category === 'overview') || VISIBLE_PANELS[0])?.id
+  let id = hash || fallback
+  // Role-Guard: nicht erlaubte Panel-IDs auf Fallback zurückbiegen
+  if (id && !VISIBLE_IDS.has(id)) {
+    mount.innerHTML = `<div class="panel-shell"><div class="empty" style="color:#F87171">Kein Zugriff auf „${id}" (Rolle: ${role}).</div></div>`
+    return
+  }
 
   // Set active state
   sidebar.querySelectorAll('a[data-pid]').forEach(a => {
