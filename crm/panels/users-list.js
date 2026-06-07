@@ -166,6 +166,37 @@ export default {
           .btn-pill.orange { color:#fb923c; }
           .btn-pill.orange:hover { background:rgba(251,146,60,0.18); border-color:rgba(251,146,60,0.4); }
           .btn-pill:disabled { opacity:0.4; cursor:wait; }
+
+          /* SWIPE-ACTIONS */
+          .ul-table tbody tr[data-swipe-ready="1"] { position:relative; will-change:transform; }
+          .ul-table tbody tr[data-swipe-ready="1"]::before,
+          .ul-table tbody tr[data-swipe-ready="1"]::after {
+            content:''; position:absolute; top:0; bottom:0; width:120px;
+            display:flex; align-items:center; justify-content:center;
+            font-weight:600; font-size:13px; letter-spacing:.02em;
+            pointer-events:none; opacity:0; transition:opacity .15s ease;
+            z-index:-1;
+          }
+          .ul-table tbody tr[data-swipe-ready="1"]::before {
+            left:0;
+            content:'+ Notiz';
+            background:linear-gradient(90deg, rgba(96,165,250,.28), rgba(96,165,250,.05));
+            color:#60a5fa;
+            padding-left:18px; justify-content:flex-start;
+          }
+          .ul-table tbody tr[data-swipe-ready="1"]::after {
+            right:0;
+            content:'✓ Verify';
+            background:linear-gradient(270deg, rgba(34,197,94,.28), rgba(34,197,94,.05));
+            color:#22c55e;
+            padding-right:18px; justify-content:flex-end;
+          }
+          .ul-table tbody tr[data-swipe-dir="right"]::before { opacity:1; }
+          .ul-table tbody tr[data-swipe-dir="left"]::after  { opacity:1; }
+          .ul-table tbody tr[data-swipe-armed="1"][data-swipe-dir="right"]::before,
+          .ul-table tbody tr[data-swipe-armed="1"][data-swipe-dir="left"]::after {
+            filter:brightness(1.25);
+          }
         </style>
         <div class="panel-shell users-list-panel">
           <div class="panel-head">
@@ -488,9 +519,11 @@ function wireTable(body, container) {
   table.querySelectorAll('tbody tr').forEach(tr => {
     tr.addEventListener('click', (e) => {
       if (e.target.closest('.col-check') || e.target.closest('.col-actions')) return
+      if (tr.__swipeMoved) { tr.__swipeMoved = false; return }
       const id = tr.dataset.id
       openUserDrawer(id, container)
     })
+    attachSwipeActions(tr, body, container)
   })
 
   const checkAll = body.querySelector('#ul-check-all')
@@ -860,6 +893,178 @@ function toCsvRow(r) {
 function exportCurrentCsv() {
   exportCsv(state.rows.map(toCsvRow), [], `nutzer-liste-${Date.now()}.csv`)
   toast('CSV exportiert', 'success')
+}
+
+// SWIPE-ACTIONS: library-frei, TouchStart/Move/End
+// swipe-left  (Finger nach links, deltaX < -60) → Verify Quick-Action
+// swipe-right (Finger nach rechts, deltaX > +60) → Notiz hinzufügen
+const SWIPE_THRESHOLD = 60
+const SWIPE_MAX = 120
+
+function attachSwipeActions(tr, body, container) {
+  if (tr.__swipeWired) return
+  tr.__swipeWired = true
+
+  // Row in einen Wrapper packen, der die Action-Backgrounds zeigt
+  // Wir setzen position:relative auf TR und einen ::before / ::after via inline styles ist tricky —
+  // stattdessen: wir nutzen transform auf der Row und blenden zwei absolut positionierte Hint-Layer ein.
+  tr.style.position = tr.style.position || 'relative'
+  tr.style.touchAction = 'pan-y'
+
+  // Indikator-Container (links: Note, rechts: Verify) — als sibling-Overlay über das tr nicht möglich,
+  // also stylen wir tr direkt via ::before/::after-Ersatz: zwei Pseudo-Elements per data-attr CSS unten.
+  // Hint via data-swipe-hint
+  tr.dataset.swipeReady = '1'
+
+  let startX = 0, startY = 0, dx = 0, dragging = false, locked = null
+
+  const reset = (animate = true) => {
+    if (animate) tr.style.transition = 'transform 220ms cubic-bezier(.22,.9,.36,1)'
+    tr.style.transform = 'translateX(0)'
+    tr.dataset.swipeDir = ''
+    setTimeout(() => { tr.style.transition = '' }, 240)
+  }
+
+  const onStart = (e) => {
+    const t = e.touches ? e.touches[0] : e
+    // Skip wenn Touch auf Buttons/Checkboxen
+    if (e.target.closest('.col-check') || e.target.closest('.col-actions') || e.target.closest('button') || e.target.closest('input')) return
+    startX = t.clientX
+    startY = t.clientY
+    dx = 0
+    dragging = true
+    locked = null
+    tr.style.transition = ''
+  }
+
+  const onMove = (e) => {
+    if (!dragging) return
+    const t = e.touches ? e.touches[0] : e
+    const rawDx = t.clientX - startX
+    const rawDy = t.clientY - startY
+    if (locked === null) {
+      if (Math.abs(rawDx) < 6 && Math.abs(rawDy) < 6) return
+      locked = Math.abs(rawDx) > Math.abs(rawDy) ? 'x' : 'y'
+    }
+    if (locked !== 'x') { dragging = false; return }
+    if (e.cancelable) e.preventDefault()
+    // Resistance ab MAX
+    let clamped = rawDx
+    if (Math.abs(rawDx) > SWIPE_MAX) {
+      const over = Math.abs(rawDx) - SWIPE_MAX
+      clamped = Math.sign(rawDx) * (SWIPE_MAX + over * 0.25)
+    }
+    dx = clamped
+    tr.style.transform = `translateX(${dx}px)`
+    tr.dataset.swipeDir = dx < 0 ? 'left' : 'right'
+    tr.dataset.swipeArmed = Math.abs(dx) >= SWIPE_THRESHOLD ? '1' : '0'
+  }
+
+  const onEnd = async () => {
+    if (!dragging) return
+    dragging = false
+    const finalDx = dx
+    if (Math.abs(finalDx) < SWIPE_THRESHOLD) {
+      reset(true)
+      return
+    }
+    tr.__swipeMoved = true
+    // Spring back nach Action-Trigger
+    reset(true)
+    const uid = tr.dataset.id
+    try {
+      if (finalDx < 0) {
+        // swipe-left → Verify Quick-Action
+        await doSwipeVerify(uid, body, container)
+      } else {
+        // swipe-right → Note hinzufügen
+        await doSwipeNote(uid, body, container)
+      }
+    } catch (err) {
+      toast(err?.message || 'Aktion fehlgeschlagen', 'error')
+    }
+  }
+
+  const onCancel = () => {
+    if (!dragging) return
+    dragging = false
+    reset(true)
+  }
+
+  tr.addEventListener('touchstart', onStart, { passive: true })
+  tr.addEventListener('touchmove', onMove, { passive: false })
+  tr.addEventListener('touchend', onEnd)
+  tr.addEventListener('touchcancel', onCancel)
+
+  // Pointer-Events für Desktop-Tests / Trackpad-Drag (optional, robust)
+  tr.addEventListener('pointerdown', (e) => {
+    if (e.pointerType === 'touch') return // touch läuft schon über touch-events
+    if (e.pointerType === 'mouse') return // Maus soll Row-Klick auslösen, nicht swipen
+  })
+}
+
+async function doSwipeVerify(uid, body, container) {
+  const row = state.rows.find(r => r.id === uid)
+  if (!row) return
+  const pa = await import('/lib/panel-actions.js')
+  if (row.is_verified) {
+    await pa.unverifyUser(uid)
+    toast('Verifizierung entzogen', 'warning')
+  } else {
+    await pa.verifyUser(uid)
+    toast('Verifiziert', 'success')
+  }
+  try { await fetchPage(); refreshTableOnly(body, container) } catch (_) {}
+}
+
+async function doSwipeNote(uid, body, container) {
+  const row = state.rows.find(r => r.id === uid)
+  if (!row) return
+  const note = await promptNote(row)
+  if (note === null) return // abgebrochen
+  if (!note.trim()) return
+  try {
+    // Best-Effort: zuerst dedizierte RPC, sonst Fallback in user_notes Tabelle
+    let res = await sb.rpc('admin_add_user_note', { p_user_id: uid, p_note: note.trim() })
+    if (res.error) {
+      // Fallback: direkter Insert (Tabelle muss existieren; sonst landet das im catch)
+      res = await sb.from('user_notes').insert({ user_id: uid, note: note.trim() })
+      if (res.error) throw res.error
+    }
+    toast('Notiz hinzugefügt', 'success')
+  } catch (e) {
+    toast(e?.message || 'Notiz konnte nicht gespeichert werden', 'error')
+  }
+}
+
+function promptNote(row) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div')
+    overlay.className = 'ul-push-overlay'
+    overlay.innerHTML = `
+      <div class="ul-push-modal glass-card" role="dialog" aria-modal="true" aria-label="Notiz hinzufügen">
+        <div class="ul-push-modal-head">
+          <h3>${iconHtml('edit-3')} Notiz für ${htmlEscape(row.full_name || row.username || 'Nutzer')}</h3>
+          <button class="btn-icon" data-x="close" title="Schließen">${iconHtml('x')}</button>
+        </div>
+        <div class="ul-push-modal-body">
+          <textarea id="ul-note-text" class="ul-push-textarea" placeholder="Interne Notiz…" rows="4" maxlength="500"></textarea>
+        </div>
+        <div class="ul-push-modal-foot">
+          <button class="btn btn-ghost" data-x="cancel">Abbrechen</button>
+          <button class="btn btn-primary" data-x="save">${iconHtml('save')} Speichern</button>
+        </div>
+      </div>
+    `
+    document.body.appendChild(overlay)
+    const ta = overlay.querySelector('#ul-note-text')
+    setTimeout(() => ta?.focus(), 30)
+    const done = (val) => { overlay.remove(); resolve(val) }
+    overlay.querySelector('[data-x="close"]').addEventListener('click', () => done(null))
+    overlay.querySelector('[data-x="cancel"]').addEventListener('click', () => done(null))
+    overlay.querySelector('[data-x="save"]').addEventListener('click', () => done(ta?.value || ''))
+    overlay.addEventListener('click', (e) => { if (e.target === overlay) done(null) })
+  })
 }
 
 function animateHero(body) {
