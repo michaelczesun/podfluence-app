@@ -353,26 +353,40 @@
     .shell:not(.sidebar-open) aside { transform: translateX(-100%); }
   }
 
-  /* Mobile overlay */
-  .mobile-block {
-    display: none;
-    position: fixed; inset: 0;
-    background: var(--bg-deep);
-    z-index: 9000;
-    padding: 40px 24px;
-    flex-direction: column; align-items: center; justify-content: center;
-    text-align: center;
-  }
-  .mobile-block h1 { font-size: 22px; margin: 0 0 12px; }
-  .mobile-block p { color: var(--text-muted); margin: 0 0 24px; max-width: 320px; }
-  .mobile-block a {
-    background: var(--primary); color: #fff;
-    padding: 12px 22px; border-radius: 10px;
-    font-weight: 700;
-  }
-  .mobile-block a:hover { text-decoration: none; }
+  /* Mobile-block raus — wird vollständig responsive (User-Wunsch 7.6.) */
+  .mobile-block { display: none !important; }
+
+  /* Mobile: kompakte Topbar, Sidebar als Drawer, Charts responsive */
   @media (max-width: 767px) {
-    .mobile-block { display: flex; }
+    .topbar { height: 52px; padding: 0 12px; gap: 8px; }
+    .topbar .title small { display: none; }
+    .topbar-mid { display: none; }
+    .topbar .logo { width: 30px; height: 30px; font-size: 15px; }
+    #logout { padding: 6px 10px; font-size: 12px; }
+    aside {
+      width: 80%; max-width: 280px;
+      position: fixed !important; left: 0; top: 52px;
+      z-index: 60;
+      height: calc(100vh - 52px);
+    }
+    .shell:not(.sidebar-open) aside { transform: translateX(-100%); }
+    .shell.sidebar-open::before {
+      content: '';
+      position: fixed; inset: 52px 0 0 0;
+      background: rgba(0,0,0,0.5);
+      z-index: 55;
+    }
+    .shell { min-height: calc(100vh - 52px); }
+    main { padding: 0 !important; width: 100%; }
+    .panel-shell { padding: 16px 12px !important; }
+    .panel-head h2 { font-size: 18px !important; }
+    .kpi-grid { grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
+    .kpi-tile .value { font-size: 22px !important; }
+    .data-table { font-size: 12px; }
+    .data-table th, .data-table td { padding: 6px 8px !important; }
+    .toolbar { flex-wrap: wrap; gap: 6px; }
+    .toolbar-btn { padding: 6px 10px !important; font-size: 12px !important; }
+    .drawer { width: 100% !important; }
   }
 </style>
 </head>
