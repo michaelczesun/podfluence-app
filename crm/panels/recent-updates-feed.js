@@ -13,9 +13,15 @@ const state = {
   filtered: [],
   search: '',
   filter: 'all',
+  sort: 'newest', // 'newest' | 'top'
+  topIds: new Set(),
   autoRefresh: false,
   refreshHandle: null,
   loading: false
+}
+
+function engagementScore(p) {
+  return (p.likes_count || 0) + 2 * (p.comments_count || 0)
 }
 
 function snippet(text, n = 180) {
@@ -57,6 +63,17 @@ function applyFilters() {
     const hay = (p.content || '') + ' ' + (p.profiles?.username || '') + ' ' + (p.profiles?.full_name || '')
     return hay.toLowerCase().includes(q)
   })
+
+  // Sortierung: Neueste (chronologisch) oder Top-Engagement (likes + 2*comments)
+  if (state.sort === 'top') {
+    state.filtered.sort((a, b) => engagementScore(b) - engagementScore(a))
+  } else {
+    state.filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  }
+
+  // Top-3 nach Engagement (über alle 7-Tages-Posts) markieren — unabhängig von Sortierung
+  const ranked = [...state.posts].sort((a, b) => engagementScore(b) - engagementScore(a))
+  state.topIds = new Set(ranked.slice(0, 3).filter(p => engagementScore(p) > 0).map(p => p.id))
 }
 
 function renderHeros(root) {
@@ -127,8 +144,11 @@ function postCardHtml(p) {
   const image = (p.image_url )
     ? `<div class="post-media"><img loading="lazy" src="${htmlEscape(p.image_url )}" alt="" /></div>`
     : ''
+  const isTop = state.topIds.has(p.id)
+  const topStyle = isTop ? ' style="border:2px solid #f5b301;box-shadow:0 0 0 1px rgba(245,179,1,0.25),0 8px 24px rgba(245,179,1,0.12);"' : ''
+  const topBadge = isTop ? `<span class="chip" style="background:linear-gradient(135deg,#f5b301,#ff8a00);color:#fff;font-weight:600;">🔥 Top</span>` : ''
   return `
-    <article class="post-card glass-card" data-id="${htmlEscape(p.id)}">
+    <article class="post-card glass-card" data-id="${htmlEscape(p.id)}"${topStyle}>
       <header class="post-card__head">
         <button class="post-user" data-action="open-user" data-uid="${htmlEscape(u.id || p.user_id || '')}">
           ${avatar}
@@ -137,7 +157,7 @@ function postCardHtml(p) {
             <div class="post-user__sub">@${htmlEscape(u.username || '—')} · ${fmtRelativeTime(p.created_at)}</div>
           </div>
         </button>
-        <div class="post-card__tags">${catBadge}</div>
+        <div class="post-card__tags">${topBadge} ${catBadge}</div>
       </header>
       <div class="post-card__body">
         <p class="post-content">${htmlEscape(snippet(p.content, 280))}</p>
@@ -348,6 +368,14 @@ function wireToolbar(root) {
     })
   })
 
+  root.querySelectorAll('.sort-pill').forEach(el => {
+    el.addEventListener('click', () => {
+      state.sort = el.dataset.sort
+      root.querySelectorAll('.sort-pill').forEach(x => x.classList.toggle('is-active', x === el))
+      applyFilters(); renderFeed(root)
+    })
+  })
+
   root.querySelector('#feed-grid')?.addEventListener('click', (ev) => {
     const userBtn = ev.target.closest('[data-action="open-user"]')
     if (userBtn) {
@@ -417,6 +445,11 @@ export default {
               <button class="filter-pill" data-filter="longform">Longform</button>
               <button class="filter-pill" data-filter="poll">Umfragen</button>
               <button class="filter-pill" data-filter="with-image">Mit Bild</button>
+            </div>
+            <div class="filters__pills" style="margin-left:auto;">
+              <span class="text-muted" style="font-size:.8rem;align-self:center;margin-right:.5rem;">Sortierung:</span>
+              <button class="sort-pill is-active" data-sort="newest">Neueste</button>
+              <button class="sort-pill" data-sort="top">🔥 Top Engagement</button>
             </div>
           </div>
 

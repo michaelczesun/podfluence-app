@@ -36,6 +36,11 @@ function injectStyles() {
     .obr-row{transition:background .15s ease}
     .obr-resolve-btn{padding:6px 12px;border-radius:8px;border:1px solid color-mix(in srgb, var(--text,#fff) 14%, transparent);background:transparent;color:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s ease}
     .obr-resolve-btn:hover{background:#34c759;color:#fff;border-color:#34c759}
+    .obr-status-btn{padding:6px 10px;border-radius:8px;border:1px solid color-mix(in srgb, var(--text,#fff) 14%, transparent);background:transparent;color:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s ease;margin-right:4px}
+    .obr-status-btn:hover{background:#0a84ff;color:#fff;border-color:#0a84ff}
+    .obr-status-btn.is-back:hover{background:#ff9500;border-color:#ff9500}
+    .obr-status-btn:disabled{opacity:.5;cursor:wait}
+    .obr-actions{display:flex;align-items:center;justify-content:flex-end;gap:0;white-space:nowrap}
     .obr-user-link{color:var(--accent,#0a84ff);cursor:pointer;font-weight:500}
     .obr-user-link:hover{text-decoration:underline}
     .obr-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 20px;text-align:center;gap:12px;color:var(--text-muted,#8e8e93)}
@@ -147,7 +152,7 @@ function renderTable(rows, userMap) {
             <th>Beschreibung</th>
             <th>Melder</th>
             <th>Gemeldet</th>
-            <th style="width:120px"></th>
+            <th style="width:220px"></th>
           </tr>
         </thead>
         <tbody>
@@ -162,7 +167,14 @@ function renderTable(rows, userMap) {
               </td>
               <td>${u ? `<span class="obr-user-link" data-uid="${r.user_id}">${htmlEscape(uName)}</span>` : htmlEscape(uName)}</td>
               <td title="${fmtDateTime(r.created_at)}">${fmtRelativeTime(r.created_at)}</td>
-              <td><button class="obr-resolve-btn" data-id="${r.id}">Lösen</button></td>
+              <td>
+                <div class="obr-actions">
+                  ${r.status === 'in_progress'
+                    ? `<button class="obr-status-btn is-back" data-id="${r.id}" data-target="open" title="Zurück auf 'Offen' setzen">↩ Zurück</button>`
+                    : `<button class="obr-status-btn" data-id="${r.id}" data-target="in_progress" title="Übernehmen — ohne Notiz">▶ Übernehmen</button>`}
+                  <button class="obr-resolve-btn" data-id="${r.id}">Lösen</button>
+                </div>
+              </td>
             </tr>`
           }).join('')}
         </tbody>

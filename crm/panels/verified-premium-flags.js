@@ -329,6 +329,13 @@ function buildPremiumDurationBuckets(premium) {
   return buckets
 }
 
+function applyPremiumFilter(premium, filter) {
+  if (!filter || filter === 'all') return premium
+  if (filter === 'soon') return premium.filter(u => premiumExpiryStatus(u) === 'soon')
+  if (filter === 'expired') return premium.filter(u => premiumExpiryStatus(u) === 'expired')
+  return premium
+}
+
 function buildGrowthSeries(users, dateField) {
   const map = new Map()
   for (const u of users) {
@@ -394,6 +401,8 @@ export default {
         const premiumCount  = state.premium.length
         const premiumBuckets = buildPremiumDurationBuckets(state.premium)
         const verifiedGrowth = buildGrowthSeries(state.verified, 'verified_at')
+        const expiringSoonCount = state.premium.filter(u => premiumExpiryStatus(u) === 'soon').length
+        const expiredCount      = state.premium.filter(u => premiumExpiryStatus(u) === 'expired').length
 
         // FIX(med): show truncation warning banner when result set hit the 5000 cap
         const truncationWarning = state.truncated
@@ -419,6 +428,14 @@ export default {
                 value: 0,
                 icon: 'star',
                 accent: 'gold',
+              })}
+            </div>
+            <div class="glass-card hero-card" id="hero-expiring" style="cursor:pointer;" title="Klick: Filter auf 'Läuft bald' setzen">
+              ${statHero({
+                label: 'Läuft <30d ab',
+                value: 0,
+                icon: 'alert-triangle',
+                accent: (expiringSoonCount + expiredCount) > 0 ? 'red' : 'gold',
               })}
             </div>
           </div>
@@ -456,10 +473,14 @@ export default {
                 <h3>${iconHtml('star')} Premium-Nutzer <span class="pill pill-gold">${fmtNumber(premiumCount)}</span></h3>
                 <input type="text" id="search-premium" class="input input-compact" placeholder="Suchen…" />
               </div>
+              <div class="premium-filter-bar">
+                <div id="premium-filter-seg"></div>
+                <span class="muted">${expiringSoonCount > 0 ? `${fmtNumber(expiringSoonCount)} läuft bald ab` : ''}${expiringSoonCount > 0 && expiredCount > 0 ? ' · ' : ''}${expiredCount > 0 ? `${fmtNumber(expiredCount)} abgelaufen` : ''}</span>
+              </div>
               <div class="user-list" id="list-premium">
                 ${premiumCount === 0
                   ? emptyListHtml('Premium', 'Premium vergeben', 'empty-grant-btn')
-                  : state.premium.map(u => userRowHtml(u, 'premium')).join('')}
+                  : applyPremiumFilter(state.premium, state.premiumFilter).map(u => userRowHtml(u, 'premium')).join('')}
               </div>
             </div>
           </div>
@@ -468,8 +489,36 @@ export default {
         // Hero count-up — statHero uses class 'lx-hero-value' (not 'stat-hero-value')
         const vHeroVal = body.querySelector('#hero-verified .lx-hero-value')
         const pHeroVal = body.querySelector('#hero-premium .lx-hero-value')
+        const eHeroVal = body.querySelector('#hero-expiring .lx-hero-value')
         if (vHeroVal) countUp(vHeroVal, 0, verifiedCount, 900)
         if (pHeroVal) countUp(pHeroVal, 0, premiumCount, 900)
+        if (eHeroVal) countUp(eHeroVal, 0, expiringSoonCount + expiredCount, 900)
+
+        // Premium-Filter segmentedControl
+        const segHost = body.querySelector('#premium-filter-seg')
+        if (segHost) {
+          segmentedControl(segHost, [
+            { key: 'all',     label: `Alle (${fmtNumber(premiumCount)})` },
+            { key: 'soon',    label: `Läuft bald (${fmtNumber(expiringSoonCount)})` },
+            { key: 'expired', label: `Abgelaufen (${fmtNumber(expiredCount)})` },
+          ], state.premiumFilter, (key) => {
+            state.premiumFilter = key
+            const listP = body.querySelector('#list-premium')
+            const filtered = applyPremiumFilter(state.premium, key)
+            if (filtered.length === 0) {
+              listP.innerHTML = emptyListHtml('Premium', '', '')
+            } else {
+              listP.innerHTML = filtered.map(u => userRowHtml(u, 'premium')).join('')
+            }
+          })
+        }
+
+        // Hero-Klick → Filter auf 'soon' setzen
+        body.querySelector('#hero-expiring')?.addEventListener('click', () => {
+          state.premiumFilter = 'soon'
+          renderBody()
+          body.querySelector('#list-premium')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+        })
 
         // Charts
         const chartVerifiedEl = body.querySelector('#chart-verified')
