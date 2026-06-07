@@ -1,6 +1,6 @@
 import { sb } from '/lib/supabase.js'
 import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
-import { makeAreaChart, makeLineChart, makeSparkline } from '/lib/charts.js'
+import { makeAreaChart, makeLineChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, pulse } from '/lib/animations.js'
 import { drawer } from '/lib/layout-extras.js'
@@ -8,34 +8,12 @@ import { drawer } from '/lib/layout-extras.js'
 const REFRESH_MS = 60_000
 
 const KPI_DEFS = [
-  { key: 'total_users',      label: 'User gesamt',        icon: 'users',     color: '#7C5CFF', fmt: 'int',   sparkMetric: 'signups',          warnBelow: null, alertChangePct: 50, alertMinPrev: 5 },
-  { key: 'active_24h',       label: 'Aktiv (24h)',        icon: 'activity',  color: '#22D3EE', fmt: 'int',   sparkMetric: 'app_opens',        warnBelow: 3,    alertChangePct: 50, alertMinPrev: 5 },
-  { key: 'posts_24h',        label: 'Beiträge (24h)',     icon: 'message',   color: '#F59E0B', fmt: 'int',   sparkMetric: 'posts',            warnBelow: null, alertChangePct: 50, alertMinPrev: 5 },
-  { key: 'listening_hours',  label: 'Hörstunden (24h)',   icon: 'headphones',color: '#10B981', fmt: 'hours', sparkMetric: 'listening_hours',  warnBelow: null, alertChangePct: 50, alertMinPrev: 5 }
+  { key: 'total_users',      label: 'User gesamt',        icon: 'users',     color: '#7C5CFF', fmt: 'int',   warnBelow: null, alertChangePct: 50, alertMinPrev: 5 },
+  { key: 'active_24h',       label: 'Aktiv (24h)',        icon: 'activity',  color: '#22D3EE', fmt: 'int',   warnBelow: 3,    alertChangePct: 50, alertMinPrev: 5 },
+  { key: 'posts_24h',        label: 'Beiträge (24h)',     icon: 'message',   color: '#F59E0B', fmt: 'int',   warnBelow: null, alertChangePct: 50, alertMinPrev: 5 },
+  { key: 'listening_hours',  label: 'Hörstunden (24h)',   icon: 'headphones',color: '#10B981', fmt: 'hours', warnBelow: null, alertChangePct: 50, alertMinPrev: 5 }
 ]
 
-const SPARK_DAYS = 7
-
-async function fetchSparkData(def) {
-  const since = new Date(Date.now() - SPARK_DAYS * 86_400_000).toISOString()
-  try {
-    if (def.sparkMetric === 'app_opens') {
-      const { data } = await sb.from('app_opens').select('created_at').gte('created_at', since).limit(5000)
-      const rows = bucketByDay(data || [], 'created_at', SPARK_DAYS, false)
-      return rows.map(r => r.value)
-    }
-    if (def.sparkMetric === 'listening_hours') {
-      const { data } = await sb.from('listening_activity').select('created_at,listened_ms').gte('created_at', since).limit(5000)
-      const rows = bucketByDay(data || [], 'created_at', SPARK_DAYS, false, r => Number(r.listened_ms || 0) / 3600000)
-      return rows.map(r => r.value)
-    }
-    if (def.sparkMetric === 'signups' || def.sparkMetric === 'posts') {
-      const { data } = await sb.rpc('admin_daily_series', { p_metric: def.sparkMetric, p_days: SPARK_DAYS })
-      return (data || []).map(d => Number(d.value) || 0)
-    }
-  } catch (_) {}
-  return []
-}
 
 async function fetchTotals() {
   // Try dedicated RPC first
@@ -213,7 +191,6 @@ function renderHeroGrid(totals) {
           <span class="kpi-label">${htmlEscape(def.label)}</span>
         </div>
         <div class="kpi-value" id="kpi-val-${def.key}" data-fmt="${def.fmt}">${formatValue(t.value, def.fmt)}</div>
-        <div class="kpi-spark" data-kpi="${def.key}" id="kpi-spark-${def.key}"></div>
         <div class="kpi-change ${up ? 'up' : 'down'}">
           ${iconHtml(up ? 'trending-up' : 'trending-down')}
           <span>${up ? '+' : ''}${change.toFixed(1)}%</span>
@@ -227,19 +204,6 @@ function renderHeroGrid(totals) {
   </div>`
 }
 
-async function renderSparklines(container) {
-  await Promise.all(KPI_DEFS.map(async def => {
-    const el = container.querySelector(`#kpi-spark-${def.key}`)
-    if (!el) return
-    try {
-      const vals = await fetchSparkData(def)
-      if (!vals || vals.length === 0) { el.innerHTML = ''; return }
-      el.innerHTML = ''
-      try { makeSparkline(el, vals, { color: def.color, height: 28 }) }
-      catch (_) { el.innerHTML = '' }
-    } catch (_) {}
-  }))
-}
 
 function styles() {
   return `<style>
@@ -272,8 +236,6 @@ function styles() {
     .kpi-warn-badge { position:absolute; top:12px; right:12px; display:inline-flex; align-items:center; gap:4px;
       padding:4px 8px; border-radius:999px; font-size:11px; font-weight:600;
       background:rgba(249,115,22,0.15); color:#fb923c; border:1px solid rgba(249,115,22,0.3); cursor:help; z-index:2; }
-    .kpi-spark { margin:-4px 0 10px; height:28px; min-height:28px; }
-    .kpi-spark:empty { display:none; }
     @keyframes kpipulse { 0%{box-shadow:0 0 0 0 var(--accent)} 50%{box-shadow:0 0 0 14px transparent} 100%{box-shadow:0 0 0 0 transparent} }
     .kpi-card-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
     .kpi-icon { display:inline-flex; width:36px; height:36px; border-radius:10px; align-items:center; justify-content:center; }
@@ -484,7 +446,6 @@ export default {
             for (const def of KPI_DEFS) {
               animateCard(def.key, 0, totals[def.key].value, def.fmt)
             }
-            renderSparklines(container).catch(() => {})
           } else {
             for (const def of KPI_DEFS) {
               const t = totals[def.key]
@@ -517,7 +478,6 @@ export default {
                 }
               }
             }
-            renderSparklines(container).catch(() => {})
           }
 
           if (lastUpd) lastUpd.textContent = `Zuletzt aktualisiert: ${fmtDateTime(new Date())} · Auto-Refresh 60s`
