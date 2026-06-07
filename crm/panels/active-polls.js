@@ -8,12 +8,28 @@ import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608e'
 
 const PALETTE = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#ef4444', '#84cc16']
 
+// Status der Tabellen 'polls' / 'poll_votes' in der DB-Schema-Wahrheit nicht bestätigt.
+// Statt das ganze Panel in den error-state zu kippen wenn die Tabelle fehlt
+// (Postgres 42P01 = relation does not exist), behandeln wir das als "Keine Daten"
+// und zeigen den freundlichen Empty-State.
+const MISSING_TABLE_CODES = new Set(['42P01', 'PGRST106', 'PGRST205'])
+
+function isMissingTableError(error) {
+  if (!error) return false
+  if (error.code && MISSING_TABLE_CODES.has(error.code)) return true
+  const msg = String(error.message || '').toLowerCase()
+  return msg.includes('does not exist') || msg.includes('relation') && msg.includes('not') || msg.includes('not find')
+}
+
 async function fetchPolls() {
   const { data, error } = await sb.from('polls')
     .select('*')
     .order('created_at', { ascending: false })
     .limit(200)
-  if (error) throw error
+  if (error) {
+    if (isMissingTableError(error)) return { rows: [], table: 'polls', missing: true }
+    throw error
+  }
   return { rows: data || [], table: 'polls' }
 }
 
@@ -22,7 +38,10 @@ async function fetchVotes(pollIds) {
   const { data, error } = await sb.from('poll_votes')
     .select('*')
     .in('poll_id', pollIds)
-  if (error) throw error
+  if (error) {
+    if (isMissingTableError(error)) return { byPoll: {}, table: 'poll_votes', missing: true }
+    throw error
+  }
   const grouped = {}
   for (const v of (data || [])) {
     if (!grouped[v.poll_id]) grouped[v.poll_id] = []
