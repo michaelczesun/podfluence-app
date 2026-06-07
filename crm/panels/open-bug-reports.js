@@ -4,18 +4,18 @@ import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader, slideInRight } from '/lib/animations.js'
 import { drawer, glassCard, statHero } from '/lib/layout-extras.js'
-import { resolveBugReport, showUserDetailModal } from '/lib/panel-actions.js'
+import { showUserDetailModal } from '/lib/panel-actions.js'
 
-const PRIO = {
-  critical: { label: 'Kritisch', color: '#ff3b30', rank: 4 },
-  high:     { label: 'Hoch',     color: '#ff9500', rank: 3 },
-  medium:   { label: 'Mittel',   color: '#ffcc00', rank: 2 },
-  low:      { label: 'Niedrig',  color: '#34c759', rank: 1 }
+// priority/category are NOT in the DB schema — UI-only mapping based on description keywords
+const STATUS_COLORS = {
+  open:        { label: 'Offen',       color: '#ff9500' },
+  in_progress: { label: 'In Arbeit',   color: '#0a84ff' },
+  resolved:    { label: 'Gelöst',      color: '#34c759' }
 }
 
-function prioBadge(p) {
-  const meta = PRIO[p] || { label: p || '—', color: '#8e8e93', rank: 0 }
-  return `<span class="prio-badge" data-prio="${p}" style="--prio-color:${meta.color}">
+function statusBadge(s) {
+  const meta = STATUS_COLORS[s] || { label: s || '—', color: '#8e8e93' }
+  return `<span class="prio-badge" style="--prio-color:${meta.color}">
     <span class="prio-dot"></span>${meta.label}
   </span>`
 }
@@ -31,12 +31,9 @@ function injectStyles() {
     .obr-section{padding:18px;border-radius:18px}
     .obr-section h3{margin:0 0 12px 0;font-size:15px;font-weight:600;letter-spacing:-.01em}
     .obr-table-wrap{overflow-x:auto;border-radius:14px}
-    .prio-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;font-size:12px;font-weight:600;background:color-mix(in srgb, var(--prio-color) 14%, transparent);color:var(--prio-color);cursor:grab;user-select:none}
-    .prio-badge:active{cursor:grabbing}
+    .prio-badge{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:99px;font-size:12px;font-weight:600;background:color-mix(in srgb, var(--prio-color) 14%, transparent);color:var(--prio-color)}
     .prio-dot{width:7px;height:7px;border-radius:50%;background:var(--prio-color);box-shadow:0 0 0 3px color-mix(in srgb, var(--prio-color) 25%, transparent)}
     .obr-row{transition:background .15s ease}
-    .obr-row.dragging{opacity:.4}
-    .obr-row.drop-target{background:color-mix(in srgb, var(--accent, #0a84ff) 8%, transparent)}
     .obr-resolve-btn{padding:6px 12px;border-radius:8px;border:1px solid color-mix(in srgb, var(--text,#fff) 14%, transparent);background:transparent;color:inherit;font-size:12px;font-weight:600;cursor:pointer;transition:all .15s ease}
     .obr-resolve-btn:hover{background:#34c759;color:#fff;border-color:#34c759}
     .obr-user-link{color:var(--accent,#0a84ff);cursor:pointer;font-weight:500}
@@ -48,9 +45,6 @@ function injectStyles() {
     .obr-toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
     .obr-tool-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:10px;border:1px solid color-mix(in srgb, var(--text,#fff) 12%, transparent);background:color-mix(in srgb, var(--text,#fff) 4%, transparent);color:inherit;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s ease}
     .obr-tool-btn:hover{background:color-mix(in srgb, var(--text,#fff) 10%, transparent);transform:translateY(-1px)}
-    .obr-drag-handle{cursor:grab;opacity:.4;padding:4px;font-size:14px}
-    .obr-drag-handle:active{cursor:grabbing}
-    .obr-row:hover .obr-drag-handle{opacity:.8}
     .obr-resolve-form{display:flex;flex-direction:column;gap:14px;padding:4px}
     .obr-resolve-form label{font-size:12px;font-weight:600;color:var(--text-muted,#8e8e93);text-transform:uppercase;letter-spacing:.04em}
     .obr-resolve-form textarea{width:100%;min-height:130px;padding:12px;border-radius:12px;border:1px solid color-mix(in srgb, var(--text,#fff) 14%, transparent);background:color-mix(in srgb, var(--text,#fff) 4%, transparent);color:inherit;font-family:inherit;font-size:14px;resize:vertical}
@@ -65,9 +59,11 @@ function injectStyles() {
 }
 
 async function fetchData() {
+  // Only select columns that exist in the bug_reports schema:
+  // id, user_id, description, status, admin_note, created_at, resolved_at
   const { data: open, error: e1 } = await sb
     .from('bug_reports')
-    .select('id, created_at, title, description, priority, status, user_id, device_info, app_version, category')
+    .select('id, created_at, description, status, admin_note, user_id, resolved_at')
     .neq('status', 'resolved')
     .order('created_at', { ascending: false })
     .limit(500)
@@ -76,7 +72,7 @@ async function fetchData() {
   const since = new Date(Date.now() - 14 * 86400e3).toISOString()
   const { data: trend } = await sb
     .from('bug_reports')
-    .select('created_at, status, priority')
+    .select('created_at, status')
     .gte('created_at', since)
 
   const sinceLast = new Date(Date.now() - 7 * 86400e3).toISOString()
@@ -117,15 +113,21 @@ function buildTrendSeries(trend) {
   return Object.entries(buckets).map(([date, count]) => ({ x: date, y: count }))
 }
 
-function buildPrioDistribution(open) {
-  const counts = { critical: 0, high: 0, medium: 0, low: 0 }
+function buildStatusDistribution(open) {
+  const counts = { open: 0, in_progress: 0 }
   for (const r of open) {
-    const p = r.priority in counts ? r.priority : 'medium'
-    counts[p]++
+    const s = r.status in counts ? r.status : 'open'
+    counts[s]++
   }
   return Object.entries(counts).map(([k, v]) => ({
-    label: PRIO[k].label, value: v, color: PRIO[k].color
+    label: STATUS_COLORS[k] ? STATUS_COLORS[k].label : k,
+    value: v,
+    color: STATUS_COLORS[k] ? STATUS_COLORS[k].color : '#8e8e93'
   }))
+}
+
+function descSnippet(r) {
+  return (r.description || '').slice(0, 80) || '(ohne Beschreibung)'
 }
 
 function renderTable(rows, userMap) {
@@ -136,16 +138,13 @@ function renderTable(rows, userMap) {
       <div>Keine offenen Bug-Reports — gute Arbeit.</div>
     </div>`
   }
-  const prioOptions = Object.keys(PRIO)
   return `
     <div class="obr-table-wrap">
       <table class="data-table" id="obr-table">
         <thead>
           <tr>
-            <th style="width:32px"></th>
-            <th>Priorität</th>
-            <th>Titel</th>
-            <th>Kategorie</th>
+            <th>Status</th>
+            <th>Beschreibung</th>
             <th>Melder</th>
             <th>Gemeldet</th>
             <th style="width:120px"></th>
@@ -155,19 +154,12 @@ function renderTable(rows, userMap) {
           ${rows.map(r => {
             const u = userMap[r.user_id]
             const uName = u ? (u.display_name || u.username || u.email) : (r.user_id ? 'Unbekannt' : 'Anonym')
-            return `<tr class="obr-row" data-id="${r.id}" data-prio="${r.priority || 'medium'}" draggable="true">
-              <td><span class="obr-drag-handle">⋮⋮</span></td>
+            return `<tr class="obr-row" data-id="${r.id}">
+              <td>${statusBadge(r.status)}</td>
               <td>
-                <select class="obr-prio-select" data-id="${r.id}" style="background:transparent;border:none;color:inherit;cursor:pointer;font:inherit">
-                  ${prioOptions.map(p => `<option value="${p}" ${p === (r.priority || 'medium') ? 'selected' : ''}>${PRIO[p].label}</option>`).join('')}
-                </select>
-                ${prioBadge(r.priority || 'medium')}
+                <div style="font-weight:600">${htmlEscape(descSnippet(r))}</div>
+                ${r.description && r.description.length > 80 ? `<div class="obr-desc">${htmlEscape(r.description.slice(80, 200))}</div>` : ''}
               </td>
-              <td>
-                <div style="font-weight:600">${htmlEscape(r.title || '(ohne Titel)')}</div>
-                ${r.description ? `<div class="obr-desc">${htmlEscape(r.description.slice(0, 120))}</div>` : ''}
-              </td>
-              <td>${htmlEscape(r.category || '—')}</td>
               <td>${u ? `<span class="obr-user-link" data-uid="${r.user_id}">${htmlEscape(uName)}</span>` : htmlEscape(uName)}</td>
               <td title="${fmtDateTime(r.created_at)}">${fmtRelativeTime(r.created_at)}</td>
               <td><button class="obr-resolve-btn" data-id="${r.id}">Lösen</button></td>
@@ -196,54 +188,6 @@ function wireTable(root, rows, userMap, refresh) {
       }
     })
   })
-  root.querySelectorAll('.obr-prio-select').forEach(sel => {
-    sel.addEventListener('change', async () => {
-      const id = sel.dataset.id
-      const newPrio = sel.value
-      try {
-        const { error } = await sb.from('bug_reports').update({ priority: newPrio }).eq('id', id)
-        if (error) throw error
-        toast(`Priorität auf "${PRIO[newPrio].label}" gesetzt`, 'success')
-        refresh()
-      } catch (err) {
-        toast('Fehler: ' + (err.message || err), 'error')
-      }
-    })
-  })
-
-  const tbody = root.querySelector('#obr-table tbody')
-  if (!tbody) return
-  let dragId = null
-  tbody.querySelectorAll('.obr-row').forEach(tr => {
-    tr.addEventListener('dragstart', (e) => {
-      dragId = tr.dataset.id
-      tr.classList.add('dragging')
-      e.dataTransfer.effectAllowed = 'move'
-    })
-    tr.addEventListener('dragend', () => {
-      tr.classList.remove('dragging')
-      tbody.querySelectorAll('.drop-target').forEach(t => t.classList.remove('drop-target'))
-    })
-    tr.addEventListener('dragover', (e) => {
-      e.preventDefault()
-      tbody.querySelectorAll('.drop-target').forEach(t => t.classList.remove('drop-target'))
-      tr.classList.add('drop-target')
-    })
-    tr.addEventListener('drop', async (e) => {
-      e.preventDefault()
-      tr.classList.remove('drop-target')
-      if (!dragId || dragId === tr.dataset.id) return
-      const targetPrio = tr.dataset.prio
-      try {
-        const { error } = await sb.from('bug_reports').update({ priority: targetPrio }).eq('id', dragId)
-        if (error) throw error
-        toast(`Priorität übernommen: "${PRIO[targetPrio].label}"`, 'success')
-        refresh()
-      } catch (err) {
-        toast('Fehler: ' + (err.message || err), 'error')
-      }
-    })
-  })
 }
 
 function openResolveDrawer(row, user, refresh) {
@@ -251,15 +195,15 @@ function openResolveDrawer(row, user, refresh) {
   const content = `
     <div class="obr-resolve-form">
       <div>
-        <div style="font-size:18px;font-weight:700;margin-bottom:4px">${htmlEscape(row.title || '(ohne Titel)')}</div>
-        ${prioBadge(row.priority || 'medium')}
+        <div style="font-size:18px;font-weight:700;margin-bottom:4px">${htmlEscape(descSnippet(row))}</div>
+        ${statusBadge(row.status)}
       </div>
 
       <div class="obr-resolve-meta">
         <div><span>Melder</span><span>${htmlEscape(uName)}</span></div>
         <div><span>Gemeldet</span><span>${fmtDateTime(row.created_at)}</span></div>
-        <div><span>Kategorie</span><span>${htmlEscape(row.category || '—')}</span></div>
-        <div><span>App-Version</span><span>${htmlEscape(row.app_version || '—')}</span></div>
+        <div><span>Status</span><span>${htmlEscape(row.status || '—')}</span></div>
+        ${row.admin_note ? `<div style="grid-column:1/-1"><span>Admin-Notiz</span><span>${htmlEscape(row.admin_note)}</span></div>` : ''}
       </div>
 
       ${row.description ? `<div>
@@ -268,7 +212,7 @@ function openResolveDrawer(row, user, refresh) {
       </div>` : ''}
 
       <div>
-        <label for="obr-resolution">Lösungs-Notiz (intern)</label>
+        <label for="obr-resolution">Admin-Notiz / Lösungs-Notiz (intern)</label>
         <textarea id="obr-resolution" placeholder="Was wurde gefixt? Commit/PR-Link, betroffener Code, Workaround…"></textarea>
       </div>
 
@@ -283,25 +227,22 @@ function openResolveDrawer(row, user, refresh) {
     const btn = document.getElementById('obr-resolve-submit')
     if (ta) ta.focus()
     if (btn) btn.addEventListener('click', async () => {
-      const resolution = ((ta && ta.value) || '').trim()
-      if (!resolution) {
-        toast('Bitte Lösungs-Notiz angeben.', 'error')
+      const note = ((ta && ta.value) || '').trim()
+      if (!note) {
+        toast('Bitte Admin-Notiz angeben.', 'error')
         if (ta) ta.focus()
         return
       }
       btn.disabled = true
       btn.textContent = 'Speichern…'
       try {
-        if (typeof resolveBugReport === 'function') {
-          await resolveBugReport(row.id, resolution)
-        } else {
-          const { error } = await sb.from('bug_reports').update({
-            status: 'resolved',
-            resolution,
-            resolved_at: new Date().toISOString()
-          }).eq('id', row.id)
-          if (error) throw error
-        }
+        // Use SECURITY DEFINER RPC to bypass RLS
+        const { error } = await sb.rpc('admin_set_bug_status', {
+          id: row.id,
+          status: 'resolved',
+          note
+        })
+        if (error) throw error
         toast('Bug als gelöst markiert.', 'success')
         if (d && typeof d.close === 'function') d.close()
         refresh()
@@ -352,18 +293,18 @@ export default {
           const { open, trend, change, lastWeek, userMap } = data
 
           const heroEl = container.querySelector('#obr-hero')
-          const critCount = open.filter(r => r.priority === 'critical').length
+          const inProgressCount = open.filter(r => r.status === 'in_progress').length
           const oldest = open.length ? open[open.length - 1] : null
           const oldestDays = oldest ? Math.floor((Date.now() - new Date(oldest.created_at).getTime()) / 86400e3) : 0
           const changeLabel = change > 0 ? `+${change}% vs. Vorwoche` : `${change}% vs. Vorwoche`
           const changeKind = change > 0 ? 'negative' : 'positive'
           heroEl.innerHTML = `
             ${statHero({ label: 'Offen gesamt', value: open.length, change: changeLabel, trend: changeKind, icon: 'bug' })}
-            ${statHero({ label: 'Kritisch', value: critCount, change: critCount > 0 ? 'Sofort beheben' : 'Keine kritischen', trend: critCount > 0 ? 'negative' : 'positive', icon: 'alert-triangle' })}
+            ${statHero({ label: 'In Arbeit', value: inProgressCount, change: inProgressCount > 0 ? 'Werden bearbeitet' : 'Keine in Bearbeitung', trend: 'neutral', icon: 'tool' })}
             ${statHero({ label: 'Neu (7 Tage)', value: lastWeek, change: `Älteste: ${oldestDays} Tg.`, trend: 'neutral', icon: 'clock' })}
           `
           heroEl.querySelectorAll('.stat-hero-value, .hero-value, [data-stat-value]').forEach((el, i) => {
-            const vals = [open.length, critCount, lastWeek]
+            const vals = [open.length, inProgressCount, lastWeek]
             if (countUp && vals[i] != null) countUp(el, vals[i])
           })
 
@@ -374,8 +315,8 @@ export default {
               <div id="obr-chart-trend" style="height:240px"></div>
             </div>
             <div class="obr-section glass-card">
-              <h3>Priorität-Verteilung</h3>
-              <div id="obr-chart-prio" style="height:240px"></div>
+              <h3>Status-Verteilung</h3>
+              <div id="obr-chart-status" style="height:240px"></div>
             </div>
           `
           try {
@@ -386,22 +327,19 @@ export default {
             })
           } catch (_) {}
           try {
-            makeDonutChart(chartsEl.querySelector('#obr-chart-prio'), {
-              data: buildPrioDistribution(open),
+            makeDonutChart(chartsEl.querySelector('#obr-chart-status'), {
+              data: buildStatusDistribution(open),
               centerLabel: open.length + ' offen'
             })
           } catch (_) {}
 
           const sorted = [...open].sort((a, b) => {
-            const ra = (PRIO[a.priority] || { rank: 0 }).rank
-            const rb = (PRIO[b.priority] || { rank: 0 }).rank
-            if (rb !== ra) return rb - ra
             return new Date(b.created_at) - new Date(a.created_at)
           })
 
           const listEl = container.querySelector('#obr-list')
           listEl.innerHTML = `<div class="obr-section glass-card">
-            <h3>Offene Reports (${open.length}) — Drag&Drop oder Dropdown zum Ändern der Priorität</h3>
+            <h3>Offene Reports (${open.length})</h3>
             ${renderTable(sorted, userMap)}
           </div>`
           wireTable(listEl, sorted, userMap, render)
@@ -434,11 +372,10 @@ export default {
             subtitle: `Stand: ${fmtDateTime(new Date().toISOString())} · ${state.open.length} offen`,
             element: container.querySelector('#obr-shell'),
             rows: state.open.map(r => ({
-              Priorität: (PRIO[r.priority] || {}).label || r.priority,
-              Titel: r.title || '',
-              Kategorie: r.category || '',
+              Status: r.status || '',
+              Beschreibung: (r.description || '').slice(0, 120),
               Gemeldet: fmtDateTime(r.created_at),
-              App: r.app_version || ''
+              'Admin-Notiz': r.admin_note || ''
             }))
           })
           toast('PDF erstellt.', 'success')
@@ -453,13 +390,12 @@ export default {
             filename: `open-bug-reports-${new Date().toISOString().slice(0, 10)}.csv`,
             rows: state.open.map(r => ({
               id: r.id,
-              priority: r.priority,
-              title: r.title,
+              status: r.status,
               description: r.description,
-              category: r.category,
               user_id: r.user_id,
               created_at: r.created_at,
-              app_version: r.app_version
+              admin_note: r.admin_note || '',
+              resolved_at: r.resolved_at || ''
             }))
           })
           toast('CSV exportiert.', 'success')

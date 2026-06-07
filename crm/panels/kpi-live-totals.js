@@ -1,5 +1,5 @@
 import { sb } from '/lib/supabase.js'
-import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
+import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
 import { makeAreaChart, makeLineChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, pulse } from '/lib/animations.js'
@@ -25,16 +25,16 @@ async function fetchTotals() {
   } catch (_) {}
 
   const today = new Date()
-  const yesterday = new Date(today.getTime() - 86_400_000)
   const dayBefore = new Date(today.getTime() - 2 * 86_400_000)
   const since24h = new Date(today.getTime() - 86_400_000).toISOString()
   const since48h = dayBefore.toISOString()
 
   const safe = (p) => p.then(r => r).catch(() => ({ count: 0, data: null }))
 
-  // app_opens as proxy for active users; daily_activity for total user-days
+  // app_opens as proxy for active users
   // episode_listening_pulses for listen duration
-  const [active24, active48, listenRows, listenRowsYday] = await Promise.all([
+  // FIX(med): renamed active48 -> activeYday (gestern 24h-48h Fenster, nicht kumulativ)
+  const [active24, activeYday, listenRows, listenRowsYday] = await Promise.all([
     safe(sb.from('app_opens').select('id', { count: 'exact', head: true }).gte('created_at', since24h)),
     safe(sb.from('app_opens').select('id', { count: 'exact', head: true }).gte('created_at', since48h).lt('created_at', since24h)),
     safe(sb.from('episode_listening_pulses').select('duration_sec,pulse_seconds,created_at').gte('created_at', since24h).limit(5000)),
@@ -45,27 +45,44 @@ async function fetchTotals() {
   const totalListenSec = sumSec(listenRows?.data)
   const ydayListenSec  = sumSec(listenRowsYday?.data)
 
-  // Fetch user/post counts via admin_daily_series as fallback
+  // FIX(high): total_users — direct COUNT on users table, not sum of 60-day signups
+  // FIX(high): total_posts — direct COUNT on updates table, not last daily_series value
   let totalUsers = 0, ydayUsers = 0, totalPosts = 0, ydayPosts = 0
   try {
-    const [usersRes, postsRes] = await Promise.all([
-      sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: 60 }),
+    const [usersCountRes, postsCountRes, usersSeriesRes, postsSeriesRes] = await Promise.all([
+      sb.from('users').select('id', { count: 'exact', head: true }),
+      sb.from('updates').select('id', { count: 'exact', head: true }),
+      sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: 2 }),
       sb.rpc('admin_daily_series', { p_metric: 'posts', p_days: 2 })
     ])
-    if (!usersRes.error && usersRes.data) {
-      const vals = usersRes.data.map(d => Number(d.value) || 0)
-      totalUsers = vals.reduce((a, b) => a + b, 0)
-      ydayUsers = totalUsers - (vals[vals.length - 1] || 0)
+
+    if (!usersCountRes.error) {
+      totalUsers = usersCountRes.count ?? 0
+      // FIX(med): ydayUsers = totalUsers minus today's signups (not totalUsers - lastDay)
+      if (!usersSeriesRes.error && usersSeriesRes.data) {
+        const vals = usersSeriesRes.data.map(d => Number(d.value) || 0)
+        // vals[-1] = heute, vals[-2] = gestern → ydayUsers = total minus heutige Signups
+        ydayUsers = totalUsers - (vals[vals.length - 1] || 0)
+      } else {
+        ydayUsers = totalUsers
+      }
     }
-    if (!postsRes.error && postsRes.data && postsRes.data.length >= 2) {
-      totalPosts = Number(postsRes.data[postsRes.data.length - 1]?.value) || 0
-      ydayPosts = Number(postsRes.data[postsRes.data.length - 2]?.value) || 0
+
+    if (!postsCountRes.error) {
+      totalPosts = postsCountRes.count ?? 0
+      // ydayPosts = totalPosts minus heutige Posts
+      if (!postsSeriesRes.error && postsSeriesRes.data) {
+        const vals = postsSeriesRes.data.map(d => Number(d.value) || 0)
+        ydayPosts = totalPosts - (vals[vals.length - 1] || 0)
+      } else {
+        ydayPosts = totalPosts
+      }
     }
   } catch (_) {}
 
   return {
     total_users:      { value: totalUsers, prev: ydayUsers },
-    active_24h:       { value: active24.count ?? 0, prev: active48.count ?? 0 },
+    active_24h:       { value: active24.count ?? 0, prev: activeYday.count ?? 0 },
     total_posts:      { value: totalPosts, prev: ydayPosts },
     listening_hours:  { value: Math.round(totalListenSec / 3600), prev: Math.round(ydayListenSec / 3600) }
   }
@@ -90,16 +107,18 @@ function normalize(raw) {
 async function fetchTimeSeries(kpiKey, days = 30) {
   // No crm_kpi_timeseries RPC in schema — skip RPC, go direct
   const since = new Date(Date.now() - days * 86_400_000).toISOString()
+  // FIX(high): .limit() on all direct-table queries to prevent massive data transfer
+  const SERIES_LIMIT = 5000
   let rows = []
   try {
     if (kpiKey === 'active_24h') {
-      const { data } = await sb.from('app_opens').select('created_at').gte('created_at', since)
+      const { data } = await sb.from('app_opens').select('created_at').gte('created_at', since).limit(SERIES_LIMIT)
       rows = bucketByDay(data || [], 'created_at', days, false)
     } else if (kpiKey === 'listening_hours') {
-      const { data } = await sb.from('episode_listening_pulses').select('created_at,duration_sec,pulse_seconds').gte('created_at', since)
+      const { data } = await sb.from('episode_listening_pulses').select('created_at,duration_sec,pulse_seconds').gte('created_at', since).limit(SERIES_LIMIT)
       rows = bucketByDay(data || [], 'created_at', days, false, r => Number(r.duration_sec || r.pulse_seconds || 0) / 3600)
     } else if (kpiKey === 'total_users' || kpiKey === 'total_posts') {
-      // 7.6.: nutze admin_daily_series RPC die RLS via SECURITY DEFINER bypasst
+      // nutze admin_daily_series RPC die RLS via SECURITY DEFINER bypasst
       const metric = kpiKey === 'total_users' ? 'signups' : 'posts'
       const { data } = await sb.rpc('admin_daily_series', { p_metric: metric, p_days: days })
       // cumulative = true für total_users (jeder neue User = +1 zum Total)
@@ -185,6 +204,7 @@ function styles() {
       border-radius:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
       color:inherit; font-size:13px; font-weight:500; cursor:pointer; transition:all .15s; }
     .toolbar button:hover { background:rgba(255,255,255,0.08); transform:translateY(-1px); }
+    .toolbar button:disabled { opacity:0.5; cursor:not-allowed; pointer-events:none; }
     .toolbar .live-dot { display:inline-flex; align-items:center; gap:6px; padding:6px 10px;
       border-radius:999px; background:rgba(34,197,94,0.1); color:#22c55e; font-size:12px; font-weight:600; }
     .toolbar .live-dot::before { content:''; width:7px; height:7px; border-radius:50%;
@@ -245,7 +265,7 @@ function toolbarHtml() {
     </div>`
 }
 
-async function renderDrilldown(def, totals) {
+async function renderDrilldown(def, totals, onClose) {
   const body = document.createElement('div')
   body.className = 'drawer-content'
   body.innerHTML = `
@@ -253,7 +273,15 @@ async function renderDrilldown(def, totals) {
     <div class="sub">Lade historische Daten …</div>
     <div class="chart-wrap" id="drill-chart"><div class="skel-card" style="height:280px"></div></div>`
 
-  try { drawer({ title: def.label, content: body, width: 720 }) }
+  // FIX(med): store drawer close function for cleanup
+  let closeDrawer = null
+  try {
+    const drawerResult = drawer({ title: def.label, content: body, width: 720 })
+    // drawer() may return a close function or an object with close()
+    if (typeof drawerResult === 'function') closeDrawer = drawerResult
+    else if (drawerResult && typeof drawerResult.close === 'function') closeDrawer = drawerResult.close.bind(drawerResult)
+    if (onClose) onClose(closeDrawer)
+  }
   catch (e) { toast({ type: 'error', message: 'Drawer konnte nicht geöffnet werden' }); return }
 
   let series = []
@@ -280,7 +308,8 @@ async function renderDrilldown(def, totals) {
 
   const el = body.querySelector('#drill-chart')
   if (!series.length) {
-    el.innerHTML = `<div class="empty-state"><div class="icon">${iconHtml('alert')}</div><h3>Daten kommen sobald die Tabelle profiles oder das RPC crm_kpi_timeseries angelegt ist</h3><p>Für diesen Zeitraum liegen noch keine Werte vor.</p></div>`
+    // FIX(low): user-friendly empty state text, no internal implementation hints
+    el.innerHTML = `<div class="empty-state"><div class="icon">${iconHtml('alert')}</div><h3>Keine historischen Daten verfügbar</h3><p>Für diesen Zeitraum liegen noch keine Werte vor.</p></div>`
   } else {
     try {
       makeLineChart(el, {
@@ -333,6 +362,8 @@ export default {
 
       let currentTotals = null
       let refreshTimer = null
+      // FIX(med): track open drawer close function for cleanup
+      let activeDrawerClose = null
 
       const body = container.querySelector('#body')
       const lastUpd = container.querySelector('#last-updated')
@@ -372,7 +403,9 @@ export default {
           const handler = () => {
             const key = card.dataset.kpi
             const def = KPI_DEFS.find(d => d.key === key)
-            if (def && currentTotals) renderDrilldown(def, currentTotals)
+            if (def && currentTotals) {
+              renderDrilldown(def, currentTotals, (closeFn) => { activeDrawerClose = closeFn })
+            }
           }
           card.addEventListener('click', handler)
           card.addEventListener('keydown', e => {
@@ -382,6 +415,9 @@ export default {
       }
 
       const load = async (isInitial = false) => {
+        // FIX(low): disable refresh button during load to prevent parallel calls
+        const btnRefresh = container.querySelector('#btn-refresh')
+        if (btnRefresh) btnRefresh.disabled = true
         try {
           const totals = await fetchTotals()
           const prev = currentTotals
@@ -420,13 +456,18 @@ export default {
           else {
             try { toast({ type: 'error', message: 'Aktualisierung fehlgeschlagen' }) } catch (_) {}
           }
+        } finally {
+          if (btnRefresh) btnRefresh.disabled = false
         }
       }
 
-      container.querySelector('#btn-refresh')?.addEventListener('click', async () => {
+      // FIX(low): debounce refresh button to prevent parallel fetches on rapid clicks
+      const debouncedRefresh = debounce(async () => {
         await load(false)
         try { toast({ type: 'success', message: 'Kennzahlen aktualisiert' }) } catch (_) {}
-      })
+      }, 300)
+
+      container.querySelector('#btn-refresh')?.addEventListener('click', debouncedRefresh)
       container.querySelector('#btn-pdf')?.addEventListener('click', () => {
         try { exportPanelAsPdf(container, 'Live-Kennzahlen.pdf') }
         catch (_) { toast({ type: 'error', message: 'PDF-Export nicht verfügbar' }) }
@@ -447,7 +488,11 @@ export default {
 
       refreshTimer = setInterval(() => load(false), REFRESH_MS)
 
-      return () => { if (refreshTimer) clearInterval(refreshTimer) }
+      // FIX(med): cleanup also closes any open drawer to prevent DOM leaks
+      return () => {
+        if (refreshTimer) clearInterval(refreshTimer)
+        if (activeDrawerClose) { try { activeDrawerClose() } catch (_) {} }
+      }
     } catch (mountErr) {
       console.error('[kpi-live-totals] mount error', mountErr)
       try {

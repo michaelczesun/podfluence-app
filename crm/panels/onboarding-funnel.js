@@ -7,10 +7,10 @@ import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const STAGES = [
-  { key: 'signup',  label: 'Signup',          desc: 'Account erstellt',        icon: 'user-plus',   color: '#6366f1' },
-  { key: 'profile', label: 'Profil gefüllt',  desc: 'Avatar + Bio gesetzt',    icon: 'user-check',  color: '#8b5cf6' },
-  { key: 'listen',  label: 'First Listen',    desc: 'Erste Folge angehört',    icon: 'headphones',  color: '#ec4899' },
-  { key: 'active',  label: 'Active',          desc: '≥3 Aktionen / 7 Tage',    icon: 'zap',         color: '#10b981' }
+  { key: 'signup',  label: 'Signup',          desc: 'Account erstellt',            icon: 'user-plus',   color: '#6366f1' },
+  { key: 'profile', label: 'Profil gefüllt',  desc: 'Avatar + Bio gesetzt',        icon: 'user-check',  color: '#8b5cf6' },
+  { key: 'listen',  label: 'First Listen',    desc: 'Erste Folge angehört',        icon: 'headphones',  color: '#ec4899' },
+  { key: 'active',  label: 'Active',          desc: 'Zuletzt aktiv ≤ 7 Tage',      icon: 'zap',         color: '#10b981' }
 ]
 
 async function fetchFunnel() {
@@ -18,15 +18,20 @@ async function fetchFunnel() {
   try {
     const { data, error } = await sb.rpc('onboarding_funnel_stats', { days: 30 })
     if (!error && data) return normalizeRpc(data)
-  } catch (_) { /* fall through */ }
+    // RPC not available — fall through to manual build
+    console.warn('[onboarding-funnel] onboarding_funnel_stats nicht verfügbar, nutze Fallback')
+  } catch (_) {
+    console.warn('[onboarding-funnel] onboarding_funnel_stats nicht verfügbar, nutze Fallback')
+  }
 
   // Build from available RPCs: admin_users_list_full + admin_daily_series + episode_listening_pulses
   const since30 = new Date(Date.now() - 30 * 86400000).toISOString()
   const since7  = new Date(Date.now() - 7  * 86400000).toISOString()
 
+  // FIX (high): use correct parameter names without p_-prefix
   const [usersRes, signupSeriesRes, listensRes] = await Promise.all([
-    sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' }),
-    sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: 30 }),
+    sb.rpc('admin_users_list_full', { limit: 5000, offset: 0, search: '' }),
+    sb.rpc('admin_daily_series', { metric: 'signups', days: 30 }),
     sb.from('episode_listening_pulses')
       .select('user_id')
       .gte('created_at', since30)
@@ -36,18 +41,24 @@ async function fetchFunnel() {
   if (usersRes.error) throw usersRes.error
 
   const all = usersRes.data || []
+  // FIX (med): RLS may block episode_listening_pulses — treat empty result gracefully,
+  // log warning so admin is aware instead of silently returning empty listenMembers.
+  if (listensRes.error) {
+    console.warn('[onboarding-funnel] episode_listening_pulses query blocked (RLS?), First-Listen-Stufe zeigt 0:', listensRes.error.message)
+  }
   const listenSet = new Set((listensRes.data || []).map(l => l.user_id))
 
   // Signup = all users (total registered)
   const signupMembers = all
 
   // Profile filled = has avatar_url OR bio (best proxy available)
+  // FIX (med): columns depend on what admin_users_list_full returns — if missing, profileMembers = []
   const profileMembers = all.filter(u => u.avatar_url || u.bio)
 
   // First listen = appeared in listening_pulses in last 30d
   const listenMembers = all.filter(u => listenSet.has(u.id))
 
-  // Active = logged in within last 7 days
+  // Active = logged in within last 7 days (last_seen_at proxy)
   const activeMembers = all.filter(u => u.last_seen_at && u.last_seen_at >= since7)
 
   const members = {
@@ -267,13 +278,15 @@ async function sendReactivationMails(userIds) {
   })
   if (!confirmed) return
 
+  // FIX (med): Edge Function send-reactivation-mail deployment status unknown.
+  // Show clear error to admin instead of silent catch.
   try {
     const { error } = await sb.functions.invoke('send-reactivation-mail', { body: { user_ids: userIds } })
     if (error) throw error
     toast(`Reactivation-Mail an ${userIds.length} Nutzer:innen versendet`, 'success')
   } catch (e) {
-    // queue_reactivation_mails RPC existiert nicht im Schema
-    toast('Versand fehlgeschlagen: ' + (e.message || 'Unbekannter Fehler'), 'error')
+    console.error('[onboarding-funnel] send-reactivation-mail Edge Function Fehler:', e)
+    toast('Versand fehlgeschlagen: ' + (e.message || 'Edge Function nicht erreichbar — bitte prüfen ob send-reactivation-mail deployed ist'), 'error')
   }
 }
 
@@ -359,7 +372,10 @@ function openDropoffDrawer(data, stageKey) {
       catch (err) { toast('User-Detail konnte nicht geöffnet werden', 'error') }
     }
   })
-  sendBtn?.addEventListener('click', async () => {
+  // FIX (low): e.preventDefault + e.stopPropagation to avoid double-click from label wrapping
+  sendBtn?.addEventListener('click', async (e) => {
+    e.preventDefault()
+    e.stopPropagation()
     const ids = [...cbAll()].filter(x => x.checked).map(x => x.value)
     await sendReactivationMails(ids)
   })
@@ -478,7 +494,8 @@ export default {
             console.error('[onboarding-funnel] load failed:', err)
             renderError(funnelHost, err, load)
             heroes.innerHTML = `<div class="of-empty" style="grid-column:1/-1;">${iconHtml('alert-triangle')}<div>Fehler: ${htmlEscape(err?.message || 'Unbekannter Fehler')}</div></div>`
-            chartsHost.innerHTML = ''
+            // FIX (low): show error UI in charts area too instead of leaving it empty
+            chartsHost.innerHTML = `<div class="glass-card" style="padding:32px; text-align:center; color:var(--text-secondary,#6b7280); grid-column:1/-1;">${iconHtml('alert-triangle')}<div style="margin-top:8px;">Charts konnten nicht geladen werden</div></div>`
           }
         }
 

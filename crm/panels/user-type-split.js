@@ -18,7 +18,7 @@ export default {
           <div class="panel-head">
             <div>
               <h2>Listener vs. Podcaster</h2>
-              <p class="panel-sub">Verteilung der User-Typen und Conversion-Trend</p>
+              <p class="panel-sub">Verteilung der User-Typen und Wachstums-Trend</p>
             </div>
             <div class="toolbar" id="utsToolbar">
               <button class="btn btn-ghost" data-act="refresh" title="Aktualisieren">${iconHtml('refresh')} Aktualisieren</button>
@@ -48,9 +48,8 @@ export default {
         }
       })
 
-      // Hintergrund-Fetch — Skeleton steht schon, fadeIn parallel
+      // FIX #8 (low): _load first, fadeIn after content is ready (called inside _load)
       this._load(container)
-      fadeIn(container)
     } catch (err) {
       console.error('[user-type-split] mount error', err)
       container.innerHTML = `
@@ -69,19 +68,27 @@ export default {
     body.innerHTML = skeletonLoader({ rows: 4, height: 140 })
 
     try {
-      // Use admin_user_type_split for fast counts, admin_users_list_full for drawer details
+      // FIX #1: Use correct RPC param names — without p_ prefix: limit, offset, search
       const [splitRes, usersRes] = await Promise.all([
         sb.rpc('admin_user_type_split'),
-        sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' })
+        sb.rpc('admin_users_list_full', { limit: 5000, offset: 0, search: '' })
       ])
       if (splitRes.error) throw splitRes.error
       if (usersRes.error) throw usersRes.error
 
       const split = splitRes.data || {}
       const all = usersRes.data || []
-      const total = (split.listener || 0) + (split.podcaster || 0) + (split.both || 0)
+
+      // FIX #3: Consistent total — always from split counts (listener + podcaster + both)
+      // listeners = type==='listener' only (NOT !u.type), both-users counted once in split.both
+      const splitListeners = split.listener || 0
+      const splitPodcasters = split.podcaster || 0
+      const splitBoth = split.both || 0
+      const effectiveTotal = (splitListeners + splitPodcasters + splitBoth) || all.length || 1
+
+      // FIX #3: listeners filter strictly type==='listener', not fallback !u.type to avoid double-count
+      const listeners = all.filter(u => u.type === 'listener')
       const podcasters = all.filter(u => u.type === 'podcaster' || u.type === 'both')
-      const listeners = all.filter(u => u.type === 'listener' || !u.type)
       const verifiedPodcasters = podcasters.filter(u => u.is_verified)
 
       const months = {}
@@ -89,7 +96,7 @@ export default {
       for (let i = 11; i >= 0; i--) {
         const d = new Date(now.getFullYear(), now.getMonth() - i, 1)
         const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-        months[key] = { month: key, listeners: 0, podcasters: 0, conversions: 0 }
+        months[key] = { month: key, listeners: 0, podcasters: 0 }
       }
       for (const u of all) {
         if (u.created_at) {
@@ -105,7 +112,6 @@ export default {
       this._lastTrend = trend
       this._lastUsers = all
 
-      const effectiveTotal = total || all.length || 1
       const convRate = effectiveTotal ? ((podcasters.length / effectiveTotal) * 100).toFixed(1) : '0.0'
 
       body.innerHTML = `
@@ -151,8 +157,8 @@ export default {
 
         <div class="glass-card uts-trend-card">
           <div class="card-head">
-            <h3>Conversion-Trend</h3>
-            <span class="hint">Listener → Podcaster pro Monat (12 Monate)</span>
+            <h3>Wachstums-Trend</h3>
+            <span class="hint">Neue Listener und Podcaster pro Monat (12 Monate)</span>
           </div>
           <div id="utsTrend" class="uts-trend"></div>
         </div>
@@ -163,11 +169,11 @@ export default {
       statHero(body.querySelector('#heroPodcasters'), { label: 'Podcaster', value: podcasters.length, icon: 'mic', accent: '#ec4899' })
       statHero(body.querySelector('#heroConv'), { label: 'Podcaster-Anteil', value: convRate, suffix: '%', icon: 'trending-up', accent: '#10b981' })
 
-      body.querySelectorAll('.stat-hero .value').forEach(el => {
-        const raw = el.textContent.replace(/[^0-9.]/g, '')
-        const num = parseFloat(raw)
-        if (!isNaN(num)) countUp(el, num, { duration: 900 })
-      })
+      // FIX #7: countUp with raw numbers instead of parsing textContent (avoids thousands-dot misparse)
+      countUp(body.querySelector('#heroTotal .value'), effectiveTotal, { duration: 900 })
+      countUp(body.querySelector('#heroListeners .value'), listeners.length, { duration: 900 })
+      countUp(body.querySelector('#heroPodcasters .value'), podcasters.length, { duration: 900 })
+      countUp(body.querySelector('#heroConv .value'), parseFloat(convRate), { duration: 900, decimals: 1 })
 
       const donut = makeDonutChart(body.querySelector('#utsDonut'), [
         { label: 'Listener', value: listeners.length, color: '#6366f1', key: 'listeners' },
@@ -181,13 +187,13 @@ export default {
         onSegmentClick: (seg) => this._openSegmentDrawer(seg.key, all)
       })
 
+      // FIX #2: Remove 'conversions' series — never populated, misleading
       makeAreaChart(body.querySelector('#utsTrend'), {
         data: trend,
         x: 'month',
         series: [
           { key: 'listeners', label: 'Neue Listener', color: '#6366f1' },
-          { key: 'podcasters', label: 'Neue Podcaster', color: '#ec4899' },
-          { key: 'conversions', label: 'Conversions', color: '#10b981' }
+          { key: 'podcasters', label: 'Neue Podcaster', color: '#ec4899' }
         ],
         height: 260,
         smooth: true,
@@ -199,6 +205,9 @@ export default {
         btn.addEventListener('mouseleave', () => donut?.highlight?.(null))
         btn.addEventListener('click', () => this._openSegmentDrawer(btn.dataset.seg, all))
       })
+
+      // FIX #8: fadeIn after content rendered
+      fadeIn(body)
     } catch (err) {
       console.error('[user-type-split] load error', err)
       body.innerHTML = `
@@ -217,7 +226,8 @@ export default {
     let filtered = []
     let title = ''
     if (segment === 'listeners') {
-      filtered = allUsers.filter(u => u.type === 'listener' || !u.type)
+      // FIX #3: strictly type==='listener' — 'both' users are NOT listeners
+      filtered = allUsers.filter(u => u.type === 'listener')
       title = 'Listener'
     } else if (segment === 'podcasters') {
       filtered = allUsers.filter(u => (u.type === 'podcaster' || u.type === 'both') && !u.is_verified)
@@ -244,7 +254,8 @@ export default {
       return
     }
 
-    const rows = filtered.slice(0, 500).map(u => `
+    // FIX #5: Render all filtered rows (not just slice(0,500)) so search works over full set
+    const rows = filtered.map(u => `
       <tr data-uid="${htmlEscape(u.id)}" class="row-clickable">
         <td>
           <div class="user-cell">
@@ -282,14 +293,16 @@ export default {
             <tbody id="utsRows">${rows}</tbody>
           </table>
         </div>
-        ${filtered.length > 500 ? `<p class="muted center">Zeige erste 500 von ${fmtNumber(filtered.length)}. CSV-Export enthält alle.</p>` : ''}
       `,
       onMount: (drawerEl) => {
         const search = drawerEl.querySelector('#utsSearch')
         const tbody = drawerEl.querySelector('#utsRows')
+        const allRows = Array.from(tbody.querySelectorAll('tr'))
+
+        // FIX #5: Search filters over all rows (full filtered array rendered), not just first 500
         const onSearch = debounce(() => {
           const q = search.value.trim().toLowerCase()
-          tbody.querySelectorAll('tr').forEach(tr => {
+          allRows.forEach(tr => {
             tr.style.display = !q || tr.textContent.toLowerCase().includes(q) ? '' : 'none'
           })
         }, 120)
@@ -299,7 +312,7 @@ export default {
           exportCsv(filtered, { filename: `${segment}-users.csv` })
         })
 
-        tbody.querySelectorAll('tr.row-clickable').forEach(tr => {
+        allRows.forEach(tr => {
           tr.addEventListener('click', () => {
             const uid = tr.dataset.uid
             if (uid) showUserDetailModal(uid)

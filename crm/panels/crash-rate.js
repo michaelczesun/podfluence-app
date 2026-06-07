@@ -24,29 +24,35 @@ function fmtRelative(iso) {
 async function fetchData() {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
-  // Try crash_logs; if table absent treat as 0 crashes
+  // Try crash_logs; track error explicitly — stille Unterdrückung wurde entfernt
   let list = []
+  let crashTableMissing = false
   const { data: crashes, error: crashErr } = await sb
     .from('crash_logs')
     .select('*')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
 
-  if (!crashErr) list = crashes || []
-  // if crashErr (table missing etc.) → list stays []
+  if (crashErr) {
+    // Table missing or RLS error — flag it so UI can warn instead of silently showing 0
+    crashTableMissing = true
+    console.warn('[crash-rate] crash_logs nicht erreichbar:', crashErr.message)
+  } else {
+    list = crashes || []
+  }
 
-  // Use app_opens as session proxy (distinct user-days)
-  const { data: opens } = await sb
+  // Fix: head:true gibt keinen Body zurück — count kommt als separates Feld
+  const { count: sessions, error: opensErr } = await sb
     .from('app_opens')
-    .select('id', { count: 'exact', head: true })
+    .select('*', { count: 'exact', head: true })
     .gte('created_at', since)
-  const sessions = opens?.count ?? 0
-  const sessionsUnavailable = sessions === 0
+  const sessionsCount = sessions ?? 0
+  const sessionsUnavailable = opensErr != null || sessionsCount === 0
 
   const totalCrashes = list.length
   const crashSessions = new Set(list.map(c => c.session_id).filter(Boolean)).size
-  const crashFreeRate = sessions > 0
-    ? Math.max(0, Math.min(100, ((sessions - crashSessions) / sessions) * 100))
+  const crashFreeRate = sessionsCount > 0
+    ? Math.max(0, Math.min(100, ((sessionsCount - crashSessions) / sessionsCount) * 100))
     : (totalCrashes === 0 ? 100 : 99)
 
   const buckets = []
@@ -78,8 +84,9 @@ async function fetchData() {
     crashFreeRate,
     totalCrashes,
     crashSessions,
-    sessions,
+    sessions: sessionsCount,
     sessionsUnavailable,
+    crashTableMissing,
     series: buckets,
     topLocations,
     raw: list,
@@ -120,12 +127,17 @@ function renderContent(body, data) {
   body.innerHTML = `
     <div class="panel-grid" style="display:grid;gap:20px">
 
+      ${data.crashTableMissing ? `
+      <div class="glass-card" style="padding:12px 16px;display:flex;align-items:center;gap:10px;font-size:13px;border-left:3px solid #f59e0b;color:var(--text-muted)">
+        ${iconHtml('alert-circle')} <span>Tabelle <code>crash_logs</code> nicht gefunden — Crash-Daten nicht verfügbar. Zur direkten Diagnose bitte <a href="${SENTRY_URL}" target="_blank" rel="noopener" style="color:#f59e0b">Sentry</a> nutzen.</span>
+      </div>` : ''}
+
       <section class="glass-card hero-section" style="padding:24px;display:grid;grid-template-columns:minmax(280px,1fr) 1fr;gap:24px;align-items:center">
         <div id="radial-hero" style="min-height:260px;display:flex;align-items:center;justify-content:center"></div>
         <div class="hero-stats" style="display:grid;gap:16px">
           <div>
             <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)">Crash-free Sessions</div>
-            <div style="font-size:44px;font-weight:700;line-height:1.1;color:${heroColor}" id="hero-rate">0,00%</div>
+            <div style="font-size:44px;font-weight:700;line-height:1.1;color:${heroColor}" id="hero-rate">0.00%</div>
             <div style="font-size:13px;color:var(--text-muted)">über die letzten 7 Tage</div>
           </div>
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
@@ -144,7 +156,7 @@ function renderContent(body, data) {
           </div>
           ${data.sessionsUnavailable ? `
           <div class="glass-card" style="padding:10px 14px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-muted)">
-            ${iconHtml('alert')} Daten kommen sobald die Tabelle <code>app_sessions</code> angelegt ist
+            ${iconHtml('alert-circle')} Daten kommen sobald die Tabelle <code>app_sessions</code> angelegt ist
           </div>` : ''}
           <a href="${SENTRY_URL}" target="_blank" rel="noopener" class="btn btn-primary" style="justify-self:start">
             ${iconHtml('external-link')} Volle Details in Sentry
@@ -180,7 +192,7 @@ function renderContent(body, data) {
             </thead>
             <tbody>
               ${data.topLocations.length === 0 ? `
-                <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">Keine Crashes erfasst</td></tr>
+                <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">${data.crashTableMissing ? 'Crash-Tabelle nicht verfügbar — Details in Sentry' : 'Keine Crashes erfasst'}</td></tr>
               ` : data.topLocations.map((loc, i) => `
                 <tr data-component="${htmlEscape(loc.component)}" class="row-clickable" style="cursor:pointer">
                   <td><span class="rank-badge rank-${i + 1}">${i + 1}</span></td>
@@ -256,9 +268,14 @@ function renderContent(body, data) {
             <h4 style="margin:0 0 8px 0;font-size:13px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Letzte Vorkommen</h4>
             <div style="display:grid;gap:6px">
               ${last10.map(c => `
-                <div class="glass-card" style="padding:10px 12px;display:flex;justify-content:space-between;align-items:center;font-size:13px">
-                  <span>${htmlEscape(fmtDateTime(c.created_at))}</span>
-                  <span style="font-family:monospace;font-size:11px;color:var(--text-muted)">${htmlEscape(String(c.id).slice(0, 8))}</span>
+                <div class="glass-card" style="padding:10px 12px;display:grid;gap:4px;font-size:13px">
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <span>${htmlEscape(fmtDateTime(c.created_at))}</span>
+                    <span style="font-family:monospace;font-size:11px;color:var(--text-muted)">${htmlEscape(String(c.id).slice(0, 8))}</span>
+                  </div>
+                  ${c.message ? `<div style="font-size:12px;color:var(--text-muted);font-family:monospace;white-space:pre-wrap;overflow:hidden;max-height:60px">${htmlEscape(c.message)}</div>` : ''}
+                  ${c.stack ? `<details style="font-size:11px;color:var(--text-muted)"><summary style="cursor:pointer">Stack-Trace</summary><pre style="white-space:pre-wrap;overflow:hidden;max-height:120px;margin:4px 0 0">${htmlEscape(c.stack)}</pre></details>` : ''}
+                  ${!c.message && !c.stack ? `<div style="font-size:11px;color:var(--text-muted)">Kein Stack-Trace — Details in Sentry</div>` : ''}
                 </div>
               `).join('')}
             </div>
@@ -338,7 +355,8 @@ const exported = {
         try {
           const data = await fetchData()
           currentData = data
-          if (data.totalCrashes === 0 && data.sessions === 0) {
+          // Empty-State nur wenn crash_logs OK war UND wirklich 0 Crashes
+          if (!data.crashTableMissing && data.totalCrashes === 0 && data.sessions === 0) {
             renderEmpty(body)
           } else {
             renderContent(body, data)
@@ -368,6 +386,8 @@ const exported = {
             component: c.component,
             session_id: c.session_id,
             created_at: c.created_at,
+            message: c.message,
+            stack: c.stack,
           })))
           toast('Crash-Daten als CSV exportiert', 'success')
         } catch (e) {

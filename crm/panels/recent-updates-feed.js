@@ -53,7 +53,8 @@ function applyFilters() {
     if (state.filter === 'poll' && cat !== 'poll') return false
     if (state.filter === 'with-image' && cat !== 'with-image') return false
     if (!q) return true
-    const hay = (p.content || '') + ' ' + (p.profiles?.username || '') + ' ' + (p.profiles?.display_name || '')
+    // FIX: use full_name (actual column from select) instead of display_name (does not exist)
+    const hay = (p.content || '') + ' ' + (p.profiles?.username || '') + ' ' + (p.profiles?.full_name || '')
     return hay.toLowerCase().includes(q)
   })
 }
@@ -113,9 +114,11 @@ function renderCharts(root) {
 
 function postCardHtml(p) {
   const u = p.profiles || {}
+  // FIX: use full_name (actual column) instead of display_name (does not exist in select)
+  const displayName = u.full_name || u.username || '?'
   const avatar = u.avatar_url
     ? `<img src="${htmlEscape(u.avatar_url)}" alt="" class="post-avatar" />`
-    : `<div class="post-avatar post-avatar--placeholder">${htmlEscape((u.display_name || u.username || '?').slice(0, 1).toUpperCase())}</div>`
+    : `<div class="post-avatar post-avatar--placeholder">${htmlEscape(displayName.slice(0, 1).toUpperCase())}</div>`
   const verified = u.is_verified ? `<span class="badge badge--verified" title="Verifiziert">✓</span>` : ''
   const cat = classifyPost(p)
   const catBadge = {
@@ -133,7 +136,7 @@ function postCardHtml(p) {
         <button class="post-user" data-action="open-user" data-uid="${htmlEscape(u.id || p.user_id || '')}">
           ${avatar}
           <div class="post-user__meta">
-            <div class="post-user__name">${htmlEscape(u.display_name || u.username || 'Unbekannt')} ${verified}</div>
+            <div class="post-user__name">${htmlEscape(displayName)} ${verified}</div>
             <div class="post-user__sub">@${htmlEscape(u.username || '—')} · ${fmtRelativeTime(p.created_at)}</div>
           </div>
         </button>
@@ -189,30 +192,24 @@ function renderFeed(root) {
 
 function openUserDrawer(userId) {
   if (!userId) return
-  if (typeof showUserDetailModal === 'function') {
-    try { showUserDetailModal(userId); return } catch (_) {}
-  }
-  // Tabelle 'profiles' existiert nicht im Schema — Empty-State anzeigen
-  const d = drawer({ title: 'Benutzer-Details', width: 480 })
-  d.body.innerHTML = `
-    <div class="empty-state glass-card" style="padding:24px;">
-      <div class="empty-state__icon">${iconHtml('alert')}</div>
-      <div class="empty-state__title">Tabelle nicht verfügbar</div>
-      <div class="empty-state__text">Daten kommen sobald die Tabelle <code>profiles</code> angelegt ist.</div>
-    </div>`
+  // showUserDetailModal aus panel-actions.js ist der einzige korrekte Weg.
+  // FIX: Fallback-Drawer mit nicht existierender `profiles`-Tabelle entfernt.
+  try { showUserDetailModal(userId) } catch (_) {}
 }
 
 function viewPost(post) {
   const m = modal({ title: 'Post anzeigen', width: 640 })
   const u = post.profiles || {}
+  // FIX: use full_name; remove dead media_url fallback (column does not exist in updates)
+  const displayName = u.full_name || u.username || '—'
   m.body.innerHTML = `
     <div class="post-view">
       <div class="post-view__head">
-        <strong>${htmlEscape(u.display_name || u.username || '—')}</strong>
+        <strong>${htmlEscape(displayName)}</strong>
         <span class="text-muted">· ${fmtDateTime(post.created_at)}</span>
       </div>
       <div class="post-view__content">${htmlEscape(post.content || '')}</div>
-      ${(post.image_url || post.media_url) ? `<img class="post-view__img" src="${htmlEscape(post.image_url || post.media_url)}" />` : ''}
+      ${post.image_url ? `<img class="post-view__img" src="${htmlEscape(post.image_url)}" />` : ''}
       <div class="post-view__metrics">❤️ ${fmtNumber(post.likes_count || 0)} · 💬 ${fmtNumber(post.comments_count || 0)}</div>
     </div>`
 }
@@ -232,6 +229,8 @@ function editPost(post) {
   m.body.querySelector('#edit-save').addEventListener('click', async () => {
     const next = m.body.querySelector('#edit-content').value
     try {
+      // NOTE: sb in CRM context uses service-role key (bypasses RLS).
+      // If this ever fails with 403, add an admin_update_post(id, content) SECURITY DEFINER RPC.
       const { error } = await sb.from('updates').update({ content: next }).eq('id', post.id)
       if (error) throw error
       toast({ kind: 'success', text: 'Post aktualisiert.' })
@@ -244,6 +243,8 @@ function editPost(post) {
 }
 
 async function deletePostFlow(post) {
+  // FIX: capture panelRoot before async gap to guard against unmount() during await
+  const root = panelRoot
   const ok = await confirmDialog({
     title: 'Post löschen?',
     text: 'Diese Aktion kann nicht rückgängig gemacht werden.',
@@ -261,10 +262,11 @@ async function deletePostFlow(post) {
     toast({ kind: 'success', text: 'Post gelöscht.' })
     state.posts = state.posts.filter(p => p.id !== post.id)
     applyFilters()
-    if (panelRoot) {
-      renderFeed(panelRoot)
-      renderHeros(panelRoot)
-      renderCharts(panelRoot)
+    // FIX: use captured root + null-check in case panel was unmounted during confirm dialog
+    if (root) {
+      renderFeed(root)
+      renderHeros(root)
+      renderCharts(root)
     }
   } catch (e) {
     toast({ kind: 'error', text: 'Löschen fehlgeschlagen: ' + (e?.message || e) })
@@ -275,14 +277,18 @@ let panelRoot = null
 
 async function reload() {
   if (!panelRoot) return
-  const body = panelRoot.querySelector('#body')
+  const root = panelRoot
+  const grid = root.querySelector('#feed-grid')
+  // FIX: show loading skeleton in feed-grid on manual refresh so user gets feedback
+  if (grid) grid.innerHTML = skeletonLoader({ count: 6, height: 180, layout: 'grid' })
+  const body = root.querySelector('#body')
   try {
     state.loading = true
     state.posts = await fetchData()
     applyFilters()
-    renderHeros(panelRoot)
-    renderCharts(panelRoot)
-    renderFeed(panelRoot)
+    renderHeros(root)
+    renderCharts(root)
+    renderFeed(root)
   } catch (e) {
     if (body) {
       body.innerHTML = `

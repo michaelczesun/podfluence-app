@@ -33,39 +33,29 @@ function buildDayBuckets(rangeDays) {
   return buckets
 }
 
+// FIX (high): use parameter names matching DB signature admin_daily_series(metric, days) — no p_ prefix
+// FIX (med): return { buckets, total } directly from admin_daily_series data — no dummy-row synthesis
 async function fetchSignupsInRange(rangeDays) {
-  const since = new Date()
-  since.setDate(since.getDate() - (rangeDays - 1))
-  since.setHours(0, 0, 0, 0)
-
-  const { data, error } = await sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: rangeDays })
+  const { data, error } = await sb.rpc('admin_daily_series', { metric: 'signups', days: rangeDays })
   if (error) throw error
-  // admin_daily_series returns [{ date, value }] — expand into synthetic rows for bucketing
-  const rows = []
+  const buckets = buildDayBuckets(rangeDays)
+  const idx = new Map(buckets.map((b, i) => [b.key, i]))
+  let total = 0
   for (const d of (data || [])) {
+    const k = dayKey(d.date)
     const count = Number(d.value) || 0
-    for (let i = 0; i < count; i++) {
-      rows.push({ id: `${d.date}-${i}`, created_at: `${d.date}T12:00:00Z`, username: null, display_name: null, is_verified: false, avatar_url: null })
-    }
+    if (idx.has(k)) buckets[idx.get(k)].count = count
+    total += count
   }
-  return rows
+  return { buckets, total }
 }
 
+// FIX (med): fetch 200 rows so clientside sort reliably captures the newest 20
 async function fetchLatestSignups(limit = 20) {
-  const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: limit, p_offset: 0, p_search: '' })
+  const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: 200, p_offset: 0, p_search: '' })
   if (error) throw error
   const rows = (data || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
   return rows.slice(0, limit)
-}
-
-function aggregate(rows, rangeDays) {
-  const buckets = buildDayBuckets(rangeDays)
-  const idx = new Map(buckets.map((b, i) => [b.key, i]))
-  for (const r of rows) {
-    const k = dayKey(r.created_at)
-    if (idx.has(k)) buckets[idx.get(k)].count++
-  }
-  return buckets
 }
 
 function avatarHtml(row) {
@@ -91,8 +81,8 @@ function renderSignupRow(row) {
         <div class="name-secondary">${htmlEscape(handle)}</div>
       </td>
       <td class="cell-time">
-        <div class="time-primary">${htmlEscape(fmtRelativeTime ? fmtRelativeTime(row.created_at) : new Date(row.created_at).toLocaleString('de-DE'))}</div>
-        <div class="time-secondary">${htmlEscape(fmtDateTime ? fmtDateTime(row.created_at) : '')}</div>
+        <div class="time-primary">${htmlEscape(fmtRelativeTime(row.created_at))}</div>
+        <div class="time-secondary">${htmlEscape(fmtDateTime(row.created_at))}</div>
       </td>
       <td class="cell-action">
         <button class="btn btn-ghost btn-sm" data-action="open-user" data-user-id="${htmlEscape(row.id)}">Öffnen</button>
@@ -130,10 +120,11 @@ function mountErrorBox(container, err) {
         <div class="error-icon" style="font-size:42px;">⚠️</div>
         <div class="error-title">Panel konnte nicht initialisiert werden</div>
         <div class="error-text">${htmlEscape(err?.message || String(err))}</div>
-        <button class="btn btn-primary" onclick="location.reload()">Seite neu laden</button>
+        <button class="btn btn-primary" data-action="reload">Seite neu laden</button>
       </div>
     </div>
   `
+  container.querySelector('[data-action="reload"]')?.addEventListener('click', () => location.reload())
 }
 
 export default {
@@ -144,7 +135,7 @@ export default {
   async mount(container) {
     try {
       let range = 7
-      const state = { rows: [], latest: [], buckets: [], loading: true, error: null }
+      const state = { latest: [], buckets: [], total: 0, loading: true, error: null }
 
       container.innerHTML = `
         <div class="panel-shell" data-panel="${PANEL_ID}">
@@ -196,13 +187,13 @@ export default {
         state.error = null
         body.innerHTML = skeletonLoader ? skeletonLoader({ rows: 6 }) : '<div class="skeleton skeleton-block"></div>'
         try {
-          const [rangeRows, latest] = await Promise.all([
+          const [rangeResult, latest] = await Promise.all([
             fetchSignupsInRange(range),
             fetchLatestSignups(20),
           ])
-          state.rows = rangeRows
+          state.buckets = rangeResult.buckets
+          state.total = rangeResult.total
           state.latest = latest
-          state.buckets = aggregate(rangeRows, range)
           state.loading = false
           render()
         } catch (e) {
@@ -214,7 +205,7 @@ export default {
       }
 
       function render() {
-        const totalRange = state.rows.length
+        const totalRange = state.total
         const avgPerDay = range > 0 ? totalRange / range : 0
         const peak = state.buckets.reduce((m, b) => (b.count > m.count ? b : m), { count: 0, label: '—' })
         const todayCount = state.buckets[state.buckets.length - 1]?.count || 0
@@ -367,7 +358,14 @@ export default {
           if (uid) openUserDrawer(uid)
         } else if (action === 'range') {
           const r = Number(btn.getAttribute('data-range'))
-          if (r) { range = r; load() }
+          if (r) {
+            range = r
+            // update active class on fallback buttons
+            rangeMount?.querySelectorAll('[data-action="range"]').forEach((b) => {
+              b.classList.toggle('active', Number(b.getAttribute('data-range')) === r)
+            })
+            load()
+          }
         }
       })
 

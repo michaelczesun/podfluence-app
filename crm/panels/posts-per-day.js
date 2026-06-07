@@ -1,6 +1,6 @@
 import { sb } from '/lib/supabase.js'
-import { toast, modal, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
-import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js'
+import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
 import { drawer, tabs, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
@@ -38,19 +38,24 @@ function buildDayAxis(rangeDays) {
   return days
 }
 
+// FIX (high): Query updates directly to get real type data per row.
+// The old admin_daily_series RPC only returns {date, value} — no type info —
+// so synthetic rows all got type='announcement', breaking the stacked chart.
 async function fetchData(rangeDays) {
-  const { data, error } = await sb.rpc('admin_daily_series', { p_metric: 'posts', p_days: rangeDays })
+  const today = new Date()
+  today.setHours(23, 59, 59, 999)
+  const start = new Date(today)
+  start.setDate(today.getDate() - (rangeDays - 1))
+  start.setHours(0, 0, 0, 0)
+
+  const { data, error } = await sb
+    .from('updates')
+    .select('created_at, type')
+    .gte('created_at', start.toISOString())
+    .lte('created_at', today.toISOString())
+    .order('created_at', { ascending: true })
   if (error) throw error
-  // RPC returns [{date, value}] — expand into flat rows for aggregate()
-  const rows = []
-  for (const r of (data || [])) {
-    const day = (r.date || '').slice(0, 10)
-    const count = r.value || 0
-    for (let i = 0; i < count; i++) {
-      rows.push({ created_at: day, type: 'announcement' })
-    }
-  }
-  return rows
+  return data || []
 }
 
 function aggregate(rows, rangeDays) {
@@ -96,6 +101,7 @@ function aggregate(rows, rangeDays) {
 async function fetchPostsForDay(day) {
   const start = day + 'T00:00:00.000Z'
   const end   = day + 'T23:59:59.999Z'
+  // FK join: updates.user_id → users.id must exist in DB schema
   const { data, error } = await sb
     .from('updates')
     .select('id, user_id, content, type, created_at, users:user_id(id, username, full_name, avatar_url)')
@@ -149,11 +155,13 @@ async function openDayDrawer(day) {
       <ul class="day-post-list">
         ${posts.map(p => {
           const prof = p.profiles || {}
-          const name = htmlEscape(prof.display_name || prof.username || 'Unbekannt')
+          // FIX (low): display_name doesn't exist on users table — use full_name || username directly
+          const name = htmlEscape(prof.full_name || prof.username || 'Unbekannt')
           const avatar = prof.avatar_url
             ? `<img src="${htmlEscape(prof.avatar_url)}" alt="" class="dp-avatar" />`
             : `<div class="dp-avatar dp-avatar-fallback">${name.slice(0, 1).toUpperCase()}</div>`
-          const title = htmlEscape(p.title || (p.content || '').slice(0, 90) || '(ohne Titel)')
+          // FIX (low): updates has no title field — use content directly
+          const title = htmlEscape((p.content || '').slice(0, 90) || '(ohne Titel)')
           return `
             <li class="day-post-item" data-user="${htmlEscape(p.user_id || '')}">
               ${avatar}
@@ -401,7 +409,9 @@ function buildToolbar(container) {
   })
 }
 
-export default {
+// FIX (high): Named const export so retry callback can reference `panel` instead of `this`
+// (which would be `window` in an event listener context on a plain-object export).
+const panel = {
   id: 'posts-per-day',
   title: 'Posts pro Tag',
   category: 'content',
@@ -489,9 +499,12 @@ export default {
           <button class="btn-primary" id="mount-retry" style="margin-top:10px;padding:8px 16px;border-radius:10px;border:0;background:#6366f1;color:#fff;cursor:pointer">Erneut versuchen</button>
         </div>`
       const retry = container.querySelector('#mount-retry')
+      // FIX (high): use panel.mount() instead of this.mount() — `this` in event listener is window
       if (retry) retry.addEventListener('click', () => {
-        try { this.mount(container) } catch (_) {}
+        try { panel.mount(container) } catch (_) {}
       })
     }
   }
 }
+
+export default panel

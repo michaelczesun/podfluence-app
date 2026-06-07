@@ -4,7 +4,8 @@ import { makeAreaChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
 import { drawer, statHero } from '/lib/layout-extras.js'
-import { showUserDetailModal, verifyUser, banUser, grantPremium } from '/lib/panel-actions.js'
+// FIX #6: added unverifyUser import; FIX #7: added unbanUser import
+import { showUserDetailModal, verifyUser, unverifyUser, banUser, unbanUser, grantPremium } from '/lib/panel-actions.js'
 
 const PAGE_SIZE = 50
 
@@ -21,11 +22,13 @@ const state = {
   totals: { all: 0, verified: 0, podcasters: 0, inactive: 0, admins: 0 }
 }
 
-// Tabelle 'users' existiert nicht im Schema — alle user-Fetches laufen über admin_list_users_full (RPC)
+// Tabelle 'users' existiert nicht im Schema — alle user-Fetches laufen über admin_users_list_full (RPC)
 // fetchTotals und fetchSignupSeries zeigen Empty-State, fetchPage nutzt das RPC
 
 // _allRows cache for totals/series (loaded once, client-filtered per page)
 let _allRows = null
+// FIX #1: in-flight promise guard to prevent duplicate concurrent RPC calls
+let _allRowsInflight = null
 
 async function fetchTotals() {
   if (!_allRows) await _loadAllRows()
@@ -40,9 +43,25 @@ async function fetchTotals() {
 }
 
 async function _loadAllRows() {
-  const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' })
-  if (error) throw error
-  _allRows = data || []
+  // FIX #1: if a fetch is already in flight, wait for it instead of issuing a second RPC call
+  if (_allRowsInflight) {
+    await _allRowsInflight
+    return
+  }
+  _allRowsInflight = (async () => {
+    const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' })
+    if (error) throw error
+    _allRows = data || []
+    // FIX #5: warn admin if result may be truncated at 5000
+    if (_allRows.length === 5000) {
+      toast('Hinweis: Ergebnis bei 5.000 Nutzern abgeschnitten. Ggf. nicht alle Nutzer sichtbar.', 'warning')
+    }
+  })()
+  try {
+    await _allRowsInflight
+  } finally {
+    _allRowsInflight = null
+  }
 }
 
 async function fetchSignupSeries() {
@@ -80,6 +99,11 @@ async function fetchPage() {
 
   let rows = data || []
   _allRows = rows  // refresh cache
+
+  // FIX #5: warn admin if result may be truncated at 5000
+  if (rows.length === 5000) {
+    toast('Hinweis: Ergebnis bei 5.000 Nutzern abgeschnitten. Ggf. nicht alle Nutzer sichtbar.', 'warning')
+  }
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
   if (state.filter === 'verified') rows = rows.filter(r => r.is_verified)
@@ -169,11 +193,14 @@ export default {
 async function loadAll(container) {
   const body = container.querySelector('#ul-body')
   if (!body) return
-  _allRows = null  // reset cache so next fetch is fresh
+  // FIX #1: pre-load _allRows ONCE before Promise.all to prevent triple concurrent RPC calls
+  _allRows = null
+  _allRowsInflight = null
   state.loading = true
   body.innerHTML = skeletonLoader({ rows: 8 })
 
   try {
+    await _loadAllRows()  // single fetch — all three helpers will reuse the cache
     await Promise.all([
       fetchTotals(),
       fetchSignupSeries(),
@@ -494,7 +521,8 @@ function wireBulk(body, container) {
     const ok = await confirmDialog({ title: `${ids.length} Nutzer verifizieren?`, message: 'Diese Nutzer werden als verifiziert markiert.' })
     if (!ok) return
     try {
-      const { data, error } = await sb.rpc('admin_bulk_verify', { user_ids: ids })
+      // FIX #4: correct RPC param name is uids[] not user_ids
+      const { data, error } = await sb.rpc('admin_bulk_verify', { uids: ids })
       if (error) throw error
       const n = typeof data === 'number' ? data : ids.length
       toast(`${n} verifiziert`, 'success')
@@ -513,7 +541,8 @@ function wireBulk(body, container) {
     const errs = []
     for (const id of ids) {
       try {
-        const { error } = await sb.rpc('admin_set_premium', { user_id: id, premium: true })
+        // FIX #3: correct RPC param names are uid + bool (not user_id + premium)
+        const { error } = await sb.rpc('admin_set_premium', { uid: id, bool: true })
         if (error) throw error
         n++
       } catch (e) { errs.push(id); console.warn('premium failed', id, e) }
@@ -550,11 +579,19 @@ function openActionMenu(anchor, userId, body, container) {
 
   const menu = document.createElement('div')
   menu.className = 'ul-action-menu glass-card'
+  // FIX #6: show Unverify button for already-verified users instead of disabled Verify
+  // FIX #7: show Unban button for already-banned users instead of always calling banUser
   menu.innerHTML = `
     <button data-a="view">${iconHtml('eye')} Details ansehen</button>
-    <button data-a="verify" ${row.is_verified ? 'disabled' : ''}>${iconHtml('check-circle')} ${row.is_verified ? 'Bereits verifiziert' : 'Verifizieren'}</button>
+    ${row.is_verified
+      ? `<button data-a="unverify">${iconHtml('x-circle')} Verifizierung entziehen</button>`
+      : `<button data-a="verify">${iconHtml('check-circle')} Verifizieren</button>`
+    }
     <button data-a="premium">${iconHtml('star')} ${row.is_premium ? 'Premium aktiv' : 'Premium gewähren'}</button>
-    <button data-a="ban" class="danger">${iconHtml('ban')} ${row.is_banned ? 'Gebannt' : 'Bannen'}</button>
+    ${row.is_banned
+      ? `<button data-a="unban">${iconHtml('unlock')} Entbannen</button>`
+      : `<button data-a="ban" class="danger">${iconHtml('ban')} Bannen</button>`
+    }
   `
   document.body.appendChild(menu)
   const rect = anchor.getBoundingClientRect()
@@ -573,10 +610,17 @@ function openActionMenu(anchor, userId, body, container) {
   menu.querySelector('[data-a="view"]')?.addEventListener('click', () => { close(); openUserDrawer(userId, container) })
   menu.querySelector('[data-a="verify"]')?.addEventListener('click', async () => {
     close()
-    if (row.is_verified) return
     const ok = await confirmDialog({ title: 'Nutzer verifizieren?' })
     if (!ok) return
     try { await verifyUser(userId); toast('Verifiziert', 'success'); await loadAll(container) }
+    catch (e) { toast(e?.message || 'Fehler', 'error') }
+  })
+  // FIX #6: wire unverify action
+  menu.querySelector('[data-a="unverify"]')?.addEventListener('click', async () => {
+    close()
+    const ok = await confirmDialog({ title: 'Verifizierung entziehen?', danger: true })
+    if (!ok) return
+    try { await unverifyUser(userId); toast('Verifizierung entzogen', 'warning'); await loadAll(container) }
     catch (e) { toast(e?.message || 'Fehler', 'error') }
   })
   menu.querySelector('[data-a="premium"]')?.addEventListener('click', async () => {
@@ -588,9 +632,17 @@ function openActionMenu(anchor, userId, body, container) {
   })
   menu.querySelector('[data-a="ban"]')?.addEventListener('click', async () => {
     close()
-    const ok = await confirmDialog({ title: row.is_banned ? 'Bereits gebannt' : 'Nutzer bannen?', danger: true })
+    const ok = await confirmDialog({ title: 'Nutzer bannen?', danger: true })
     if (!ok) return
     try { await banUser(userId); toast('Gebannt', 'warning'); await loadAll(container) }
+    catch (e) { toast(e?.message || 'Fehler', 'error') }
+  })
+  // FIX #7: wire unban action
+  menu.querySelector('[data-a="unban"]')?.addEventListener('click', async () => {
+    close()
+    const ok = await confirmDialog({ title: 'Nutzer entbannen?' })
+    if (!ok) return
+    try { await unbanUser(userId); toast('Entbannt', 'success'); await loadAll(container) }
     catch (e) { toast(e?.message || 'Fehler', 'error') }
   })
 }
@@ -618,10 +670,11 @@ function openBulkPushModal(ids, body, container) {
   overlay.innerHTML = `
     <div class="ul-push-modal glass-card" role="dialog" aria-modal="true" aria-label="Push senden">
       <div class="ul-push-modal-head">
-        <h3>${iconHtml('bell')} Push an ${ids.length} Nutzer senden</h3>
+        <h3>${iconHtml('bell')} Push-Broadcast senden</h3>
         <button class="btn-icon" id="ul-push-close" title="Schließen">${iconHtml('x')}</button>
       </div>
       <div class="ul-push-modal-body">
+        <div class="ul-push-notice">${iconHtml('alert-circle')} Dieser Push wird als Broadcast an <strong>alle</strong> Nutzer gesendet, nicht nur an die Auswahl.</div>
         <label class="ul-push-label" for="ul-push-title">Titel</label>
         <input type="text" id="ul-push-title" class="ul-push-input" placeholder="z. B. Neue Funktion für dich!" maxlength="64" />
         <label class="ul-push-label" for="ul-push-body">Nachricht</label>
@@ -630,7 +683,7 @@ function openBulkPushModal(ids, body, container) {
       </div>
       <div class="ul-push-modal-foot">
         <button class="btn btn-ghost" id="ul-push-cancel">Abbrechen</button>
-        <button class="btn btn-primary" id="ul-push-send">${iconHtml('send')} Senden</button>
+        <button class="btn btn-primary" id="ul-push-send">${iconHtml('send')} An alle senden</button>
       </div>
     </div>
   `
@@ -653,24 +706,21 @@ function openBulkPushModal(ids, body, container) {
     }
     const sendBtn = overlay.querySelector('#ul-push-send')
     if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sendet…' }
-    let sent = 0
-    const errs = []
-    for (const id of ids) {
-      try {
-        const { error } = await sb.rpc('send_broadcast_push', {
-          p_title: title,
-          p_body: body,
-          p_audience: 'all',
-          p_deep_link: null
-        })
-        if (error) throw error
-        sent++
-        break // send_broadcast_push is a broadcast — one call is sufficient
-      } catch (e) { errs.push(id); console.warn('push failed', id, e); break }
+    // FIX #2: send_broadcast_push sends to ALL users (audience='all') — one single call, no per-user loop
+    try {
+      const { error } = await sb.rpc('send_broadcast_push', {
+        p_title: title,
+        p_body: body,
+        p_audience: 'all',
+        p_deep_link: null
+      })
+      if (error) throw error
+      close()
+      toast('Broadcast-Push gesendet (alle Nutzer)', 'success')
+    } catch (e) {
+      close()
+      toast(e?.message || 'Push-Versand fehlgeschlagen', 'error')
     }
-    close()
-    if (errs.length) toast('Push-Versand fehlgeschlagen', 'error')
-    else toast(`Push gesendet (${ids.length} Empfänger)`, 'success')
   })
 }
 

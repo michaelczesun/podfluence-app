@@ -2244,7 +2244,7 @@
 
     // ===== Social-Proof: Featured Podcasts Bubbles =====
     // Fetch verified podcasts, render cover-bubble imgs, replace placeholders
-    fetch(SUPABASE_URL + '/rest/v1/podcasts?select=title,cover_url,verified&verified=eq.true&limit=6', {
+    fetch(SUPABASE_URL + '/rest/v1/podcasts?select=title,cover_url&cover_url=not.is.null&archived_at=is.null&order=followers_count.desc.nullslast&limit=8', {
       headers: {
         'apikey': SUPABASE_KEY,
         'Accept': 'application/json'

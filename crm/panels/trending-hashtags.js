@@ -8,25 +8,15 @@ import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const PALETTE = ['#7c5cff', '#22c1c3', '#fdbb2d', '#ff5e7e', '#3ee8a3', '#ffa057', '#5d9cff', '#c97bff']
 
-async function fetchHashtags() {
-  // Try materialized view first (may exist as hashtag_trends or trending_hashtags)
-  for (const viewName of ['hashtag_trends', 'trending_hashtags', 'trending_hashtags_view']) {
-    try {
-      const { data, error } = await sb.from(viewName).select('*').limit(100)
-      if (!error && data && data.length) {
-        return data.map(t => ({
-          tag: t.tag || t.hashtag || t.name || '',
-          usage_count: t.usage_count || t.count || t.total_count || 0,
-          posts_24h: t.posts_24h || t.count_24h || 0,
-          posts_7d: t.posts_7d || t.count_7d || 0,
-          last_used_at: t.last_used_at || t.last_seen_at || null,
-          trend: t.trend || 'flat'
-        }))
-      }
-    } catch (_) {}
-  }
+// Max rows fetched from updates for hashtag aggregation.
+// Keep this low to avoid expensive client-side scans.
+// TODO: replace with server-side RPC admin_hashtag_stats when available.
+const FALLBACK_FETCH_LIMIT = 500
 
-  // Fallback: parse hashtags directly from updates table (last 30 days)
+async function fetchHashtags() {
+  // Direct fallback: parse hashtags from updates table (last 30 days).
+  // No materialized view is guaranteed to exist, so we skip the brute-force
+  // view probe and use the updates table directly.
   const since30 = new Date(Date.now() - 30 * 86400000).toISOString()
   const since24 = new Date(Date.now() - 86400000).toISOString()
   const since7  = new Date(Date.now() - 7 * 86400000).toISOString()
@@ -35,7 +25,8 @@ async function fetchHashtags() {
     .from('updates')
     .select('content, created_at')
     .gte('created_at', since30)
-    .limit(5000)
+    .order('created_at', { ascending: false })
+    .limit(FALLBACK_FETCH_LIMIT)
   if (error) throw error
 
   const TAG_RE = /#([a-zA-ZäöüÄÖÜß0-9_]+)/g
@@ -79,16 +70,33 @@ async function fetchHashtags() {
 
 async function fetchPostsForTag(tag) {
   const since = new Date(Date.now() - 30 * 86400000).toISOString()
-  const { data, error } = await sb
+
+  // Avoid FK join on users — the FK may not exist or the users table may not
+  // be accessible via Supabase FK syntax. Fetch posts first, then batch-load
+  // user profiles separately.
+  const { data: posts, error } = await sb
     .from('updates')
-    .select('id, user_id, content, created_at, likes_count, comments_count, users:user_id(id, username, avatar_url)')
+    .select('id, user_id, content, created_at, likes_count, comments_count')
     .gte('created_at', since)
     .ilike('content', `%#${tag}%`)
     .order('created_at', { ascending: false })
     .limit(50)
   if (error) throw error
-  return (data || []).map(p => ({
+
+  const userIds = [...new Set((posts || []).map(p => p.user_id).filter(Boolean))]
+  let usersMap = {}
+  if (userIds.length) {
+    const { data: userRows } = await sb
+      .from('users')
+      .select('id, username, avatar_url')
+      .in('id', userIds)
+    for (const u of (userRows || [])) usersMap[u.id] = u
+  }
+
+  return (posts || []).map(p => ({
     ...p,
+    users: usersMap[p.user_id] || null,
+    // likes_count / comments_count may not exist on all rows — default to 0
     like_count: p.likes_count || 0,
     comment_count: p.comments_count || 0,
   }))
@@ -150,6 +158,11 @@ async function openTagDrawer(tag) {
     width: 540,
     content: `<div id="tag-drawer-body">${skeletonLoader({ rows: 6 })}</div>`
   })
+
+  // Wait one animation frame to ensure the drawer has rendered its DOM
+  // before we try to access #tag-drawer-body.
+  await new Promise(resolve => requestAnimationFrame(resolve))
+
   let posts = []
   try {
     posts = await fetchPostsForTag(tag)
@@ -236,13 +249,25 @@ export default {
 
       const body = container.querySelector('#body')
       let currentItems = []
+      let isLoading = false
+
+      const setExportButtonsDisabled = (disabled) => {
+        const btnPdf = container.querySelector('#btn-pdf')
+        const btnCsv = container.querySelector('#btn-csv')
+        if (btnPdf) btnPdf.disabled = disabled
+        if (btnCsv) btnCsv.disabled = disabled
+      }
 
       const render = async () => {
+        isLoading = true
+        setExportButtonsDisabled(true)
         body.innerHTML = skeletonLoader({ rows: 8 })
         let items = []
         try {
           items = await fetchHashtags()
         } catch (e) {
+          isLoading = false
+          setExportButtonsDisabled(false)
           body.innerHTML = `<div class="error-state">
             <div class="empty-icon">${iconHtml('alert-triangle')}</div>
             <h3>Fehler beim Laden</h3>
@@ -254,6 +279,8 @@ export default {
         }
 
         currentItems = items
+        isLoading = false
+        setExportButtonsDisabled(false)
 
         if (!items.length) {
           body.innerHTML = `<div class="empty-state">
@@ -297,8 +324,8 @@ export default {
               content: `<div id="chart-bar" style="height:300px"></div>`
             })}
             ${glassCard({
-              title: 'Aktivität letzte 24h',
-              subtitle: 'Neue Posts mit Top-Tags',
+              title: 'Top-Tags nach 24h-Posts',
+              subtitle: 'Neue Posts mit Top-Tags in den letzten 24h',
               content: `<div id="chart-area" style="height:300px"></div>`
             })}
           </div>
@@ -365,12 +392,15 @@ export default {
 
       if (btnRefresh) {
         btnRefresh.onclick = () => {
-          render()
-          toast('Aktualisiert', 'info')
+          if (!isLoading) {
+            render()
+            toast('Aktualisiert', 'info')
+          }
         }
       }
       if (btnPdf) {
         btnPdf.onclick = () => {
+          if (isLoading) return
           try {
             exportPanelAsPdf(container, 'trending-hashtags')
             toast('PDF wird erzeugt …', 'info')
@@ -381,6 +411,7 @@ export default {
       }
       if (btnCsv) {
         btnCsv.onclick = () => {
+          if (isLoading) return
           if (!currentItems.length) {
             toast('Keine Daten zum Exportieren', 'warning')
             return

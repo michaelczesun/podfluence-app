@@ -12,11 +12,19 @@ const RANGE_OPTIONS = [
   { value: '90', label: '90T' }
 ]
 
+// State is kept inside mount() closures; this module-scope object is reset on unmount.
 const state = {
   range: '30',
   series: [],
   loading: false,
   error: null
+}
+
+function resetState() {
+  state.range = '30'
+  state.series = []
+  state.loading = false
+  state.error = null
 }
 
 function formatDateKey(d) {
@@ -35,13 +43,17 @@ function formatDateShort(key) {
 }
 
 async function fetchDau(days) {
-  // Try admin_daily_series RPC first (SECURITY DEFINER, bypasses RLS)
+  // Try admin_daily_series RPC first (SECURITY DEFINER, bypasses RLS).
+  // Parameters are metric/days (no p_ prefix) per RPC signature.
   try {
-    const { data, error } = await sb.rpc('admin_daily_series', { p_metric: 'dau', p_days: Number(days) })
+    const { data, error } = await sb.rpc('admin_daily_series', { metric: 'dau', days: Number(days) })
     if (!error && data && data.length > 0) {
       return data.map(d => ({ date: d.date, users: Number(d.value) || 0 }))
     }
-  } catch (_) {}
+    if (error) console.warn('[dau-trend] admin_daily_series RPC error, falling back:', error.message)
+  } catch (e) {
+    console.warn('[dau-trend] admin_daily_series RPC threw, falling back:', e.message)
+  }
 
   // Fallback: direct app_opens query (RLS-friendly)
   const since = new Date()
@@ -75,19 +87,28 @@ async function fetchUsersForDay(dateKey) {
   const end = new Date(start)
   end.setDate(end.getDate() + 1)
 
-  const { data: opens } = await sb
+  const { data: opens, error: opensErr } = await sb
     .from('app_opens')
     .select('user_id, created_at')
     .gte('created_at', start.toISOString())
     .lt('created_at', end.toISOString())
 
+  if (opensErr) throw opensErr
+
   const ids = Array.from(new Set((opens || []).map(p => p.user_id))).filter(Boolean)
   if (!ids.length) return []
 
-  // Use admin RPC (SECURITY DEFINER) to bypass RLS on user table
-  const { data: users } = await sb.rpc('admin_users_list_full', { p_limit: 500, p_offset: 0, p_search: '' })
+  // Query users table directly with .in() — SECURITY DEFINER RPC is not needed
+  // here since we pass explicit ids; avoids loading all 500 users and pagination issues.
+  const { data: users, error: usersErr } = await sb
+    .from('users')
+    .select('id, username, full_name, avatar_url, is_verified, last_seen_at')
+    .in('id', ids)
+
+  if (usersErr) throw usersErr
   if (!users) return []
-  return users.filter(u => ids.includes(u.id)).map(u => ({
+
+  return users.map(u => ({
     id: u.id,
     username: u.username,
     display_name: u.full_name || u.username,
@@ -208,11 +229,16 @@ async function renderBody(host, onPointClick) {
   `
 
   const heroEl = host.querySelector('#dau-hero-value')
-  if (heroEl) countUp(heroEl, today, { duration: 900, format: fmtNumber })
+  if (heroEl) {
+    countUp(heroEl, today, { duration: 900 })
+    // Ensure formatted value is displayed after animation completes
+    setTimeout(() => { if (heroEl) heroEl.textContent = fmtNumber(today) }, 950)
+  }
 
   host.querySelectorAll('.kpi-value[data-count]').forEach(el => {
     const target = Number(el.dataset.count)
-    countUp(el, target, { duration: 800, format: fmtNumber })
+    countUp(el, target, { duration: 800 })
+    setTimeout(() => { if (el) el.textContent = fmtNumber(target) }, 850)
   })
 
   const chartHost = host.querySelector('#dau-chart')
@@ -260,7 +286,7 @@ async function openDayDrawer(dateKey) {
   try {
     const users = await fetchUsersForDay(dateKey)
     if (!users.length) {
-      dlg.setContent(`
+      dlg?.setContent?.(`
         <div class="empty-state">
           <div class="empty-icon">${iconHtml('users')}</div>
           <h4>Keine aktiven Nutzer</h4>
@@ -288,7 +314,7 @@ async function openDayDrawer(dateKey) {
       </div>
     `).join('')
 
-    dlg.setContent(`
+    dlg?.setContent?.(`
       <div class="drawer-stat-row">
         <div><strong>${fmtNumber(users.length)}</strong> aktive Nutzer</div>
         <button class="btn btn-ghost" id="day-export">${iconHtml('download')} CSV</button>
@@ -296,14 +322,14 @@ async function openDayDrawer(dateKey) {
       <div class="user-list">${rows}</div>
     `)
 
-    dlg.root.querySelectorAll('.user-row').forEach(row => {
+    dlg?.root?.querySelectorAll('.user-row').forEach(row => {
       row.addEventListener('click', () => {
         const uid = row.dataset.uid
         if (uid) showUserDetailModal(uid)
       })
     })
 
-    dlg.root.querySelector('#day-export')?.addEventListener('click', () => {
+    dlg?.root?.querySelector('#day-export')?.addEventListener('click', () => {
       try {
         exportCsv(`dau-${dateKey}.csv`, users.map(u => ({
           id: u.id,
@@ -318,7 +344,7 @@ async function openDayDrawer(dateKey) {
       }
     })
   } catch (e) {
-    dlg.setContent(`
+    dlg?.setContent?.(`
       <div class="empty-state error-state">
         <div class="empty-icon">${iconHtml('alert-triangle')}</div>
         <h4>Fehler beim Laden</h4>
@@ -375,7 +401,7 @@ export default {
       const body = container.querySelector('#dau-body')
       const rangeHost = container.querySelector('#dau-range')
 
-      if (body) renderSkeleton(body)
+      // No redundant skeleton here — loadAndRender calls renderSkeleton itself.
 
       if (rangeHost) {
         try {
@@ -440,9 +466,14 @@ export default {
           <div class="empty-icon">${iconHtml ? iconHtml('alert-triangle') : '⚠️'}</div>
           <h3>Panel konnte nicht initialisiert werden</h3>
           <p>Fehler: ${htmlEscape ? htmlEscape(e.message || String(e)) : (e.message || String(e))}</p>
-          <button class="btn btn-primary" onclick="location.reload()">Neu laden</button>
+          <button class="btn btn-primary" id="dau-fatal-reload">Neu laden</button>
         </div>
       `
+      container.querySelector('#dau-fatal-reload')?.addEventListener('click', () => location.reload())
     }
+  },
+
+  unmount() {
+    resetState()
   }
 }

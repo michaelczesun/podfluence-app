@@ -25,11 +25,11 @@ async function fetchSeries() {
   for (let i = 0; i < DAYS; i++) {
     const d = new Date(since)
     d.setDate(d.getDate() + i)
-    buckets.set(isoDay(d), { day: isoDay(d), count: 0, episodes: [] })
+    buckets.set(isoDay(d), { day: isoDay(d), count: 0 })
   }
 
-  // admin_daily_series returns [{date, value}]
-  const { data: series, error: seriesErr } = await sb.rpc('admin_daily_series', { p_metric: 'episodes', p_days: DAYS })
+  // FIX(high): Parameternamen ohne p_-Prefix — RPC-Signatur ist admin_daily_series(metric, days)
+  const { data: series, error: seriesErr } = await sb.rpc('admin_daily_series', { metric: 'episodes', days: DAYS })
   if (seriesErr) throw seriesErr
   for (const row of (series || [])) {
     const k = row.date ? isoDay(row.date) : null
@@ -38,52 +38,25 @@ async function fetchSeries() {
     }
   }
 
-  // Optionally enrich with actual episode rows for the drawer (best-effort)
-  try {
-    const sinceIso = since.toISOString()
-    const { data: eps } = await sb
-      .from('podcasts')
-      .select('id, title, cover_url')
-      .limit(1)
-    // Only fetch episode details if podcasts table accessible
-    if (eps !== null) {
-      const { data: epRows } = await sb
-        .from('episodes')
-        .select('id, title, published_at, audio_url, podcast_id, podcasts:podcast_id(title, cover_url)')
-        .gte('published_at', sinceIso)
-        .order('published_at', { ascending: true })
-        .limit(500)
-      for (const ep of (epRows || [])) {
-        const k = ep.published_at ? isoDay(ep.published_at) : null
-        if (k && buckets.has(k)) {
-          buckets.get(k).episodes.push(ep)
-        }
-      }
-    }
-  } catch (_) {}
+  // FIX(high+med): episodes-Tabelle existiert nicht im Schema — probe-Query + episodes-Fetch entfernt.
+  // Drawer zeigt nur Zählung; keine Row-Level-Episodendaten verfügbar.
 
   return Array.from(buckets.values())
 }
 
 function dayDrawer(bucket) {
-  const eps = bucket.episodes
-  const body = eps.length === 0
-    ? `<div class="empty-state"><div class="empty-icon">${iconHtml('mic-off')}</div><h3>Keine Episoden</h3><p>An diesem Tag wurde keine Episode veröffentlicht.</p></div>`
-    : `<div class="episode-list">${eps.map(ep => `
-        <div class="episode-row glass-card" data-id="${htmlEscape(ep.id)}">
-          <div class="ep-cover">${ep.podcasts?.cover_url ? `<img src="${htmlEscape(ep.podcasts.cover_url)}" alt="">` : iconHtml('mic')}</div>
-          <div class="ep-meta">
-            <div class="ep-title">${htmlEscape(ep.title || 'Ohne Titel')}</div>
-            <div class="ep-sub">${htmlEscape(ep.podcasts?.title || 'Unbekannter Podcast')} · ${fmtDateTime(ep.published_at)}</div>
-            ${ep.audio_url ? `<audio class="ep-audio" controls preload="none" src="${htmlEscape(ep.audio_url)}"></audio>` : `<div class="ep-noaudio">${iconHtml('alert-circle')} Kein Audio verfügbar</div>`}
-          </div>
-        </div>`).join('')}</div>`
+  const body = `
+    <div class="empty-state">
+      <div class="empty-icon">${iconHtml('bar-chart-2')}</div>
+      <h3>${bucket.count} ${bucket.count === 1 ? 'Episode' : 'Episoden'}</h3>
+      <p>Am ${fmtDay(bucket.day)} wurden ${bucket.count} Episoden veröffentlicht.</p>
+    </div>`
 
   drawer({
     title: `Episoden am ${fmtDay(bucket.day)}`,
-    subtitle: `${eps.length} ${eps.length === 1 ? 'Episode' : 'Episoden'}`,
+    subtitle: `${bucket.count} ${bucket.count === 1 ? 'Episode' : 'Episoden'}`,
     html: body,
-    width: 560
+    width: 400
   })
 }
 
@@ -93,6 +66,9 @@ export default {
   category: 'content',
 
   async mount(container) {
+    // FIX(med): cachedSeries außerhalb von render() — CSV-Export nutzt Cache statt neuem DB-Call
+    let cachedSeries = null
+
     try {
       container.innerHTML = `
         <div class="panel-shell">
@@ -118,6 +94,7 @@ export default {
         let series
         try {
           series = await fetchSeries()
+          cachedSeries = series
         } catch (e) {
           body.innerHTML = `
             <div class="error-state glass-card">
@@ -190,9 +167,11 @@ export default {
           toast('PDF-Export fehlgeschlagen: ' + (e.message || ''), 'error')
         }
       })
-      container.querySelector('[data-act="csv"]').addEventListener('click', async () => {
+      // FIX(med): cachedSeries statt fetchSeries() — kein doppelter DB-Call beim CSV-Export
+      container.querySelector('[data-act="csv"]').addEventListener('click', () => {
         try {
-          const s = await fetchSeries()
+          const s = cachedSeries
+          if (!s) { toast('Daten noch nicht geladen', 'error'); return }
           exportCsv(s.map(b => ({ Tag: b.day, Episoden: b.count })), 'episoden-pro-tag.csv')
         } catch (e) { toast('CSV-Export fehlgeschlagen: ' + (e.message || ''), 'error') }
       })
@@ -202,7 +181,7 @@ export default {
       container.innerHTML = `
         <div class="panel-shell">
           <div class="error-state glass-card" style="margin:24px">
-            <div class="error-icon">${iconHtml ? iconHtml('alert-triangle') : '!'}</div>
+            <div class="error-icon">${iconHtml('alert-triangle')}</div>
             <h3>Panel konnte nicht geladen werden</h3>
             <p>${htmlEscape(mountErr?.message || String(mountErr))}</p>
             <button class="btn btn-primary" data-act="mount-retry">Erneut versuchen</button>

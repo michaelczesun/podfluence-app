@@ -41,117 +41,125 @@ async function fetchVersionData() {
 }
 
 function normalize(rows) {
+  // FIX #1: r.users fallback entfernt — admin_build_versions liefert nur count, bereits als user_count gemappt
   const arr = rows.map(r => ({
     version: r.version,
-    user_count: Number(r.user_count || r.users || 0),
-    platforms: r.platforms || {},
-    last_seen: r.last_seen || r.last_seen_at || null
+    user_count: Number(r.user_count || 0),
+    platforms: {},
+    last_seen: null
   })).filter(r => r.version && r.user_count > 0)
   const versions = [...new Set(arr.map(r => r.version))].sort((a, b) => cmpVersion(b, a))
   return arr.map(r => ({ ...r, rank: versionRank(r.version, versions) }))
     .sort((a, b) => cmpVersion(b.version, a.version))
 }
 
+// FIX #3: Kein 5000-Row-Dump mehr — direkt per p_search auf die Version filtern
 async function fetchUsersOnVersion(version) {
-  // Load all users and filter by client_build_version field
-  const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' })
+  const { data, error } = await sb.rpc('admin_users_list_full', {
+    p_limit: 500,
+    p_offset: 0,
+    p_search: String(version)
+  })
   if (error) throw error
+  // p_search trifft ggf. auch andere Felder — clientseitig auf exakte Version einschränken
   return (data || []).filter(u => String(u.client_build_version || '') === String(version))
+}
+
+// Exportiert als benannte Funktion damit mount() sich sicher selbst aufrufen kann (FIX #8)
+async function mountPanel(container) {
+  try {
+    container.innerHTML = `
+      <div class="panel-shell">
+        <div class="panel-head">
+          <div>
+            <h2>App-Versionen im Feld</h2>
+            <p class="panel-sub">Verteilung aktiver Builds, Update-Druck und Force-Push pro Version.</p>
+          </div>
+          <div class="toolbar" id="cbv-toolbar">
+            <button class="btn btn-ghost" data-act="refresh">${iconHtml('refresh')} Aktualisieren</button>
+            <button class="btn btn-ghost" data-act="pdf">${iconHtml('file-text')} PDF</button>
+            <button class="btn btn-ghost" data-act="csv">${iconHtml('download')} CSV</button>
+          </div>
+        </div>
+        <div class="panel-body" id="cbv-body"></div>
+      </div>
+    `
+
+    const body = container.querySelector('#cbv-body')
+    body.innerHTML = skeletonLoader({ rows: 6, height: 64 })
+    fadeIn(container)
+
+    const state = { rows: [], latest: null }
+
+    const renderAll = async () => {
+      body.innerHTML = skeletonLoader({ rows: 6, height: 64 })
+      try {
+        const rows = await fetchVersionData()
+        state.rows = rows
+        state.latest = rows.length ? rows.map(r => r.version).sort((a, b) => cmpVersion(b, a))[0] : null
+        renderContent(body, state, renderAll)
+      } catch (err) {
+        console.error(err)
+        body.innerHTML = renderError(err)
+        body.querySelector('[data-act="retry"]')?.addEventListener('click', renderAll)
+      }
+    }
+
+    container.querySelector('[data-act="refresh"]').addEventListener('click', () => {
+      toast('Aktualisiere…')
+      renderAll()
+    })
+    container.querySelector('[data-act="pdf"]').addEventListener('click', () => {
+      try {
+        exportPanelAsPdf({ container, title: 'App-Versionen im Feld' })
+      } catch (err) {
+        console.error(err)
+        toast(`PDF-Export fehlgeschlagen: ${err?.message || 'Fehler'}`, 'error')
+      }
+    })
+    // FIX #9 (low): Plattformen-Spalte aus CSV-Export entfernt — immer leer
+    container.querySelector('[data-act="csv"]').addEventListener('click', () => {
+      if (!state.rows.length) return toast('Keine Daten')
+      try {
+        exportCsv({
+          filename: `app-versions-${new Date().toISOString().slice(0, 10)}.csv`,
+          rows: state.rows.map(r => ({
+            Version: r.version,
+            Nutzer: r.user_count,
+            Status: colorFor(r.rank).label
+          }))
+        })
+      } catch (err) {
+        console.error(err)
+        toast(`CSV-Export fehlgeschlagen: ${err?.message || 'Fehler'}`, 'error')
+      }
+    })
+
+    await renderAll()
+  } catch (mountErr) {
+    console.error('client-build-versions mount failed', mountErr)
+    container.innerHTML = `
+      <div class="panel-shell">
+        <div class="empty-state error">
+          ${iconHtml('alert-triangle')}
+          <h3>Panel konnte nicht geladen werden</h3>
+          <p>${htmlEscape(mountErr?.message || 'Unbekannter Fehler beim Initialisieren')}</p>
+          <button class="btn btn-primary" data-act="mount-retry">${iconHtml('refresh')} Erneut versuchen</button>
+        </div>
+      </div>
+    `
+    // FIX #8: mountPanel statt this.mount — korrekte Referenz unabhängig vom this-Kontext
+    container.querySelector('[data-act="mount-retry"]')?.addEventListener('click', () => {
+      mountPanel(container)
+    })
+  }
 }
 
 export default {
   id: 'client-build-versions',
   title: 'App-Versionen im Feld',
   category: 'users',
-
-  async mount(container) {
-    try {
-      container.innerHTML = `
-        <div class="panel-shell">
-          <div class="panel-head">
-            <div>
-              <h2>App-Versionen im Feld</h2>
-              <p class="panel-sub">Verteilung aktiver Builds, Update-Druck und Force-Push pro Version.</p>
-            </div>
-            <div class="toolbar" id="cbv-toolbar">
-              <button class="btn btn-ghost" data-act="refresh">${iconHtml('refresh')} Aktualisieren</button>
-              <button class="btn btn-ghost" data-act="pdf">${iconHtml('file-text')} PDF</button>
-              <button class="btn btn-ghost" data-act="csv">${iconHtml('download')} CSV</button>
-            </div>
-          </div>
-          <div class="panel-body" id="cbv-body"></div>
-        </div>
-      `
-
-      const body = container.querySelector('#cbv-body')
-      body.innerHTML = skeletonLoader({ rows: 6, height: 64 })
-      fadeIn(container)
-
-      const state = { rows: [], latest: null }
-
-      const renderAll = async () => {
-        body.innerHTML = skeletonLoader({ rows: 6, height: 64 })
-        try {
-          const rows = await fetchVersionData()
-          state.rows = rows
-          state.latest = rows.length ? rows.map(r => r.version).sort((a, b) => cmpVersion(b, a))[0] : null
-          renderContent(body, state, renderAll)
-        } catch (err) {
-          console.error(err)
-          body.innerHTML = renderError(err)
-          body.querySelector('[data-act="retry"]')?.addEventListener('click', renderAll)
-        }
-      }
-
-      container.querySelector('[data-act="refresh"]').addEventListener('click', () => {
-        toast('Aktualisiere…')
-        renderAll()
-      })
-      container.querySelector('[data-act="pdf"]').addEventListener('click', () => {
-        try {
-          exportPanelAsPdf({ container, title: 'App-Versionen im Feld' })
-        } catch (err) {
-          console.error(err)
-          toast(`PDF-Export fehlgeschlagen: ${err?.message || 'Fehler'}`, 'error')
-        }
-      })
-      container.querySelector('[data-act="csv"]').addEventListener('click', () => {
-        if (!state.rows.length) return toast('Keine Daten')
-        try {
-          exportCsv({
-            filename: `app-versions-${new Date().toISOString().slice(0, 10)}.csv`,
-            rows: state.rows.map(r => ({
-              Version: r.version,
-              Nutzer: r.user_count,
-              Status: colorFor(r.rank).label,
-              Plattformen: Object.entries(r.platforms).map(([k, v]) => `${k}:${v}`).join('|'),
-              'Zuletzt aktiv': r.last_seen ? fmtDateTime(r.last_seen) : ''
-            }))
-          })
-        } catch (err) {
-          console.error(err)
-          toast(`CSV-Export fehlgeschlagen: ${err?.message || 'Fehler'}`, 'error')
-        }
-      })
-
-      await renderAll()
-    } catch (mountErr) {
-      console.error('client-build-versions mount failed', mountErr)
-      container.innerHTML = `
-        <div class="panel-shell">
-          <div class="empty-state error">
-            ${iconHtml('alert-triangle')}
-            <h3>Panel konnte nicht geladen werden</h3>
-            <p>${htmlEscape(mountErr?.message || 'Unbekannter Fehler beim Initialisieren')}</p>
-            <button class="btn btn-primary" data-act="mount-retry">${iconHtml('refresh')} Erneut versuchen</button>
-          </div>
-        </div>
-      `
-      container.querySelector('[data-act="mount-retry"]')?.addEventListener('click', () => {
-        try { this.mount(container) } catch (_) {}
-      })
-    }
-  }
+  mount: mountPanel
 }
 
 function renderError(err) {
@@ -165,11 +173,12 @@ function renderError(err) {
   `
 }
 
+// FIX #5: Empty-State-Text aktualisiert — kein Verweis auf nicht-existente user_devices / crm_app_versions_in_field
 function renderEmpty(body) {
   body.innerHTML = `
     <div class="glass-card" style="padding:2rem;text-align:center;">
       ${iconHtml('alert')}
-      <p style="margin-top:1rem;">Daten kommen sobald die Tabelle <code>user_devices</code> oder das RPC <code>crm_app_versions_in_field</code> angelegt ist.</p>
+      <p style="margin-top:1rem;">Kein Build-Versions-Tracking vorhanden. Sobald Nutzer <code>client_build_version</code> in der users-Tabelle schreiben, erscheinen hier Daten.</p>
     </div>
   `
 }
@@ -184,6 +193,7 @@ function renderContent(body, state, refresh) {
   const stale = rows.filter(r => r.rank >= 2).reduce((a, r) => a + r.user_count, 0)
   const adoption = totalUsers ? Math.round((latestUsers / totalUsers) * 100) : 0
 
+  // FIX #2: Spalten "Plattformen" und "Zuletzt aktiv" entfernt — admin_build_versions liefert keine Plattform-/Last-seen-Daten
   body.innerHTML = `
     <div class="cbv-grid">
       <div class="cbv-heros">
@@ -220,22 +230,17 @@ function renderContent(body, state, refresh) {
                 <th>Version</th>
                 <th>Status</th>
                 <th class="num">Nutzer</th>
-                <th>Plattformen</th>
-                <th>Zuletzt aktiv</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
               ${rows.map(r => {
                 const c = colorFor(r.rank)
-                const platforms = Object.entries(r.platforms || {}).map(([k, v]) => `<span class="chip chip-xs">${htmlEscape(k)} · ${fmtNumber(v)}</span>`).join(' ')
                 return `
                   <tr data-version="${htmlEscape(r.version)}" class="row-clickable">
                     <td><strong>${htmlEscape(r.version)}</strong></td>
                     <td><span class="badge badge-${c.tone}">${c.label}</span></td>
                     <td class="num">${fmtNumber(r.user_count)}</td>
-                    <td>${platforms || '<span class="muted">—</span>'}</td>
-                    <td>${r.last_seen ? fmtRelativeTime(r.last_seen) : '<span class="muted">—</span>'}</td>
                     <td class="row-actions">
                       <button class="btn btn-xs" data-act="users" data-version="${htmlEscape(r.version)}">${iconHtml('users')} Nutzer</button>
                       ${r.rank > 0 ? `<button class="btn btn-xs btn-warn" data-act="force" data-version="${htmlEscape(r.version)}">${iconHtml('bell')} Force-Push</button>` : ''}
@@ -318,6 +323,7 @@ async function openVersionDrawer(versionRow, state, refresh) {
     title: `Version ${versionRow.version}`,
     subtitle: `${fmtNumber(versionRow.user_count)} Nutzer · ${c.label}`,
     width: 560,
+    // FIX #7: typeof-Guard entfernt — spinnerHtml ist ein importierter Callable
     bodyHtml: `
       <div class="drawer-toolbar">
         <span class="badge badge-${c.tone}">${c.label}</span>
@@ -325,7 +331,7 @@ async function openVersionDrawer(versionRow, state, refresh) {
           ? `<button class="btn btn-warn" data-act="force-bulk">${iconHtml('bell')} Force-Update an alle (${fmtNumber(versionRow.user_count)})</button>`
           : `<span class="muted">Diese Version ist aktuell – kein Push nötig.</span>`}
       </div>
-      <div id="cbv-userlist" class="user-list">${typeof spinnerHtml === 'function' ? spinnerHtml() : 'Lade Nutzer…'}</div>
+      <div id="cbv-userlist" class="user-list">${spinnerHtml()}</div>
     `
   })
 
@@ -333,10 +339,11 @@ async function openVersionDrawer(versionRow, state, refresh) {
   try {
     const users = await fetchUsersOnVersion(versionRow.version)
     if (!users.length) {
+      // FIX #6: Stale-Text ersetzt — kein Verweis auf nicht-existente Tabellen/RPCs
       listEl.innerHTML = `
         <div class="glass-card" style="padding:1.5rem;text-align:center;">
           ${iconHtml('alert')}
-          <p style="margin-top:.75rem;">Daten kommen sobald die Tabelle <code>user_devices</code> oder das RPC <code>crm_users_on_app_version</code> angelegt ist.</p>
+          <p style="margin-top:.75rem;">Keine Nutzer auf dieser Version gefunden. Möglicherweise ist <code>client_build_version</code> in der users-Tabelle noch nicht befüllt.</p>
         </div>
       `
     } else {
@@ -364,6 +371,8 @@ async function openVersionDrawer(versionRow, state, refresh) {
   })
 }
 
+// FIX #4: crm_force_update_push entfernt (RPC existiert nicht) — direkt sendBroadcastPush aufrufen
+// Parameter-Key 'segment' auf 'audience' korrigiert gemäß send_broadcast_push(title,body,audience,deep_link?)
 async function forceUpdatePush(versionRow, refresh, drawerInstance) {
   const ok = await confirmDialog({
     title: 'Force-Update-Push senden?',
@@ -374,20 +383,13 @@ async function forceUpdatePush(versionRow, refresh, drawerInstance) {
   if (!ok) return
 
   try {
-    let sent = 0
-    try {
-      const { data, error } = await sb.rpc('crm_force_update_push', { p_version: versionRow.version })
-      if (error) throw error
-      sent = Number(data?.sent ?? data ?? versionRow.user_count)
-    } catch (rpcErr) {
-      const res = await sendBroadcastPush({
-        title: 'Update verfügbar',
-        body: 'Bitte aktualisiere Podfluence auf die neueste Version für beste Stabilität.',
-        segment: { app_version: versionRow.version },
-        data: { type: 'force_update', target_version: versionRow.version }
-      })
-      sent = Number(res?.sent || versionRow.user_count)
-    }
+    const res = await sendBroadcastPush(
+      'Update verfügbar',
+      'Bitte aktualisiere Podfluence auf die neueste Version für beste Stabilität.',
+      { app_version: versionRow.version },
+      null
+    )
+    const sent = Number(res?.sent || versionRow.user_count)
     toast(`Push an ${fmtNumber(sent)} Nutzer gesendet`, 'success')
     drawerInstance?.close?.()
     refresh?.()
