@@ -382,7 +382,11 @@ function renderQuickActions() {
 
 function renderAuditList(rows) {
   if (!rows.length) {
-    return `<div class="audit-empty">Noch keine Admin-Aktionen.</div>`
+    return `<div class="audit-empty" style="text-align:center;padding:24px 16px;color:var(--text-muted)">
+      <div style="font-size:28px;opacity:.45;margin-bottom:6px">${iconHtml('file-text')}</div>
+      <div style="font-weight:600;color:var(--text);margin-bottom:4px">Noch keine Admin-Aktionen</div>
+      <div style="font-size:12px;line-height:1.4">Sobald du User verifizierst, bannst oder Premium vergibst, taucht's hier auf — inklusive Wer/Wann/Was.</div>
+    </div>`
   }
   return `<ul class="audit-list">
     ${rows.map(r => {

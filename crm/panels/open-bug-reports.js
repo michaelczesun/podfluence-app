@@ -337,7 +337,7 @@ export default {
           heroEl.innerHTML = ''
           const heroTiles = [
             statHero({ label: 'Offen gesamt', value: open.length, change: changeLabel, trend: changeKind, icon: 'bug' }),
-            statHero({ label: 'In Arbeit', value: inProgressCount, change: inProgressCount > 0 ? 'Werden bearbeitet' : 'Keine in Bearbeitung', trend: 'neutral', icon: 'tool' }),
+            statHero({ label: 'In Arbeit', value: inProgressCount, change: inProgressCount > 0 ? 'Werden bearbeitet' : 'Keine in Bearbeitung', trend: 'neutral', icon: 'wrench' }),
             statHero({ label: 'Neu (7 Tage)', value: lastWeek, change: oldestLabel, trend: 'neutral', icon: 'clock' })
           ]
           heroTiles.forEach(tile => {

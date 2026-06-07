@@ -350,7 +350,7 @@ export default {
 
         heroRow.innerHTML = ''
         try {
-          heroRow.appendChild(statHero({ label: 'Aktive Umfragen', value: polls.length, icon: 'poll', accent: 'indigo', countUpTo: polls.length }))
+          heroRow.appendChild(statHero({ label: 'Aktive Umfragen', value: polls.length, icon: 'bar-chart-3', accent: 'indigo', countUpTo: polls.length }))
           heroRow.appendChild(statHero({ label: 'Stimmen gesamt', value: totalVotes, icon: 'vote', accent: 'violet', countUpTo: totalVotes }))
           heroRow.appendChild(statHero({ label: 'Schließen < 24h', value: closingSoon, icon: 'clock', accent: 'amber', countUpTo: closingSoon }))
         } catch (_) {
