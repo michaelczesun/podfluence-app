@@ -38,7 +38,14 @@
       'users-by-country','referral-leaderboard','referral-overview','invite-codes-usage',
       'podcaster-engagement-7d','trending-podcasters','achievements-unlocks',
       'insta-approval-queue','insta-post-type-scores','newsletter-audience-sync',
-      'bug-reports-triage','push-broadcast','storage-ops','podcast-verification-queue','settings'
+      'bug-reports-triage','push-broadcast','storage-ops','podcast-verification-queue','settings',
+      // Neue Top-Tab-Bundles (mounten je 4 Sub-Panels intern):
+      '_tab-pulse','_tab-people','_tab-growth','_tab-content','_tab-system'
+    ]
+
+    // Zusätzliche Pages, die via Iframe getestet werden (kein Module-Mount):
+    const PAGES = [
+      { id: 'user-detail.html', url: '/crm/user-detail.html?uid=selftest&_selftest=1' }
     ]
 
     const tbody = document.querySelector('#results tbody')
@@ -107,6 +114,58 @@
         if (status === 'ok') okCount++; else errCount++
 
         console.error = origErr
+      }
+
+      // ---------- PAGES (Iframe-Test) ----------
+      for (const page of PAGES) {
+        networkErrors.length = 0
+        let status = 'ok'
+        let errText = ''
+        const errors = []
+
+        try {
+          await new Promise((resolve, reject) => {
+            const iframe = document.createElement('iframe')
+            iframe.style.width = '800px'
+            iframe.style.height = '600px'
+            iframe.style.border = '0'
+            const timeout = setTimeout(() => { resolve() }, 4000)
+            iframe.addEventListener('load', () => {
+              try {
+                const w = iframe.contentWindow
+                if (w) {
+                  const origErr = w.console.error
+                  w.console.error = (...args) => {
+                    errors.push(args.map(a => a && a.message || String(a)).join(' '))
+                    origErr.apply(w.console, args)
+                  }
+                  w.addEventListener('error', (e) => errors.push(String(e.message || e)))
+                  w.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason && e.reason.message || e.reason)))
+                }
+              } catch (_) { /* cross-origin = ignorieren */ }
+              setTimeout(() => { clearTimeout(timeout); resolve() }, 2500)
+            })
+            iframe.addEventListener('error', () => { clearTimeout(timeout); reject(new Error('iframe load error')) })
+            hidden.innerHTML = ''
+            hidden.appendChild(iframe)
+            iframe.src = page.url
+          })
+        } catch (e) {
+          status = 'err'; errText = String(e.message || e).slice(0, 400)
+        }
+
+        if (errors.length && status === 'ok') status = 'warn'
+        const errStr = errText || errors.slice(0, 3).join('\n').slice(0, 400)
+        const netStr = networkErrors.map(n => `${n.status} ${n.url.split('/').slice(-2).join('/')}`).slice(0, 3).join('\n')
+
+        const tr = document.createElement('tr')
+        tr.innerHTML = `
+          <td><strong>page: ${page.id}</strong></td>
+          <td class="${status === 'ok' ? 'ok' : status === 'warn' ? 'warn' : 'err'}">${status.toUpperCase()}</td>
+          <td><pre>${errStr || '—'}</pre></td>
+          <td><pre>${netStr || '—'}</pre></td>`
+        tbody.appendChild(tr)
+        if (status === 'ok') okCount++; else errCount++
       }
 
       summary.innerHTML = `<strong>${okCount} ok / ${errCount} mit Problemen</strong>`
