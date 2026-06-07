@@ -478,16 +478,37 @@ try {
 const role = window.__CRM_ROLE__ || 'admin'
 
 // Top-Tabs gefiltert nach Rolle (deny → ausgeblendet)
+// Hash-Format: #<tab>/<subtab> (z.B. #people/users, #growth/funnels)
+// id === tabKey === erstes Hash-Segment
 const PANELS = Object.entries(PERMISSIONS.tabs || {}).map(([key, def]) => ({
-  id: 'tab-' + key,
+  id: key,
   tabKey: key,
   title: def.label || key,
   icon: TAB_ICONS[key] || '•',
-  access: def.access?.[role] || (PERMISSIONS.nullRoleAccess ? 'rw' : 'deny')
+  access: def.access?.[role] || (PERMISSIONS.nullRoleAccess ? 'rw' : 'deny'),
+  subtabs: def.subtabs || null
 }))
 
 const VISIBLE_PANELS = PANELS.filter(p => p.access && p.access !== 'deny')
 const VISIBLE_IDS = new Set(VISIBLE_PANELS.map(p => p.id))
+
+// Default-Subtab pro Tab: erster Subtab auf den die Rolle Zugriff hat
+function defaultSubFor(tabKey) {
+  const meta = PANELS.find(p => p.id === tabKey)
+  if (!meta?.subtabs) return ''
+  const entries = Object.entries(meta.subtabs)
+  const first = entries.find(([, acc]) => {
+    const a = (acc && typeof acc === 'object') ? acc[role] : acc
+    return a && a !== 'deny'
+  })
+  return first ? first[0] : ''
+}
+
+// Vollständigen Hash-Pfad bauen (für Sidebar-Links: #tab/defaultsub)
+function buildHashFor(tabKey) {
+  const sub = defaultSubFor(tabKey)
+  return sub ? `${tabKey}/${sub}` : tabKey
+}
 
 // ---- Sidebar rendern (flach, 5 Top-Tabs) ----
 const sidebar = document.getElementById('sidebar')
@@ -495,7 +516,7 @@ sidebar.innerHTML = `
   <div class="cat" data-cat="top">
     <div class="cat-items" style="gap:2px">
       ${VISIBLE_PANELS.map(p => `
-        <a href="#${p.id}" data-pid="${p.id}" class="top-tab-link">
+        <a href="#${buildHashFor(p.id)}" data-pid="${p.id}" class="top-tab-link">
           <span class="ic" style="font-size:15px;margin-right:10px">${p.icon}</span>
           <span class="lbl">${p.title}</span>
         </a>
@@ -660,9 +681,10 @@ function renderQuickSearch(query) {
 function activateQuickSearchItem(it) {
   if (!it) return
   if (it.type === 'panel') {
-    location.hash = '#' + it.id
+    location.hash = '#' + buildHashFor(it.id)
   } else if (it.type === 'user') {
-    location.hash = '#users-list?u=' + it.id
+    // Direkt in den People/Users-Subtab springen mit User-Parameter
+    location.hash = '#people/users?u=' + it.id
   }
   closeQuickSearch()
 }
@@ -777,14 +799,43 @@ const mount = document.getElementById('panel-mount')
 
 async function loadPanel() {
   const hashRaw = location.hash.replace(/^#/, '').trim()
-  const [hash] = hashRaw.split('?')
-  // Default-Load: 'tab-pulse' falls verfügbar, sonst erster sichtbarer Tab
-  const fallback = (VISIBLE_PANELS.find(p => p.id === 'tab-pulse') || VISIBLE_PANELS[0])?.id
-  let id = hash || fallback
-  // Role-Guard: nicht erlaubte Panel-IDs auf Fallback zurückbiegen
+  // Hash-Format: <tab>/<subtab>?<params>  — beides optional
+  const [hashPath, queryStr = ''] = hashRaw.split('?')
+  const segments = hashPath.split('/').filter(Boolean)
+  // Legacy-Migration: alte '#tab-<key>'-Hashes auf neues Format umbiegen
+  let rawTab = segments[0] || ''
+  if (rawTab.startsWith('tab-')) rawTab = rawTab.slice(4)
+  let subFromHash = segments[1] || ''
+  // Back-Compat: alte Sub-Tab-Module schreiben '?sub=<key>' in den Hash.
+  // Wenn der Pfad keinen zweiten Segment hat, akzeptiere ?sub=.
+  if (!subFromHash && queryStr) {
+    try {
+      const sp = new URLSearchParams(queryStr)
+      if (sp.get('sub')) subFromHash = sp.get('sub')
+    } catch {}
+  }
+
+  // Default-Load: 'pulse' falls verfügbar, sonst erster sichtbarer Tab
+  const fallback = (VISIBLE_PANELS.find(p => p.id === 'pulse') || VISIBLE_PANELS[0])?.id
+  let id = rawTab || fallback
+
+  // Role-Guard: nicht erlaubte Top-Tabs auf Fallback zurückbiegen
   if (id && !VISIBLE_IDS.has(id)) {
     mount.innerHTML = `<div class="panel-shell"><div class="empty" style="color:#F87171">Kein Zugriff auf „${id}" (Rolle: ${role}).</div></div>`
     return
+  }
+
+  // Falls noch kein Subtab im Hash, aber Tab hat welche → in Hash setzen (ohne Reload-Loop)
+  if (!subFromHash) {
+    const def = defaultSubFor(id)
+    if (def) {
+      const target = '#' + id + '/' + def + (queryStr ? '?' + queryStr : '')
+      if (location.hash !== target) {
+        // replaceState verhindert History-Pollution + zweiten hashchange-Fire
+        history.replaceState(null, '', target)
+      }
+      subFromHash = def
+    }
   }
 
   // Set active state
@@ -814,8 +865,9 @@ async function loadPanel() {
       const v = new Date().toISOString().slice(0, 13)  // YYYY-MM-DDTHH
       // Top-Tabs werden als _tab-<key>.js geladen (Unterstrich-Prefix = Sub-Module-Loader).
       // Diese Loader importieren ihrerseits die existierenden Panel-Dateien.
-      const modulePath = id.startsWith('tab-')
-        ? `./panels/_tab-${id.slice(4)}.js?v=${v}`
+      // VISIBLE_IDS sind Top-Tab-Keys → immer _tab-<key>.js
+      const modulePath = VISIBLE_IDS.has(id)
+        ? `./panels/_tab-${id}.js?v=${v}`
         : `./panels/${id}.js?v=${v}`
       mod = await import(modulePath)
       cache.set(id, mod)
@@ -824,9 +876,15 @@ async function loadPanel() {
     if (!panel || typeof panel.mount !== 'function') {
       throw new Error('Panel-Modul exportiert kein mount()')
     }
-    // Sub-Tab nach '?' an mount() weitergeben (z.B. #tab-pulse?sub=live)
-    const subParams = hashRaw.includes('?') ? hashRaw.split('?')[1] : ''
-    await panel.mount(mount, { role, access: meta.access, sub: subParams, permissions: PERMISSIONS })
+    // Subtab (zweites Hash-Segment) + zusätzliche Query-Params an mount() weitergeben
+    // sub = 'users' (Subtab-Key), params = 'u=abc&x=1' (alles nach '?')
+    await panel.mount(mount, {
+      role,
+      access: meta.access,
+      sub: subFromHash,
+      params: queryStr,
+      permissions: PERMISSIONS
+    })
   } catch (e) {
     console.error('[crm] panel load error', id, e)
     mount.innerHTML = `<div class="panel-shell"><div class="panel-head"><h2>${meta.title}</h2></div><div class="empty" style="color:#F87171">Panel-Fehler: ${e?.message || e}</div></div>`
