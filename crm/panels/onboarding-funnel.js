@@ -234,12 +234,14 @@ function renderFunnelHTML(data) {
 function renderHeroes(host, data, rangeLabel) {
   const c = data.counts
   const total = c.signup || 1
-  const overallConv = Math.round((c.active / total) * 100)
+  // FIX (math-impossible-values): Gesamt-Conversion auf 100% clampen.
+  const overallConv = Math.min(100, Math.round((c.active / total) * 100))
   let worst = { idx: 1, rate: 100 }
   for (let i = 1; i < STAGES.length; i++) {
     const prev = c[STAGES[i - 1].key] || 1
     const cur = c[STAGES[i].key] || 0
-    const r = Math.round((cur / prev) * 100)
+    // Rate clampen, sonst kann "Größter Drop-off" negativ werden (242% → -142%)
+    const r = Math.min(100, Math.round((cur / prev) * 100))
     if (r < worst.rate) worst = { idx: i, rate: r }
   }
 
@@ -575,8 +577,9 @@ export default {
             const rows = STAGES.map((s, i) => {
               const c = data.counts[s.key] || 0
               const prev = i === 0 ? c : (data.counts[STAGES[i - 1].key] || 0)
-              const conv = prev ? Math.round((c / prev) * 100) : 0
-              const overall = data.counts.signup ? Math.round((c / data.counts.signup) * 100) : 0
+              // FIX (math-impossible-values): clamp auf max 100%
+              const conv = prev ? Math.min(100, Math.round((c / prev) * 100)) : 0
+              const overall = data.counts.signup ? Math.min(100, Math.round((c / data.counts.signup) * 100)) : 0
               return {
                 Stufe: s.label,
                 Beschreibung: s.desc,
