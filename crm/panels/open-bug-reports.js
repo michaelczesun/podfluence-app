@@ -330,17 +330,19 @@ export default {
           const heroEl = container.querySelector('#obr-hero')
           const inProgressCount = open.filter(r => r.status === 'in_progress').length
           const oldest = open.length ? open[open.length - 1] : null
-          const oldestDays = oldest ? Math.floor((Date.now() - new Date(oldest.created_at).getTime()) / 86400e3) : 0
+          const oldestDays = oldest ? Math.floor((Date.now() - new Date(oldest.created_at).getTime()) / 86400e3) : null
           const changeLabel = change > 0 ? `+${change}% vs. Vorwoche` : `${change}% vs. Vorwoche`
           const changeKind = change > 0 ? 'negative' : 'positive'
-          heroEl.innerHTML = `
-            ${statHero({ label: 'Offen gesamt', value: open.length, change: changeLabel, trend: changeKind, icon: 'bug' })}
-            ${statHero({ label: 'In Arbeit', value: inProgressCount, change: inProgressCount > 0 ? 'Werden bearbeitet' : 'Keine in Bearbeitung', trend: 'neutral', icon: 'tool' })}
-            ${statHero({ label: 'Neu (7 Tage)', value: lastWeek, change: `Älteste: ${oldestDays} Tg.`, trend: 'neutral', icon: 'clock' })}
-          `
-          heroEl.querySelectorAll('.stat-hero-value, .hero-value, [data-stat-value]').forEach((el, i) => {
-            const vals = [open.length, inProgressCount, lastWeek]
-            if (countUp && vals[i] != null) countUp(el, vals[i])
+          const oldestLabel = oldestDays == null ? 'Noch keiner offen' : `Älteste: ${oldestDays} Tg.`
+          heroEl.innerHTML = ''
+          const heroTiles = [
+            statHero({ label: 'Offen gesamt', value: open.length, change: changeLabel, trend: changeKind, icon: 'bug' }),
+            statHero({ label: 'In Arbeit', value: inProgressCount, change: inProgressCount > 0 ? 'Werden bearbeitet' : 'Keine in Bearbeitung', trend: 'neutral', icon: 'tool' }),
+            statHero({ label: 'Neu (7 Tage)', value: lastWeek, change: oldestLabel, trend: 'neutral', icon: 'clock' })
+          ]
+          heroTiles.forEach(tile => {
+            if (tile instanceof Node) heroEl.appendChild(tile)
+            else if (typeof tile === 'string') heroEl.insertAdjacentHTML('beforeend', tile)
           })
 
           const chartsEl = container.querySelector('#obr-charts')
@@ -355,16 +357,21 @@ export default {
             </div>
           `
           try {
+            const series = buildTrendSeries(trend)
             makeAreaChart(chartsEl.querySelector('#obr-chart-trend'), {
-              data: buildTrendSeries(trend),
-              color: '#0a84ff',
-              yLabel: 'Reports'
+              categories: series.map(p => p.x),
+              series: [{ name: 'Reports', data: series.map(p => p.y) }],
+              colors: ['#0a84ff'],
+              height: 240
             })
           } catch (_) {}
           try {
+            const dist = buildStatusDistribution(open)
             makeDonutChart(chartsEl.querySelector('#obr-chart-status'), {
-              data: buildStatusDistribution(open),
-              centerLabel: open.length + ' offen'
+              labels: dist.map(d => d.label),
+              values: dist.map(d => d.value),
+              colors: dist.map(d => d.color),
+              height: 240
             })
           } catch (_) {}
 

@@ -257,11 +257,10 @@ export default {
         const barTop = top.slice(0, 10)
         try {
           makeBarChart(barHost, {
-            data: barTop.map(p => ({ x: p.title.length > 18 ? p.title.slice(0, 17) + '…' : p.title, y: p.totalMinutes })),
-            xLabel: 'Podcast',
-            yLabel: 'Minuten',
-            color: '#8b5cf6',
-            horizontal: true
+            categories: barTop.map(p => p.title.length > 18 ? p.title.slice(0, 17) + '…' : p.title),
+            series: [{ name: 'Minuten', data: barTop.map(p => p.totalMinutes) }],
+            colors: ['#8b5cf6'],
+            height: 320
           })
         } catch (e) {
           barHost.innerHTML = `<div class="muted" style="padding:24px">Chart konnte nicht gerendert werden: ${htmlEscape(e.message || String(e))}</div>`
@@ -277,7 +276,12 @@ export default {
         }))
         if (restSum > 0) donutData.push({ label: 'Rest', value: restSum, color: '#374151' })
         try {
-          makeDonutChart(donutHost, { data: donutData })
+          makeDonutChart(donutHost, {
+            labels: donutData.map(d => d.label),
+            values: donutData.map(d => d.value),
+            colors: donutData.map(d => d.color),
+            height: 320
+          })
         } catch (e) {
           donutHost.innerHTML = `<div class="muted" style="padding:24px">Chart konnte nicht gerendert werden: ${htmlEscape(e.message || String(e))}</div>`
         }

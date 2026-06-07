@@ -26,7 +26,8 @@ function countForAudience(audience, splitData, statsData) {
   if (audience === 'podcaster') return (sp.podcaster || 0) + (sp.both || 0)
   if (audience === 'listener')  return (sp.listener  || 0) + (sp.both || 0)
   // accept 'beta_user', 'beta', or 'premium' — whatever key the RPC returns
-  if (audience === 'beta')      return sp.beta_user || sp.beta || sp.premium || 0
+  // Only accept real beta keys — premium != beta
+  if (audience === 'beta')      return sp.beta_user || sp.beta || 0
   return 0
 }
 
