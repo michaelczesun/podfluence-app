@@ -2,7 +2,7 @@ import { sb } from '/lib/supabase.js'
 import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js'
 import { makeDonutChart, makeBarChart, makeAreaChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { countUp, fadeIn } from '/lib/animations.js'
 import { drawer, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
 
 const STATUS_LABELS = {
@@ -161,11 +161,11 @@ export default {
           </div>
 
           <div id="hero-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;">
-            ${skeletonLoader({ rows: 1, height: 90 })}
+            <div class="pf-skeleton" style="height:90px;border-radius:10px;"></div>
           </div>
 
           <div style="display:grid;grid-template-columns:2fr 1fr;gap:14px;" id="chart-row">
-            ${skeletonLoader({ rows: 1, height: 220 })}
+            <div class="pf-skeleton" style="height:220px;border-radius:10px;"></div>
           </div>
 
           <div class="glass-card" style="padding:14px 16px;border-radius:14px;display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
@@ -174,7 +174,10 @@ export default {
           </div>
 
           <div id="grid" class="card-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(320px,1fr));gap:14px;min-height:300px;">
-            ${skeletonLoader({ rows: 4, height: 180 })}
+            <div class="pf-skeleton" style="height:180px;border-radius:10px;"></div>
+            <div class="pf-skeleton" style="height:180px;border-radius:10px;"></div>
+            <div class="pf-skeleton" style="height:180px;border-radius:10px;"></div>
+            <div class="pf-skeleton" style="height:180px;border-radius:10px;"></div>
           </div>
         </div>
       `
@@ -205,7 +208,7 @@ export default {
       // all operate on that local array — no secondary fetches.
       async function loadAll() {
         try {
-          grid.innerHTML = skeletonLoader({ rows: 4, height: 180 })
+          grid.innerHTML = '<div class="pf-skeleton" style="height:180px;border-radius:10px;"></div>'.repeat(4)
           allPodcasts = await fetchAllPodcasts()
           renderHero()
           renderCharts()
@@ -242,8 +245,9 @@ export default {
             <div class="cu" data-val="${last7}" style="font-size:32px;font-weight:700;color:#60a5fa;">0</div>
           </div>
         `
+        // countUp(element, from, to, durationMs) — positional
         heroRow.querySelectorAll('.cu').forEach(el => {
-          try { countUp(el, parseInt(el.dataset.val) || 0, { duration: 800 }) }
+          try { countUp(el, 0, parseInt(el.dataset.val) || 0, 800) }
           catch (_) { el.textContent = el.dataset.val }
         })
       }
@@ -314,7 +318,7 @@ export default {
         }
         grid.innerHTML = pods.map(cardHtml).join('')
         wireCards()
-        try { fadeIn(grid, { duration: 300 }) } catch (_) {}
+        try { fadeIn(grid, 300) } catch (_) {}
       }
 
       function wireCards() {
@@ -338,10 +342,10 @@ export default {
         try {
           const { error } = await sb.functions.invoke('send-podcast-verification', { body: { p_id: id } })
           if (error) throw error
-          toast('Verify-Mail gesendet', { type: 'success' })
+          toast('Verify-Mail gesendet', 'success')
           loadAll()
         } catch (e) {
-          toast('Fehler beim Senden: ' + (e.message || 'unbekannt'), { type: 'error' })
+          toast('Fehler beim Senden: ' + (e.message || 'unbekannt'), 'error')
         }
       }
 
@@ -360,62 +364,69 @@ export default {
           // FIX H1: Use podcast_id as parameter key (SECURITY DEFINER RPC admin_force_verify_podcast).
           const { error } = await sb.rpc('admin_force_verify_podcast', { podcast_id: id })
           if (error) throw error
-          toast('Podcast verifiziert', { type: 'success' })
+          toast('Podcast verifiziert', 'success')
           loadAll()
         } catch (e) {
-          toast('Fehler: ' + (e.message || 'unbekannt'), { type: 'error' })
+          toast('Fehler: ' + (e.message || 'unbekannt'), 'error')
         }
       }
 
       async function doReject(id) {
         const p = allPodcasts.find(x => x.id === id)
         if (!p) return
-        modal({
-          title: 'Podcast ablehnen',
-          content: `
-            <div style="display:flex;flex-direction:column;gap:12px;">
-              <p style="margin:0;color:#aaa;font-size:13px;">Grund wird dem Owner per E-Mail mitgeteilt.</p>
-              <div style="padding:10px 12px;background:rgba(255,255,255,.04);border-radius:8px;font-size:12px;color:#ccc;">
-                <strong>${htmlEscape(p.title || '')}</strong><br>
-                <span style="color:#888;">${htmlEscape(p.owner_email || '')}</span>
-              </div>
-              <label style="font-size:12px;color:#aaa;">Ablehnungs-Grund</label>
-              <textarea id="reject-reason" rows="4" placeholder="Z.B. RSS-Feed nicht erreichbar, Owner-E-Mail im Feed stimmt nicht überein, ..." style="width:100%;padding:10px;background:#0a0a0a;border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#fff;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
-            </div>
-          `,
-          actions: [
-            { label: 'Abbrechen', style: 'ghost', value: false },
-            { label: 'Ablehnen', style: 'danger', value: true }
-          ],
-          onAction: async (val, m) => {
-            if (!val) { m.close(); return }
-            // FIX M3: Scope querySelector to modal container (m.el) to avoid hitting wrong textarea
-            // when multiple modals/panels coexist in the DOM.
-            const reason = (m.el ? m.el.querySelector('#reject-reason') : document.querySelector('#reject-reason'))?.value?.trim() || ''
+        // modal({ title, content, footer, width }) — no actions/onAction support.
+        // Build footer DOM manually; use the returned { close } handle.
+        const footerEl = document.createElement('div')
+        footerEl.style.cssText = 'display:flex;gap:8px;justify-content:flex-end;'
+        const cancelBtn = document.createElement('button')
+        cancelBtn.textContent = 'Abbrechen'
+        cancelBtn.style.cssText = 'padding:8px 14px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);color:#ccc;border-radius:8px;cursor:pointer;font-size:13px;'
+        const rejectBtn = document.createElement('button')
+        rejectBtn.textContent = 'Ablehnen'
+        rejectBtn.style.cssText = 'padding:8px 14px;background:#7f1d1d;border:1px solid #ef444455;color:#fca5a5;border-radius:8px;cursor:pointer;font-size:13px;font-weight:600;'
+        footerEl.appendChild(cancelBtn)
+        footerEl.appendChild(rejectBtn)
+
+        const contentEl = document.createElement('div')
+        contentEl.style.cssText = 'display:flex;flex-direction:column;gap:12px;'
+        contentEl.innerHTML = `
+          <p style="margin:0;color:#aaa;font-size:13px;">Grund wird dem Owner per E-Mail mitgeteilt.</p>
+          <div style="padding:10px 12px;background:rgba(255,255,255,.04);border-radius:8px;font-size:12px;color:#ccc;">
+            <strong>${htmlEscape(p.title || '')}</strong><br>
+            <span style="color:#888;">${htmlEscape(p.owner_email || '')}</span>
+          </div>
+          <label style="font-size:12px;color:#aaa;">Ablehnungs-Grund</label>
+          <textarea id="reject-reason-${htmlEscape(id)}" rows="4" placeholder="Z.B. RSS-Feed nicht erreichbar, Owner-E-Mail im Feed stimmt nicht überein, ..." style="width:100%;padding:10px;background:#0a0a0a;border:1px solid rgba(255,255,255,.1);border-radius:8px;color:#fff;font-family:inherit;font-size:13px;resize:vertical;"></textarea>
+        `
+
+        const { close } = modal({ title: 'Podcast ablehnen', content: contentEl, footer: footerEl, width: 520 })
+
+        cancelBtn.onclick = () => close()
+        rejectBtn.onclick = async () => {
+          // Scope to contentEl to avoid hitting a textarea from another modal
+          const reason = contentEl.querySelector(`#reject-reason-${id}`)?.value?.trim() || ''
+          try {
+            // FIX H2: Use SECURITY DEFINER RPC instead of direct .update() which is blocked by RLS.
+            const { error } = await sb.rpc('admin_reject_podcast', { p_id: id, p_reason: reason || null })
+            if (error) throw error
+            // FIX M6: Surface mail-send errors instead of silently swallowing them.
             try {
-              // FIX H2: Use SECURITY DEFINER RPC instead of direct .update() which is blocked by RLS.
-              // Requires DB function: admin_reject_podcast(p_id uuid, p_reason text) SECURITY DEFINER
-              const { error } = await sb.rpc('admin_reject_podcast', { p_id: id, p_reason: reason || null })
-              if (error) throw error
-              // FIX M6: Surface mail-send errors instead of silently swallowing them.
-              try {
-                const { error: mailErr } = await sb.functions.invoke('send-podcast-verification', { body: { p_id: id, action: 'reject', reason } })
-                if (mailErr) {
-                  console.warn('Ablehnungsmail Fehler:', mailErr)
-                  toast('Ablehnung gespeichert, aber Ablehnungsmail konnte nicht gesendet werden', { type: 'warning' })
-                }
-              } catch (mailEx) {
-                console.warn('Ablehnungsmail Exception:', mailEx)
-                toast('Ablehnung gespeichert, aber Ablehnungsmail konnte nicht gesendet werden', { type: 'warning' })
+              const { error: mailErr } = await sb.functions.invoke('send-podcast-verification', { body: { p_id: id, action: 'reject', reason } })
+              if (mailErr) {
+                console.warn('Ablehnungsmail Fehler:', mailErr)
+                toast('Ablehnung gespeichert, aber Ablehnungsmail konnte nicht gesendet werden', 'warning')
               }
-              toast('Podcast abgelehnt', { type: 'success' })
-              m.close()
-              loadAll()
-            } catch (e) {
-              toast('Fehler: ' + (e.message || 'unbekannt'), { type: 'error' })
+            } catch (mailEx) {
+              console.warn('Ablehnungsmail Exception:', mailEx)
+              toast('Ablehnung gespeichert, aber Ablehnungsmail konnte nicht gesendet werden', 'warning')
             }
+            toast('Podcast abgelehnt', 'success')
+            close()
+            loadAll()
+          } catch (e) {
+            toast('Fehler: ' + (e.message || 'unbekannt'), 'error')
           }
-        })
+        }
       }
 
       function showDetails(id) {
@@ -474,23 +485,28 @@ export default {
       container.querySelector('#btn-refresh').onclick = () => { toast('Aktualisiere…'); loadAll() }
       container.querySelector('#btn-csv').onclick = () => {
         try {
-          exportCsv(allPodcasts.map(p => ({
-            title: p.title,
-            rss_url: p.rss_url,
-            owner_email: p.owner_email,
-            status: p.verification_status,
-            created_at: p.created_at,
-            rejection_reason: p.rejection_reason || ''
-          })), `podcast-verifizierung-${currentFilter}-${new Date().toISOString().slice(0,10)}.csv`)
-        } catch (e) { toast('CSV-Export fehlgeschlagen', { type: 'error' }) }
+          // exportCsv(rows, columns, filename) — pass null for columns to auto-derive
+          exportCsv(
+            allPodcasts.map(p => ({
+              title: p.title,
+              rss_url: p.rss_url,
+              owner_email: p.owner_email,
+              status: p.verification_status,
+              created_at: p.created_at,
+              rejection_reason: p.rejection_reason || ''
+            })),
+            null,
+            `podcast-verifizierung-${currentFilter}-${new Date().toISOString().slice(0, 10)}.csv`
+          )
+        } catch (e) { toast('CSV-Export fehlgeschlagen', 'error') }
       }
       container.querySelector('#btn-pdf').onclick = () => {
         try { exportPanelAsPdf(container, { title: 'Podcast-Verifizierung' }) }
-        catch (e) { toast('PDF-Export fehlgeschlagen', { type: 'error' }) }
+        catch (e) { toast('PDF-Export fehlgeschlagen', 'error') }
       }
 
       loadAll()
-      try { fadeIn(container, { duration: 400 }) } catch (_) {}
+      try { fadeIn(container, 400) } catch (_) {}
     } catch (err) {
       console.error('[podcast-verification-queue] mount failed', err)
       mountErrorBox(container, err)

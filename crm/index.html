@@ -751,11 +751,15 @@ window.addEventListener('keydown', e => {
     if (qsBackdrop) closeQuickSearch(); else openQuickSearch()
     return
   }
-  // Cmd+/
+  // Cmd+/ — Desktop: toggle collapse; Mobile: toggle drawer
   if (meta && e.key === '/') {
     e.preventDefault()
-    shellEl.classList.toggle('sidebar-collapsed')
-    shellEl.classList.toggle('sidebar-open')
+    if (window.innerWidth >= 1024) {
+      shellEl.classList.toggle('sidebar-collapsed')
+      shellEl.classList.toggle('sidebar-open')
+    } else {
+      shellEl.classList.toggle('sidebar-open')
+    }
     return
   }
   // ESC
