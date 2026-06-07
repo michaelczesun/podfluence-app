@@ -1,5 +1,5 @@
-import { sb } from '/lib/supabase.js'
-import { toast, confirmDialog, fmtDateTime, htmlEscape } from '/lib/ui.js'
+import { sb } from '/lib/supabase.js?v=20260607b'
+import { toast, confirmDialog, fmtDateTime, htmlEscape } from '/lib/ui.js?v=20260607b'
 
 // ---- helpers ----
 const LS_KEY = 'crm_settings'

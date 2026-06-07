@@ -1,9 +1,9 @@
-import { sb } from '/lib/supabase.js'
-import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
-import { makeAreaChart, makeRadialBar } from '/lib/charts.js'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer } from '/lib/layout-extras.js'
+import { sb } from '/lib/supabase.js?v=20260607b'
+import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260607b'
+import { makeAreaChart, makeRadialBar } from '/lib/charts.js?v=20260607b'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260607b'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260607b'
+import { drawer } from '/lib/layout-extras.js?v=20260607b'
 
 const SENTRY_URL = 'https://sentry.io/organizations/podfluence/issues/'
 

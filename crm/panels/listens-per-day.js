@@ -1,9 +1,9 @@
-import { sb } from '/lib/supabase.js'
-import { toast, fmtNumber, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js'
-import { makeLineChart, makeHeatmap } from '/lib/charts.js'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js'
+import { sb } from '/lib/supabase.js?v=20260607b'
+import { toast, fmtNumber, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js?v=20260607b'
+import { makeLineChart, makeHeatmap } from '/lib/charts.js?v=20260607b'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260607b'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260607b'
+import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js?v=20260607b'
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 

@@ -1,11 +1,11 @@
-import { sb } from '/lib/supabase.js'
-import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
-import { makeAreaChart, makeDonutChart } from '/lib/charts.js'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
-import { countUp, fadeIn } from '/lib/animations.js'
-import { drawer, statHero } from '/lib/layout-extras.js'
+import { sb } from '/lib/supabase.js?v=20260607b'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260607b'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260607b'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260607b'
+import { countUp, fadeIn } from '/lib/animations.js?v=20260607b'
+import { drawer, statHero } from '/lib/layout-extras.js?v=20260607b'
 // FIX #6: added unverifyUser import; FIX #7: added unbanUser import
-import { showUserDetailModal, verifyUser, unverifyUser, banUser, unbanUser, grantPremium } from '/lib/panel-actions.js'
+import { showUserDetailModal, verifyUser, unverifyUser, banUser, unbanUser, grantPremium } from '/lib/panel-actions.js?v=20260607b'
 
 const PAGE_SIZE = 50
 

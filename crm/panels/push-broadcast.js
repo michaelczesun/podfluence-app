@@ -1,8 +1,8 @@
-import { sb } from '/lib/supabase.js'
-import { toast, confirmDialog, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
-import { makeAreaChart, makeDonutChart } from '/lib/charts.js'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
-import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+import { sb } from '/lib/supabase.js?v=20260607b'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260607b'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260607b'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260607b'
+import { drawer, statHero, glassCard } from '/lib/layout-extras.js?v=20260607b'
 
 // Audiences supported by send_broadcast_push RPC
 const AUDIENCES = [

@@ -1,7 +1,7 @@
-import { sb } from '/lib/supabase.js'
-import { toast, fmtNumber, fmtRelativeTime, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
-import { exportCsv } from '/lib/export.js'
-import { fadeIn, skeletonLoader } from '/lib/animations.js'
+import { sb } from '/lib/supabase.js?v=20260607b'
+import { toast, fmtNumber, fmtRelativeTime, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260607b'
+import { exportCsv } from '/lib/export.js?v=20260607b'
+import { fadeIn, skeletonLoader } from '/lib/animations.js?v=20260607b'
 
 const PAGE_SIZE = 100
 
