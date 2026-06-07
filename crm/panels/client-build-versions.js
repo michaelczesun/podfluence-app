@@ -338,17 +338,16 @@ async function openVersionDrawer(versionRow, state, refresh) {
   const c = colorFor(versionRow.rank)
   const d = drawer({
     title: `Version ${versionRow.version}`,
-    subtitle: `${fmtNumber(versionRow.user_count)} Nutzer · ${c.label}`,
     width: 560,
-    // FIX #7: typeof-Guard entfernt — spinnerHtml ist ein importierter Callable
-    bodyHtml: `
-      <div class="drawer-toolbar">
+    contentHtml: `
+      <div class="drawer-subtitle muted" style="margin-bottom:.75rem;">${fmtNumber(versionRow.user_count)} Nutzer · ${c.label}</div>
+      <div class="drawer-toolbar" style="display:flex;align-items:center;gap:.75rem;margin-bottom:1rem;">
         <span class="badge badge-${c.tone}">${c.label}</span>
         ${versionRow.rank > 0
           ? `<button class="btn btn-warn" data-act="force-bulk">${iconHtml('bell')} Force-Update an alle (${fmtNumber(versionRow.user_count)})</button>`
           : `<span class="muted">Diese Version ist aktuell – kein Push nötig.</span>`}
       </div>
-      <div id="cbv-userlist" class="user-list">${spinnerHtml()}</div>
+      <div id="cbv-userlist" class="user-list">${typeof spinnerHtml === 'function' ? spinnerHtml() : '<div class="muted">Lade…</div>'}</div>
     `
   })
 

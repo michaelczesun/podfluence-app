@@ -355,6 +355,8 @@ function renderBody(body, data) {
 
   const hero = body.querySelector('#hero-row')
   try {
+    // FIX(high): Phase 2 hat icon-Render gefixt — statHero ruft selbst iconHtml() auf.
+    // Hier nur den Icon-Key passen, NICHT doppelt iconHtml() aufrufen.
     hero.appendChild(statHero({ label: 'Codes generiert', value: data.funnel.generated, icon: 'zap', accent: '#6366f1' }))
     hero.appendChild(statHero({ label: 'Codes verwendet', value: data.funnel.used, icon: 'mouse-pointer-click', accent: '#ec4899' }))
     hero.appendChild(statHero({ label: 'Neue User', value: data.funnel.signedUp, icon: 'user-check', accent: '#10b981' }))

@@ -275,18 +275,35 @@ function renderCharts(host, data) {
   const donut = host.querySelector('#of-donut')
 
   if (data.series && data.series.length) {
-    try { makeAreaChart(area, { data: data.series, xKey: 'x', yKey: 'y', color: '#6366f1', label: 'Signups' }) }
-    catch (e) { area.innerHTML = `<div class="of-empty">${iconHtml('alert-triangle')}<div>Chart-Fehler: ${htmlEscape(e.message || '')}</div></div>` }
+    // FIX (data): korrekte Shape {categories, series:[{name,data}], colors, height}
+    try {
+      makeAreaChart(area, {
+        categories: data.series.map(p => p.x),
+        series: [{ name: 'Signups', data: data.series.map(p => p.y) }],
+        colors: ['#6366f1'],
+        height: 240
+      })
+    } catch (e) { area.innerHTML = `<div class="of-empty">${iconHtml('alert-triangle')}<div>Chart-Fehler: ${htmlEscape(e.message || '')}</div></div>` }
   } else {
-    area.innerHTML = `<div class="of-empty">${iconHtml('bar-chart')}<div>Noch keine Signups im Zeitraum</div></div>`
+    area.innerHTML = `<div class="of-empty">${iconHtml('bar-chart')}<div style="font-weight:600; margin-bottom:4px;">Keine Signups</div><div style="font-size:12px;">Im gewählten Zeitraum wurden keine neuen Accounts erstellt.</div></div>`
   }
 
-  try {
-    makeDonutChart(donut, {
-      data: STAGES.map(s => ({ label: s.label, value: data.counts[s.key] || 0, color: s.color }))
-    })
-  } catch (e) {
-    donut.innerHTML = `<div class="of-empty">${iconHtml('alert-triangle')}<div>Chart-Fehler: ${htmlEscape(e.message || '')}</div></div>`
+  // FIX (data): Donut-Shape {labels, values, colors, height} statt {data:[...]}
+  const donutValues = STAGES.map(s => data.counts[s.key] || 0)
+  const donutHasData = donutValues.some(v => v > 0)
+  if (donutHasData) {
+    try {
+      makeDonutChart(donut, {
+        labels: STAGES.map(s => s.label),
+        values: donutValues,
+        colors: STAGES.map(s => s.color),
+        height: 240
+      })
+    } catch (e) {
+      donut.innerHTML = `<div class="of-empty">${iconHtml('alert-triangle')}<div>Chart-Fehler: ${htmlEscape(e.message || '')}</div></div>`
+    }
+  } else {
+    donut.innerHTML = `<div class="of-empty">${iconHtml('pie-chart')}<div style="font-weight:600; margin-bottom:4px;">Noch keine Daten</div><div style="font-size:12px;">Sobald User durch den Funnel laufen, erscheint die Verteilung hier.</div></div>`
   }
 }
 
