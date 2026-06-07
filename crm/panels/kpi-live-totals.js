@@ -8,10 +8,10 @@ import { drawer } from '/lib/layout-extras.js'
 const REFRESH_MS = 60_000
 
 const KPI_DEFS = [
-  { key: 'total_users',      label: 'Total Users',      icon: 'users',     color: '#7C5CFF', fmt: 'int' },
-  { key: 'active_24h',       label: 'Aktiv (24h)',      icon: 'activity',  color: '#22D3EE', fmt: 'int' },
-  { key: 'total_posts',      label: 'Total Posts',      icon: 'message',   color: '#F59E0B', fmt: 'int' },
-  { key: 'listening_hours',  label: 'Listening-Hours',  icon: 'headphones',color: '#10B981', fmt: 'hours' }
+  { key: 'total_users',      label: 'User gesamt',        icon: 'users',     color: '#7C5CFF', fmt: 'int' },
+  { key: 'active_24h',       label: 'Aktiv (24h)',        icon: 'activity',  color: '#22D3EE', fmt: 'int' },
+  { key: 'posts_24h',        label: 'Beiträge (24h)',     icon: 'message',   color: '#F59E0B', fmt: 'int' },
+  { key: 'listening_hours',  label: 'Hörstunden (24h)',   icon: 'headphones',color: '#10B981', fmt: 'hours' }
 ]
 
 async function fetchTotals() {
@@ -31,19 +31,18 @@ async function fetchTotals() {
 
   const safe = (p) => p.then(r => r).catch(() => ({ count: 0, data: null }))
 
-  // app_opens as proxy for active users
-  // episode_listening_pulses for listen duration
-  // FIX(med): renamed active48 -> activeYday (gestern 24h-48h Fenster, nicht kumulativ)
+  // Schema-Truth: app_opens hat KEIN user_id (nur device_fp) → reine event-counts.
+  // listening_activity.listened_ms ist die echte Hör-Quelle.
   const [active24, activeYday, listenRows, listenRowsYday] = await Promise.all([
     safe(sb.from('app_opens').select('id', { count: 'exact', head: true }).gte('created_at', since24h)),
     safe(sb.from('app_opens').select('id', { count: 'exact', head: true }).gte('created_at', since48h).lt('created_at', since24h)),
-    safe(sb.from('episode_listening_pulses').select('duration_sec,pulse_seconds,created_at').gte('created_at', since24h).limit(5000)),
-    safe(sb.from('episode_listening_pulses').select('duration_sec,pulse_seconds,created_at').gte('created_at', since48h).lt('created_at', since24h).limit(5000))
+    safe(sb.from('listening_activity').select('listened_ms,created_at').gte('created_at', since24h).limit(5000)),
+    safe(sb.from('listening_activity').select('listened_ms,created_at').gte('created_at', since48h).lt('created_at', since24h).limit(5000))
   ])
 
-  const sumSec = (rows) => (rows || []).reduce((a, r) => a + Number(r.duration_sec || r.pulse_seconds || 0), 0)
-  const totalListenSec = sumSec(listenRows?.data)
-  const ydayListenSec  = sumSec(listenRowsYday?.data)
+  const sumMs = (rows) => (rows || []).reduce((a, r) => a + Number(r.listened_ms || 0), 0)
+  const totalListenSec = sumMs(listenRows?.data) / 1000
+  const ydayListenSec  = sumMs(listenRowsYday?.data) / 1000
 
   // FIX(high): total_users — direct COUNT on users table, not sum of 60-day signups
   // FIX(high): total_posts — direct COUNT on updates table, not last daily_series value
@@ -83,7 +82,7 @@ async function fetchTotals() {
   return {
     total_users:      { value: totalUsers, prev: ydayUsers },
     active_24h:       { value: active24.count ?? 0, prev: activeYday.count ?? 0 },
-    total_posts:      { value: totalPosts, prev: ydayPosts },
+    posts_24h:        { value: totalPosts, prev: ydayPosts },
     listening_hours:  { value: Math.round(totalListenSec / 3600), prev: Math.round(ydayListenSec / 3600) }
   }
 }
@@ -115,9 +114,9 @@ async function fetchTimeSeries(kpiKey, days = 30) {
       const { data } = await sb.from('app_opens').select('created_at').gte('created_at', since).limit(SERIES_LIMIT)
       rows = bucketByDay(data || [], 'created_at', days, false)
     } else if (kpiKey === 'listening_hours') {
-      const { data } = await sb.from('episode_listening_pulses').select('created_at,duration_sec,pulse_seconds').gte('created_at', since).limit(SERIES_LIMIT)
-      rows = bucketByDay(data || [], 'created_at', days, false, r => Number(r.duration_sec || r.pulse_seconds || 0) / 3600)
-    } else if (kpiKey === 'total_users' || kpiKey === 'total_posts') {
+      const { data } = await sb.from('listening_activity').select('created_at,listened_ms').gte('created_at', since).limit(SERIES_LIMIT)
+      rows = bucketByDay(data || [], 'created_at', days, false, r => Number(r.listened_ms || 0) / 3600000)
+    } else if (kpiKey === 'total_users' || kpiKey === 'posts_24h') {
       // nutze admin_daily_series RPC die RLS via SECURITY DEFINER bypasst
       const metric = kpiKey === 'total_users' ? 'signups' : 'posts'
       const { data } = await sb.rpc('admin_daily_series', { p_metric: metric, p_days: days })
