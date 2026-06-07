@@ -434,10 +434,9 @@ export default {
       function showDetails(id) {
         const p = allPodcasts.find(x => x.id === id)
         if (!p) return
-        drawer({
-          title: p.title || 'Podcast',
-          width: 480,
-          content: `
+        // drawer accepts { content: DOM-Node } — build node so we can wire handlers after.
+        const node = document.createElement('div')
+        node.innerHTML = `
             <div style="display:flex;flex-direction:column;gap:16px;padding:4px;">
               <div style="display:flex;gap:14px;align-items:center;">
                 ${p.cover_image ? `<img src="${htmlEscape(p.cover_image)}" style="width:80px;height:80px;border-radius:12px;object-fit:cover;">` : `<div style="width:80px;height:80px;border-radius:12px;background:#1a1a1a;display:flex;align-items:center;justify-content:center;font-size:28px;">${iconHtml('mic')}</div>`}
@@ -475,13 +474,12 @@ export default {
                 <button class="dr-reject" style="flex:1;padding:10px;background:#7f1d1d;border:none;color:#fca5a5;border-radius:8px;cursor:pointer;font-size:13px;">${iconHtml('x-circle')} Ablehnen</button>
               </div>
             </div>
-          `,
-          onMount: (el) => {
-            el.querySelector('.dr-send').onclick = () => sendVerifyMail(id)
-            el.querySelector('.dr-force').onclick = () => doForceVerify(id)
-            el.querySelector('.dr-reject').onclick = () => doReject(id)
-          }
-        })
+          `
+        // Bind handlers on the detached node — they survive when drawer appends it.
+        node.querySelector('.dr-send').onclick = () => sendVerifyMail(id)
+        node.querySelector('.dr-force').onclick = () => doForceVerify(id)
+        node.querySelector('.dr-reject').onclick = () => doReject(id)
+        drawer({ title: p.title || 'Podcast', width: 480, content: node })
       }
 
       container.querySelector('#btn-refresh').onclick = () => { toast('Aktualisiere…'); loadAll() }

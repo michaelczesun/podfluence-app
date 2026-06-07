@@ -51,9 +51,12 @@ async function fetchData() {
 
   const totalCrashes = list.length
   const crashSessions = new Set(list.map(c => c.session_id).filter(Boolean)).size
+  // Hero und Body müssen dieselbe Source-of-Truth haben. Wenn keine Sessions-Zahl
+  // verfügbar ist (app_opens != crash_logs Domain — apples vs oranges), zeigen
+  // wir keine fake-100%/99% sondern null → UI rendert '—' + Warnung.
   const crashFreeRate = sessionsCount > 0
     ? Math.max(0, Math.min(100, ((sessionsCount - crashSessions) / sessionsCount) * 100))
-    : (totalCrashes === 0 ? 100 : 99)
+    : null
 
   const buckets = []
   for (let i = 6; i >= 0; i--) {
