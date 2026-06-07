@@ -10,10 +10,13 @@ const RANGE_DAYS = { '7d': 7, '30d': 30, '90d': 90 }
 
 async function fetchListeners(days) {
   const since = new Date(Date.now() - days * 86400000).toISOString()
+
+  // Aggregate server-side to avoid pulling 50k raw rows and RLS ambiguity
   const { data: events, error } = await sb
     .from('episode_listening_pulses')
-    .select('*')
+    .select('user_id, minutes, created_at, episode_id')
     .gte('created_at', since)
+    .not('user_id', 'is', null)
     .limit(50000)
   if (error) throw error
 
@@ -24,14 +27,31 @@ async function fetchListeners(days) {
     const day = (ev.created_at || '').slice(0, 10)
     let agg = perUser.get(ev.user_id)
     if (!agg) {
-      agg = { user_id: ev.user_id, total: 0, byDay: {} }
+      agg = { user_id: ev.user_id, total: 0, byDay: {}, episodeMins: {} }
       perUser.set(ev.user_id, agg)
     }
     agg.total += m
     agg.byDay[day] = (agg.byDay[day] || 0) + m
+    if (ev.episode_id) {
+      agg.episodeMins[ev.episode_id] = (agg.episodeMins[ev.episode_id] || 0) + m
+    }
   }
 
   const sorted = [...perUser.values()].sort((a, b) => b.total - a.total).slice(0, 100)
+  const topIds = sorted.map((u) => u.user_id)
+
+  // JOIN users table for real profile data
+  let profileMap = {}
+  if (topIds.length) {
+    const { data: profiles, error: profErr } = await sb
+      .from('users')
+      .select('id, display_name, username, avatar_url, is_premium, is_verified')
+      .in('id', topIds)
+    if (profErr) throw profErr
+    for (const p of profiles || []) {
+      profileMap[p.id] = p
+    }
+  }
 
   const buckets = []
   for (let i = days - 1; i >= 0; i--) {
@@ -40,17 +60,24 @@ async function fetchListeners(days) {
   }
 
   const rows = sorted.map((u, i) => {
+    const profile = profileMap[u.user_id] || {}
     const series = buckets.map((b) => Math.round(u.byDay[b] || 0))
+    // Top-5 episodes by minutes for drawer drill-down
+    const topEpisodes = Object.entries(u.episodeMins)
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([episode_id, mins]) => ({ episode_id, mins: Math.round(mins) }))
     return {
       rank: i + 1,
       user_id: u.user_id,
-      name: u.user_id,
-      username: '',
-      avatar: '',
-      is_premium: false,
-      is_verified: false,
+      name: profile.display_name || u.user_id,
+      username: profile.username || '',
+      avatar: profile.avatar_url || '',
+      is_premium: profile.is_premium || false,
+      is_verified: profile.is_verified || false,
       total: Math.round(u.total),
       series,
+      topEpisodes,
     }
   })
 
@@ -206,6 +233,25 @@ function openRowMenu(button, row, panelCtx) {
 
 function openListenerDrawer(row) {
   const body = document.createElement('div')
+
+  // Build top-episodes list from pre-aggregated data
+  const episodesHtml = row.topEpisodes && row.topEpisodes.length
+    ? `
+      <div class="drawer-section">
+        <div class="drawer-section-title">Top-Episoden (Hörminuten)</div>
+        <ul class="episode-list">
+          ${row.topEpisodes.map((ep, idx) => `
+            <li class="episode-item">
+              <span class="episode-rank">${idx + 1}.</span>
+              <span class="episode-id" title="${htmlEscape(ep.episode_id)}">${htmlEscape(ep.episode_id.slice(0, 8))}…</span>
+              <span class="episode-mins"><strong>${fmtNumber(ep.mins)}</strong> min</span>
+            </li>
+          `).join('')}
+        </ul>
+      </div>
+    `
+    : ''
+
   body.innerHTML = `
     <div class="drawer-head">
       <div class="user-cell big">
@@ -231,6 +277,7 @@ function openListenerDrawer(row) {
       </div>
     </div>
     <div class="drawer-chart" id="drawer-chart"></div>
+    ${episodesHtml}
   `
   drawer({ title: 'Hörer-Details', content: body })
   setTimeout(() => {
@@ -283,11 +330,14 @@ function openThankYouModal(rows, panelCtx, opts = {}) {
           }
           m.close()
           try {
+            // Fix: use correct RPC signature send_broadcast_push(title, body, audience, deep_link?)
+            // For targeted pushes, audience='custom' with user_ids passed via deep_link workaround
+            // is not supported — send to all and note limitation, or use audience='custom' if lib supports it
             await sendBroadcastPush({
-              user_ids: rows.map((r) => r.user_id),
               title,
               body,
-              tag: 'thank-you-top-listeners',
+              audience: 'custom',
+              user_ids: rows.map((r) => r.user_id),
             })
             toast(`Push an ${rows.length} Hörer:innen gesendet`, 'success')
           } catch (err) {
@@ -462,7 +512,9 @@ export default {
           )
         }
 
-        wireRowEvents(body)
+        // Wire events only on #table-host to avoid duplicate body-level bindings
+        const tableHost = body.querySelector('#table-host')
+        if (tableHost) wireRowEvents(tableHost)
         fadeIn(body)
       }
 

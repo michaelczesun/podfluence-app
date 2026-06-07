@@ -9,42 +9,26 @@ import { showUserDetailModal } from '/lib/panel-actions.js'
 const PALETTE = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#ef4444', '#84cc16']
 
 async function fetchPolls() {
-  const tries = ['polls', 'community_polls', 'post_polls']
-  for (const t of tries) {
-    try {
-      const { data, error } = await sb.from(t)
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(200)
-      if (!error && data) return { rows: data, table: t }
-    } catch (_) {}
-  }
-  return { rows: [], table: null }
+  const { data, error } = await sb.from('polls')
+    .select('*')
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return { rows: data || [], table: 'polls' }
 }
 
-async function fetchVotes(table, pollIds) {
-  if (!pollIds.length) return { byPoll: {}, table: null }
-  const voteTables = [
-    table ? table.replace(/s$/, '') + '_votes' : null,
-    'poll_votes',
-    'community_poll_votes'
-  ].filter(Boolean)
-  for (const vt of voteTables) {
-    try {
-      const { data, error } = await sb.from(vt)
-        .select('*')
-        .in('poll_id', pollIds)
-      if (!error && data) {
-        const grouped = {}
-        for (const v of data) {
-          if (!grouped[v.poll_id]) grouped[v.poll_id] = []
-          grouped[v.poll_id].push(v)
-        }
-        return { byPoll: grouped, table: vt }
-      }
-    } catch (_) {}
+async function fetchVotes(pollIds) {
+  if (!pollIds.length) return { byPoll: {}, table: 'poll_votes' }
+  const { data, error } = await sb.from('poll_votes')
+    .select('*')
+    .in('poll_id', pollIds)
+  if (error) throw error
+  const grouped = {}
+  for (const v of (data || [])) {
+    if (!grouped[v.poll_id]) grouped[v.poll_id] = []
+    grouped[v.poll_id].push(v)
   }
-  return { byPoll: {}, table: null }
+  return { byPoll: grouped, table: 'poll_votes' }
 }
 
 function normalizePoll(p) {
@@ -147,7 +131,7 @@ function renderBars(el, poll) {
   }
 }
 
-async function closePoll(table, pollId) {
+async function closePoll(pollId) {
   const ok = await confirmDialog({
     title: 'Umfrage schließen?',
     message: 'Die Umfrage wird sofort beendet. Nutzer können nicht mehr abstimmen.',
@@ -156,10 +140,12 @@ async function closePoll(table, pollId) {
   })
   if (!ok) return false
   try {
-    const { error } = await sb.from(table)
+    const { data, error } = await sb.from('polls')
       .update({ is_active: false, closes_at: new Date().toISOString() })
       .eq('id', pollId)
+      .select('id')
     if (error) throw error
+    if (!data || data.length === 0) throw new Error('Keine Zeile aktualisiert — RLS blockiert möglicherweise das Update')
     toast({ type: 'success', message: 'Umfrage geschlossen' })
     return true
   } catch (e) {
@@ -198,7 +184,7 @@ function openVoterDrawer(poll) {
             <div class="voter-row" data-user-id="${htmlEscape(String(v.user_id || ''))}">
               <div class="voter-avatar">${(v.user_id || '?').toString().slice(0, 2).toUpperCase()}</div>
               <div class="voter-meta">
-                <div class="voter-id">${htmlEscape(String(v.user_id || 'Anonym'))}</div>
+                <div class="voter-id">${htmlEscape(String(v.user_id || 'Anonym').slice(0, 8))}&hellip;</div>
                 <div class="voter-time">${v.created_at ? fmtRelativeTime(v.created_at) : ''}</div>
               </div>
               ${v.user_id ? '<button class="btn btn-ghost btn-sm" data-action="open-user">Profil</button>' : ''}
@@ -230,7 +216,8 @@ function openVoterDrawer(poll) {
   })
 
   try {
-    const cu = d?.querySelector?.('[data-cu]')
+    const drawerEl = d?.el ?? (d instanceof Element ? d : null)
+    const cu = drawerEl?.querySelector('[data-cu]')
     if (cu) countUp(cu, Number(cu.dataset.cu || 0))
   } catch (_) {}
 
@@ -248,7 +235,8 @@ function openVoterDrawer(poll) {
   }, 30)
 
   try {
-    d?.querySelectorAll?.('[data-action="open-user"]').forEach(btn => {
+    const drawerEl = d?.el ?? (d instanceof Element ? d : null)
+    drawerEl?.querySelectorAll('[data-action="open-user"]').forEach(btn => {
       btn.addEventListener('click', (ev) => {
         const row = ev.currentTarget.closest('[data-user-id]')
         const uid = row?.dataset.userId
@@ -261,7 +249,7 @@ function openVoterDrawer(poll) {
 function emptyState(container) {
   container.innerHTML = `
     <div class="empty-state">
-      <div class="empty-icon">${iconHtml('poll', 48) || '📊'}</div>
+      <div class="empty-icon">${iconHtml('poll', 48) || '<span aria-label="Umfrage">&#x1F4CA;</span>'}</div>
       <h3>Keine aktiven Umfragen</h3>
       <p>Sobald Nutzer Umfragen starten, erscheinen sie hier mit Live-Verteilung und Voter-Insights.</p>
     </div>
@@ -321,7 +309,7 @@ export default {
 
       const body = container.querySelector('#body')
       const heroRow = container.querySelector('#hero-row')
-      const state = { polls: [], pollsTable: null, votesTable: null }
+      const state = { polls: [] }
 
       const renderSkeleton = () => {
         heroRow.innerHTML = `<div class="hero-skel"></div><div class="hero-skel"></div><div class="hero-skel"></div>`
@@ -414,8 +402,7 @@ export default {
           if (!poll) return
           card.querySelector('[data-action="details"]')?.addEventListener('click', () => openVoterDrawer(poll))
           card.querySelector('[data-action="close"]')?.addEventListener('click', async () => {
-            if (!state.pollsTable) return toast({ type: 'error', message: 'Tabelle unbekannt' })
-            const ok = await closePoll(state.pollsTable, poll.id)
+            const ok = await closePoll(poll.id)
             if (ok) load()
           })
         })
@@ -426,13 +413,11 @@ export default {
       const load = async () => {
         renderSkeleton()
         try {
-          const { rows, table } = await fetchPolls()
-          state.pollsTable = table
+          const { rows } = await fetchPolls()
           const normalized = rows.map(normalizePoll)
           const active = normalized.filter(p => p.is_active)
           const ids = active.map(p => p.id)
-          const { byPoll, table: vt } = await fetchVotes(table, ids)
-          state.votesTable = vt
+          const { byPoll } = await fetchVotes(ids)
           state.polls = active.map(p => mergeVotes(p, byPoll[p.id] || []))
           render()
         } catch (e) {

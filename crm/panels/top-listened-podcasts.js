@@ -7,6 +7,8 @@ import { drawer, statHero } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const DAY_MS = 86400000
+// FIX #1: module-scope constant so render() can safely reference it
+const DAYS = 7
 
 function dayKey(d) {
   return new Date(d).toISOString().slice(0, 10)
@@ -32,8 +34,17 @@ async function fetchSessions(days = 7) {
     .gte('created_at', since)
     .limit(100000)
   if (error) throw error
+
+  const rows = data || []
+
+  // FIX #3: warn if the hard-cap may have been hit (truncation guard)
+  if (rows.length >= 100000) {
+    console.warn('[top-listened-podcasts] fetchSessions: result hit the 100 000-row cap — data may be truncated. Consider moving aggregation to a server-side RPC.')
+    toast('Hinweis: Datenmenge sehr groß – Ergebnisse könnten unvollständig sein.', 'warning')
+  }
+
   // Remap to shape aggregatePodcasts expects: r.episodes.podcasts
-  return (data || []).map(r => ({
+  return rows.map(r => ({
     user_id: r.user_id,
     episode_id: r.episode_id,
     duration_seconds: (Number(r.minutes) || 0) * 60,
@@ -72,7 +83,8 @@ function aggregatePodcasts(rows) {
     const k = dayKey(r.started_at)
     if (k in o.spark) o.spark[k] += minutes
   }
-  return Array.from(byPodcast.values())
+
+  const result = Array.from(byPodcast.values())
     .map(p => ({
       ...p,
       totalMinutes: Math.round(p.totalMinutes),
@@ -80,11 +92,13 @@ function aggregatePodcasts(rows) {
       episodeCount: p.episodeIds.size
     }))
     .sort((a, b) => b.totalMinutes - a.totalMinutes)
-}
 
-// podcasts, podcast_hosts, users tables do not exist — replaced with empty-state stub
-async function fetchPodcastDetail(podcastId) {
-  return { podcast: null, hosts: [], episodes: [], sessions: [] }
+  // FIX #4: warn if schema mismatch silently dropped all rows
+  if (result.length === 0 && rows.length > 0) {
+    console.warn('[top-listened-podcasts] aggregatePodcasts: rawRows had', rows.length, 'entries but 0 survived aggregation — possible schema mismatch (episodes FK or podcasts FK missing or returning null).')
+  }
+
+  return result
 }
 
 export default {
@@ -151,7 +165,7 @@ export default {
           body.innerHTML = `
             <div class="empty-state glass-card">
               <div class="empty-icon">${iconHtml('headphones')}</div>
-              <h3>Noch keine Hör-Aktivität in den letzten ${days} Tagen</h3>
+              <h3>Noch keine Hör-Aktivität in den letzten ${DAYS} Tagen</h3>
               <p>Sobald Nutzer Episoden anhören, erscheint das Leaderboard hier.</p>
               <button class="btn btn-primary" data-act="reload">Erneut laden</button>
             </div>`
@@ -263,11 +277,17 @@ export default {
 
         renderLeaderboardRows()
 
+        // FIX #5: on sort, only re-render table rows — avoid full render() which re-creates charts
         body.querySelectorAll('th.sortable').forEach(th => {
           th.addEventListener('click', () => {
             sortKey = th.dataset.sort
             aggregated.sort((a, b) => b[sortKey] - a[sortKey])
-            render()
+            // Update sort indicators in headers without full re-render
+            body.querySelectorAll('th.sortable').forEach(h => {
+              const base = h.dataset.sort === 'totalMinutes' ? 'Total Min' : 'Plays'
+              h.textContent = base + (h.dataset.sort === sortKey ? ' ▾' : '')
+            })
+            renderLeaderboardRows()
           })
         })
 
@@ -338,7 +358,13 @@ export default {
           subtitle: 'Letzte 30 Tage · Episoden & Hosts',
           content: `<div id="drawerLoading" style="padding:32px;text-align:center">${spinnerHtml()} Details werden geladen…</div>`
         })
+        // FIX #2: guard against drawer() returning an object without querySelector
         const root = d.contentEl || d.body || d.el || d
+        if (!root || typeof root.querySelector !== 'function') {
+          console.error('[top-listened-podcasts] drawer() did not return an element with querySelector. Received:', d)
+          toast('Drawer konnte nicht geöffnet werden.', 'error')
+          return
+        }
 
         try {
           const p = aggregated.find(x => x.id === podcastId)
@@ -389,14 +415,14 @@ export default {
               </table>` : `<div class="empty-state" style="padding:24px;text-align:center">Keine Episode-Daten verfügbar.</div>`}
             </div>
           `
-          const loadingEl = root.querySelector ? root.querySelector('#drawerLoading') : null
+          const loadingEl = root.querySelector('#drawerLoading')
           if (loadingEl) loadingEl.outerHTML = html
-          else if (root.querySelector) {
+          else {
             const target = root.querySelector('.drawer-content') || root
             target.innerHTML = html
           }
         } catch (err) {
-          const loadingEl = root.querySelector ? root.querySelector('#drawerLoading') : null
+          const loadingEl = root.querySelector('#drawerLoading')
           const html = `<div class="error-state" style="padding:24px">
             <div class="error-icon">${iconHtml('alert')}</div>
             <h3>Details konnten nicht geladen werden</h3>

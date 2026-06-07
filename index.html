@@ -2211,7 +2211,7 @@
     // --- Fetch live stats and write data-target ---
     var bust = '?t=' + Math.floor(Date.now() / 60000);
     fetch(SUPABASE_URL + '/functions/v1/public-stats' + bust, {
-      headers: { 'apikey': SUPABASE_KEY },
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': 'Bearer ' + SUPABASE_KEY },
       cache: 'no-cache'
     })
     .then(function(r) { return r.json(); })

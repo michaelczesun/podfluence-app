@@ -8,12 +8,11 @@ import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const MEDALS = ['🥇', '🥈', '🥉']
 
-async function fetchLeaderboard() {
-  try {
-    const { data, error } = await sb.rpc('referral_leaderboard', { p_limit: 20 })
-    if (!error && Array.isArray(data) && data.length) return data
-  } catch (_) {}
+// Fallback skeleton HTML in case skeletonLoader import is unavailable
+const SKELETON_FALLBACK = '<div style="opacity:.3;padding:12px;text-align:center;">Lade…</div>'
 
+async function fetchLeaderboard() {
+  // Kein referral_leaderboard-RPC vorhanden — direkt aus referrals-Tabelle aggregieren
   const { data: refs, error } = await sb
     .from('referrals')
     .select('inviter_id, invited_user_id, created_at')
@@ -36,8 +35,9 @@ async function fetchLeaderboard() {
   const ids = list.map(l => l.inviter_id)
   if (ids.length) {
     try {
+      // FIX: 'profiles' → 'users' (korrekte Tabelle laut Schema)
       const { data: users } = await sb
-        .from('profiles')
+        .from('users')
         .select('id, display_name, username, avatar_url, is_verified')
         .in('id', ids)
       const um = new Map((users || []).map(u => [u.id, u]))
@@ -84,9 +84,10 @@ async function fetchReferralTimeseries() {
 }
 
 async function fetchReferredUsers(inviterId) {
+  // FIX: select('*') → konkrete Spalten
   const { data, error } = await sb
     .from('referrals')
-    .select('*')
+    .select('id, inviter_id, invited_user_id, created_at, status, bonus_granted')
     .eq('inviter_id', inviterId)
     .order('created_at', { ascending: false })
     .limit(100)
@@ -95,8 +96,9 @@ async function fetchReferredUsers(inviterId) {
   let users = []
   if (ids.length) {
     try {
+      // FIX: 'profiles' → 'users'
       const { data: u } = await sb
-        .from('profiles')
+        .from('users')
         .select('id, display_name, username, avatar_url, is_verified, created_at')
         .in('id', ids)
       users = u || []
@@ -109,28 +111,8 @@ async function fetchReferredUsers(inviterId) {
   }))
 }
 
-async function grantBonusCode(inviterId) {
-  const ok = await confirmDialog({
-    title: 'Bonus-Code vergeben',
-    body: 'Einen neuen Bonus-Code für diesen Inviter erstellen?',
-    confirmText: 'Vergeben',
-    danger: false,
-  })
-  if (!ok) return false
-  try {
-    const code = 'BONUS-' + Math.random().toString(36).slice(2, 8).toUpperCase()
-    const { error } = await sb.rpc('grant_referral_bonus_code', {
-      p_user_id: inviterId,
-      p_code: code,
-    })
-    if (error) throw error
-    toast(`Bonus-Code ${code} vergeben`, { type: 'success' })
-    return true
-  } catch (e) {
-    toast('Funktion in Vorbereitung: ' + (e.message || e), { type: 'error' })
-    return false
-  }
-}
+// FIX: grantBonusCode() entfernt — RPC 'grant_referral_bonus_code' existiert nicht.
+// Button wird im Drawer ausgeblendet bis Feature implementiert ist.
 
 function podiumCard(row, rank) {
   const heightCls = rank === 0 ? 'podium-1' : rank === 1 ? 'podium-2' : 'podium-3'
@@ -205,6 +187,10 @@ function errorState(msg) {
 }
 
 async function openInviterDrawer(row) {
+  const skeletonHtml = typeof skeletonLoader === 'function'
+    ? skeletonLoader({ rows: 6 })
+    : (typeof spinnerHtml === 'function' ? spinnerHtml() : SKELETON_FALLBACK)
+
   const d = drawer({
     title: `Einladungen von ${row.display_name || 'User'}`,
     width: 560,
@@ -224,19 +210,22 @@ async function openInviterDrawer(row) {
             <div><span class="muted">Zuletzt</span><strong>${row.last_referral_at ? fmtRelativeTime(row.last_referral_at) : '—'}</strong></div>
           </div>
           <div class="drawer-actions">
-            <button class="btn-primary" id="grant-bonus">🎁 Bonus-Code vergeben</button>
+            <!-- FIX: Bonus-Code-Button entfernt — RPC nicht implementiert -->
             <button class="btn-secondary" id="open-profile">Profil öffnen</button>
           </div>
         </div>
         <div class="section-title">Eingeladene Nutzer</div>
-        <div id="referred-list" class="referred-list">${skeletonLoader ? skeletonLoader({ rows: 6 }) : (spinnerHtml ? spinnerHtml() : 'Lade…')}</div>
+        <div id="referred-list" class="referred-list">${skeletonHtml}</div>
       </div>
     `,
   })
 
+  // FIX: drawer() gibt Objekt zurück — body-Zugriff absichern; d selbst kann Element sein
+  const drawerRoot = (d && typeof d.body !== 'undefined') ? d.body : (d instanceof Element ? d : null)
+
   try {
     const refs = await fetchReferredUsers(row.inviter_id)
-    const listEl = d.body.querySelector('#referred-list')
+    const listEl = drawerRoot ? drawerRoot.querySelector('#referred-list') : null
     if (!listEl) return
     if (!refs.length) {
       listEl.innerHTML = `<div class="muted small" style="padding:16px;text-align:center;">Keine eingeladenen Nutzer.</div>`
@@ -246,12 +235,15 @@ async function openInviterDrawer(row) {
         const av = u.avatar_url
           ? `<img src="${htmlEscape(u.avatar_url)}" class="row-avatar sm">`
           : `<div class="row-avatar sm avatar-fallback">${htmlEscape((u.display_name || '?').slice(0, 1).toUpperCase())}</div>`
+        // status und bonus_granted kommen jetzt sicher aus dem expliziten SELECT
+        const statusText = r.status ? htmlEscape(r.status) : 'aktiv'
+        const bonusText = r.bonus_granted ? ' · 🎁 Bonus' : ''
         return `
           <div class="referred-row" data-uid="${htmlEscape(r.invited_user_id || '')}">
             ${av}
             <div class="referred-meta">
               <div>${htmlEscape(u.display_name || u.username || 'Gelöscht')} ${u.is_verified ? '<span class="verified-badge">✓</span>' : ''}</div>
-              <div class="muted small">${fmtDateTime(r.created_at)} · ${htmlEscape(r.status || 'aktiv')}${r.bonus_granted ? ' · 🎁 Bonus' : ''}</div>
+              <div class="muted small">${fmtDateTime(r.created_at)} · ${statusText}${bonusText}</div>
             </div>
             <button class="btn-ghost btn-sm" data-act="open-user">↗</button>
           </div>
@@ -259,22 +251,18 @@ async function openInviterDrawer(row) {
       }).join('')
     }
 
-    d.body.querySelector('#grant-bonus')?.addEventListener('click', async () => {
-      const ok = await grantBonusCode(row.inviter_id)
-      if (ok) d.close()
-    })
-    d.body.querySelector('#open-profile')?.addEventListener('click', () => {
+    drawerRoot.querySelector('#open-profile')?.addEventListener('click', () => {
       if (typeof showUserDetailModal === 'function') showUserDetailModal(row.inviter_id)
       else toast('Profil-Modal nicht verfügbar', { type: 'info' })
     })
-    d.body.querySelectorAll('[data-act="open-user"]').forEach(b => {
+    drawerRoot.querySelectorAll('[data-act="open-user"]').forEach(b => {
       b.addEventListener('click', (e) => {
         const uid = e.currentTarget.closest('[data-uid]')?.dataset.uid
         if (uid && typeof showUserDetailModal === 'function') showUserDetailModal(uid)
       })
     })
   } catch (e) {
-    const listEl = d.body.querySelector('#referred-list')
+    const listEl = drawerRoot ? drawerRoot.querySelector('#referred-list') : null
     if (listEl) listEl.innerHTML = `<div class="muted small" style="padding:16px;text-align:center;">Fehler: ${htmlEscape(e.message || String(e))}</div>`
   }
 }
@@ -285,6 +273,9 @@ export default {
   category: 'growth',
 
   async mount(container) {
+    // FIX: State außerhalb refresh() damit CSV-Export sauber resettet
+    let _board = null
+
     try {
       container.innerHTML = `
         <style>
@@ -370,14 +361,15 @@ export default {
 
       const skeletonHtml = () => `
         <div class="hero-row">
-          ${[1,2,3,4].map(()=>'<div class="glass-card" style="height:96px">'+(skeletonLoader?skeletonLoader({rows:2}):'')+'</div>').join('')}
+          ${[1,2,3,4].map(()=>'<div class="glass-card" style="height:96px">'+(typeof skeletonLoader==='function'?skeletonLoader({rows:2}):SKELETON_FALLBACK)+'</div>').join('')}
         </div>
         <div class="podium" style="margin-top:24px">
-          ${[0,1,2].map(i => `<div class="glass-card podium-${i+1}" style="opacity:.5">${skeletonLoader?skeletonLoader({rows:4}):(spinnerHtml?spinnerHtml():'')}</div>`).join('')}
+          ${[0,1,2].map(i => `<div class="glass-card podium-${i+1}" style="opacity:.5">${typeof skeletonLoader==='function'?skeletonLoader({rows:4}):(typeof spinnerHtml==='function'?spinnerHtml():SKELETON_FALLBACK)}</div>`).join('')}
         </div>
       `
 
       const refresh = async () => {
+        _board = null
         bodyEl.innerHTML = skeletonHtml()
         try {
           const [board, ts] = await Promise.all([fetchLeaderboard(), fetchReferralTimeseries()])
@@ -494,7 +486,7 @@ export default {
             })
           })
 
-          container._board = board
+          _board = board
         } catch (e) {
           bodyEl.innerHTML = errorState(e.message || String(e))
           bodyEl.querySelector('#err-retry')?.addEventListener('click', refresh)
@@ -511,7 +503,7 @@ export default {
         } catch (e) { toast('PDF fehlgeschlagen: ' + (e.message || e), { type: 'error' }) }
       })
       container.querySelector('#btn-csv')?.addEventListener('click', () => {
-        const board = container._board || []
+        const board = _board || []
         if (!board.length) return toast('Keine Daten', { type: 'info' })
         try {
           exportCsv(board.map((r, i) => ({

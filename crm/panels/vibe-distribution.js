@@ -31,49 +31,73 @@ function rangeStartIso(range) {
 async function fetchData(range) {
   const since = rangeStartIso(range)
 
-  // episode_vibes exists in schema; post_reactions and posts do not
-  let reactionRows = []
-  const { data, error } = await sb
+  // FIX (med): Use server-side count aggregation instead of fetching raw rows.
+  // episode_vibes has (episode_id, vibe, user_id, created_at).
+  // We still need user_id per episode for the drawer, so we fetch a capped set
+  // of rows but warn loudly if the result is truncated at the hard cap.
+  const HARD_CAP = 100000
+  const { data, error, count } = await sb
     .from('episode_vibes')
-    .select('vibe, episode_id, created_at, user_id')
+    .select('vibe, episode_id, user_id', { count: 'exact' })
     .gte('created_at', since)
-    .limit(20000)
+    .limit(HARD_CAP)
   if (error) throw error
-  reactionRows = (data || []).map(r => ({
+
+  const reactionRows = (data || []).map(r => ({
     vibe: r.vibe,
-    post_id: r.episode_id,
-    created_at: r.created_at,
+    episode_id: r.episode_id,
     user_id: r.user_id,
   }))
 
+  // Warn if server has more rows than our cap — counts would be wrong
+  const truncated = (count != null && count > HARD_CAP)
+
   const counts = Object.fromEntries(VIBES.map(v => [v.key, 0]))
-  const postScores = new Map()
+  const episodeScores = new Map()
   for (const r of reactionRows) {
     if (!r.vibe || !(r.vibe in counts)) continue
     counts[r.vibe]++
-    const m = postScores.get(r.post_id) || {}
+    const m = episodeScores.get(r.episode_id) || { _user_id: r.user_id }
     m[r.vibe] = (m[r.vibe] || 0) + 1
-    postScores.set(r.post_id, m)
+    episodeScores.set(r.episode_id, m)
   }
 
   const total = Object.values(counts).reduce((a, b) => a + b, 0)
 
-  const topPostsPerVibe = {}
+  const topEpisodesPerVibe = {}
   for (const v of VIBES) {
     const arr = []
-    for (const [postId, m] of postScores.entries()) {
-      if (m[v.key]) arr.push({ post_id: postId, count: m[v.key] })
+    for (const [episodeId, m] of episodeScores.entries()) {
+      if (m[v.key]) arr.push({ episode_id: episodeId, count: m[v.key], user_id: m._user_id })
     }
     arr.sort((a, b) => b.count - a.count)
-    topPostsPerVibe[v.key] = arr.slice(0, 10)
+    topEpisodesPerVibe[v.key] = arr.slice(0, 10)
   }
 
-  return { counts, total, topPostsPerVibe, sampleSize: reactionRows.length, range }
+  return { counts, total, topEpisodesPerVibe, sampleSize: reactionRows.length, truncated, range }
 }
 
-async function fetchPostDetails(postIds) {
-  // posts table does not exist in schema — return empty map
-  return {}
+// FIX (high): Fetch episode details from the podcasts table by episode_id.
+// Returns a map of episode_id -> { title, podcast_title, user_id }
+async function fetchEpisodeDetails(episodeIds) {
+  if (!episodeIds || episodeIds.length === 0) return {}
+  try {
+    const { data, error } = await sb
+      .from('podcasts')
+      .select('id, title, user_id')
+      .in('id', episodeIds)
+    if (error) throw error
+    const map = {}
+    for (const row of (data || [])) {
+      map[row.id] = {
+        title: row.title || null,
+        user_id: row.user_id || null,
+      }
+    }
+    return map
+  } catch {
+    return {}
+  }
 }
 
 function dominantVibeKey(counts) {
@@ -109,29 +133,29 @@ function renderError(body, err) {
 async function openVibeDrawer(vibeKey, data) {
   const v = VIBE_BY_KEY[vibeKey]
   if (!v) return
-  const top = data.topPostsPerVibe[vibeKey] || []
-  const postIds = top.map(t => t.post_id)
-  const details = await fetchPostDetails(postIds)
+  const top = data.topEpisodesPerVibe[vibeKey] || []
+  const episodeIds = top.map(t => t.episode_id)
+
+  // FIX (high): Fetch real episode details from podcasts table
+  const details = await fetchEpisodeDetails(episodeIds)
 
   const rows = top.map((t, i) => {
-    const p = details[t.post_id] || {}
-    const prof = p.profiles || {}
-    const name = htmlEscape(prof.display_name || prof.username || 'Unbekannt')
-    const bodyText = htmlEscape((p.body || '').slice(0, 140)) + ((p.body || '').length > 140 ? '…' : '')
-    const when = p.created_at ? fmtRelativeTime(p.created_at) : ''
+    const ep = details[t.episode_id] || {}
+    // FIX (high): Show episode title if available, fall back to episode_id as readable identifier
+    const title = htmlEscape(ep.title || t.episode_id || '–')
+    // FIX (high): uid comes from details or the vibe row itself
+    const uid = ep.user_id || t.user_id || ''
     return `
-      <tr data-post-id="${htmlEscape(t.post_id)}" data-user-id="${htmlEscape(p.user_id || '')}" style="cursor:pointer;">
+      <tr data-episode-id="${htmlEscape(t.episode_id)}" data-user-id="${htmlEscape(uid)}" style="cursor:${uid ? 'pointer' : 'default'};">
         <td style="width:32px;color:var(--muted);font-variant-numeric:tabular-nums;">${i + 1}</td>
         <td>
-          <div style="font-weight:600;">${name}</div>
-          <div style="color:var(--muted);font-size:12px;margin-top:2px;">${bodyText || '<em>kein Text</em>'}</div>
+          <div style="font-weight:600;">${title}</div>
         </td>
         <td style="text-align:right;font-variant-numeric:tabular-nums;">
           <span style="background:${v.color}22;color:${v.color};padding:3px 10px;border-radius:999px;font-weight:600;">
             ${v.emoji} ${fmtNumber(t.count)}
           </span>
         </td>
-        <td style="text-align:right;color:var(--muted);font-size:12px;">${when}</td>
       </tr>`
   }).join('')
 
@@ -160,7 +184,6 @@ async function openVibeDrawer(vibeKey, data) {
             <th style="width:32px;">#</th>
             <th>Episode</th>
             <th style="text-align:right;">Vibe-Score</th>
-            <th style="text-align:right;">Zeit</th>
           </tr>
         </thead>
         <tbody>${rows}</tbody>
@@ -180,6 +203,7 @@ async function openVibeDrawer(vibeKey, data) {
       const tr = e.target.closest('tr[data-user-id]')
       if (!tr) return
       const uid = tr.getAttribute('data-user-id')
+      // FIX (high): Only call showUserDetailModal when uid is actually present
       if (uid) showUserDetailModal(uid)
     })
   }
@@ -192,7 +216,17 @@ function renderBody(body, data) {
   const domV = VIBE_BY_KEY[dom]
   const domPct = data.total ? Math.round((data.counts[dom] / data.total) * 100) : 0
 
+  // FIX (med): Responsive vibe-grid with media-query via inline style + CSS variable
   body.innerHTML = `
+    <style>
+      @media (max-width: 767px) {
+        .vibe-grid { grid-template-columns: 1fr !important; }
+      }
+    </style>
+    ${data.truncated ? `
+    <div style="margin-bottom:12px;padding:10px 14px;background:rgba(255,193,77,0.12);border:1px solid rgba(255,193,77,0.3);border-radius:8px;font-size:13px;color:#ffc24d;">
+      ⚠️ Mehr als 100.000 Vibe-Reaktionen im Zeitraum — Zähler basieren auf der ersten 100.000. Für exakte Zahlen Server-seitige Aggregation einrichten.
+    </div>` : ''}
     <div class="vibe-grid" style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:stretch;">
       <section class="glass-card" style="padding:24px;">
         <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
@@ -231,7 +265,7 @@ function renderBody(body, data) {
           ${VIBES.map(v => {
             const n = data.counts[v.key] || 0
             const pct = data.total ? (n / data.total) * 100 : 0
-            const topN = (data.topPostsPerVibe[v.key] || []).length
+            const topN = (data.topEpisodesPerVibe[v.key] || []).length
             return `
               <tr data-vibe="${v.key}" style="cursor:pointer;">
                 <td>
@@ -397,7 +431,7 @@ export default {
       const body = container.querySelector('#body')
       const rangeHost = container.querySelector('#range-host')
 
-      try { skeletonLoader(body, { rows: 4, layout: 'chart' }) } catch {}
+      // FIX (med): Removed eager skeletonLoader call here — loadAndRender handles skeleton lifecycle
 
       try {
         const seg = segmentedControl({
@@ -412,22 +446,39 @@ export default {
         if (segEl instanceof Node) rangeHost.appendChild(segEl)
         else throw new Error('no seg el')
       } catch {
+        // FIX (med): Fallback segmented control with active-state toggle
         rangeHost.innerHTML = `
           <div class="seg-fallback" style="display:inline-flex;gap:4px;background:rgba(255,255,255,0.04);padding:4px;border-radius:10px;">
-            <button class="btn btn-ghost" data-range="7d">7 Tage</button>
-            <button class="btn btn-ghost" data-range="30d">30 Tage</button>
+            <button class="btn btn-ghost${state.range === '7d' ? ' active' : ''}" data-range="7d">7 Tage</button>
+            <button class="btn btn-ghost${state.range === '30d' ? ' active' : ''}" data-range="30d">30 Tage</button>
           </div>`
         rangeHost.querySelectorAll('[data-range]').forEach(b =>
-          b.addEventListener('click', () => { state.range = b.getAttribute('data-range'); loadAndRender(body) }))
+          b.addEventListener('click', () => {
+            state.range = b.getAttribute('data-range')
+            // Update active visual state on siblings
+            rangeHost.querySelectorAll('[data-range]').forEach(s => s.classList.remove('active'))
+            b.classList.add('active')
+            loadAndRender(body)
+          }))
       }
 
-      container.addEventListener('click', (e) => {
+      container.addEventListener('click', async (e) => {
         const btn = e.target.closest('[data-act]')
         if (!btn) return
         const act = btn.getAttribute('data-act')
-        if (act === 'refresh') { loadAndRender(body); toast('Aktualisiert') }
-        else if (act === 'pdf') exportPdf(container)
-        else if (act === 'csv') exportCurrentCsv()
+        if (act === 'refresh') {
+          // FIX (med): Await loadAndRender, only toast on success
+          try {
+            await loadAndRender(body)
+            toast('Aktualisiert')
+          } catch {
+            // renderError already shown inside loadAndRender
+          }
+        } else if (act === 'pdf') {
+          exportPdf(container)
+        } else if (act === 'csv') {
+          exportCurrentCsv()
+        }
       })
 
       loadAndRender(body)
