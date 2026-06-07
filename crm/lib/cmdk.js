@@ -181,27 +181,42 @@ function buildItems(query) {
   }))
   let out = panels.filter(i => !q || i.match > 0)
   out.sort((a, b) => b.match - a.match || a.title.localeCompare(b.title))
-  if (userResults.length && q) {
+  if (userResults.length) {
     out = out.concat(userResults.map(u => ({
       type: 'user',
       id: u.id,
-      title: u.display_name || u.username || u.email || (u.id || '').slice(0, 8),
+      title: u.full_name || u.username || u.display_name || (u.id || '').slice(0, 8),
       cat: 'Nutzer',
       icon: '👤',
-      match: 1
+      match: 1,
+      user: u
     })))
   }
   return out.slice(0, 30)
 }
 
+// Trigger: query starts with "@" OR has >2 chars (i.e. >=3).
+// Calls RPC `admin_users_list_filtered` with p_search + p_limit:10.
+// Result rows expose id, username, full_name, avatar_url, is_verified.
 async function searchUsers(query) {
-  if (!_sb || !query || query.length < 2) { userResults = []; return }
+  const raw = String(query || '')
+  const trimmed = raw.trim()
+  const hasAt = trimmed.startsWith('@')
+  const term = hasAt ? trimmed.slice(1).trim() : trimmed
+
+  // Reset wenn keine Trigger-Bedingung erfüllt.
+  if (!_sb || (!hasAt && trimmed.length <= 2) || (hasAt && term.length === 0)) {
+    userResults = []
+    return
+  }
+
   try {
-    const { data } = await _sb.from('users')
-      .select('id, display_name, username, email')
-      .or(`display_name.ilike.%${query}%,username.ilike.%${query}%,email.ilike.%${query}%`)
-      .limit(5)
-    userResults = data || []
+    const { data, error } = await _sb.rpc('admin_users_list_filtered', {
+      p_search: term,
+      p_limit: 10
+    })
+    if (error) { userResults = []; return }
+    userResults = (data || []).slice(0, 10)
   } catch { userResults = [] }
 }
 
@@ -214,21 +229,100 @@ function render(query) {
     list.innerHTML = `<div class="cmdk-empty">Nichts gefunden für „${escapeHtml(query || '')}"</div>`
     return
   }
-  list.innerHTML = items.map((it, i) => `
+  list.innerHTML = items.map((it, i) => {
+    if (it.type === 'user') return renderUserRow(it, i, i === 0)
+    return `
     <div class="cmdk-item ${i === 0 ? 'sel' : ''}" data-idx="${i}">
       <span style="font-size:14px">${it.icon}</span>
       <span class="cmdk-title">${escapeHtml(it.title)}</span>
       <span class="cmdk-cat">${escapeHtml(it.cat)}</span>
-    </div>
-  `).join('')
+    </div>`
+  }).join('')
   list.querySelectorAll('.cmdk-item').forEach(el => {
     el.addEventListener('mouseenter', () => {
       list.querySelectorAll('.cmdk-item').forEach(x => x.classList.remove('sel'))
       el.classList.add('sel')
       sel = +el.dataset.idx
     })
-    el.addEventListener('click', () => activate(items[+el.dataset.idx]))
+    el.addEventListener('click', (ev) => {
+      // Klicks auf Action-Buttons (View/Verify/Note) gehen NICHT in activate().
+      if (ev.target.closest('[data-cmdk-user-action]')) return
+      activate(items[+el.dataset.idx])
+    })
   })
+  // User-Action-Buttons (View / Verify / Note) verdrahten.
+  list.querySelectorAll('[data-cmdk-user-action]').forEach(btn => {
+    btn.addEventListener('click', async (ev) => {
+      ev.preventDefault()
+      ev.stopPropagation()
+      const action = btn.getAttribute('data-cmdk-user-action')
+      const userId = btn.getAttribute('data-user-id')
+      if (!userId) return
+      await runUserAction(action, userId, btn)
+    })
+  })
+}
+
+function renderUserRow(it, i, selected) {
+  const u = it.user || {}
+  const username = u.username || ''
+  const fullName = u.full_name || u.display_name || ''
+  const verified = !!u.is_verified
+  const initials = (fullName || username || '?')
+    .split(/\s+/).map(s => s[0] || '').join('').slice(0, 2).toUpperCase()
+  const avatar = u.avatar_url
+    ? `<img src="${escapeHtml(u.avatar_url)}" alt="" class="cmdk-user-avatar" />`
+    : `<div class="cmdk-user-avatar">${escapeHtml(initials)}</div>`
+  const uid = escapeHtml(u.id || it.id || '')
+  const verifyBtn = verified
+    ? `<button class="verified" disabled title="bereits verifiziert">✓</button>`
+    : `<button data-cmdk-user-action="verify" data-user-id="${uid}" title="Verifizieren">Verify</button>`
+  return `
+    <div class="cmdk-item cmdk-user-row ${selected ? 'sel' : ''}" data-idx="${i}" role="option">
+      ${avatar}
+      <div class="cmdk-user-info">
+        <div class="cmdk-user-name">${escapeHtml(fullName || username || '—')}</div>
+        <div class="cmdk-user-handle">@${escapeHtml(username || '—')}</div>
+      </div>
+      <div class="cmdk-user-actions">
+        <button data-cmdk-user-action="view" data-user-id="${uid}" title="Profil ansehen">View</button>
+        ${verifyBtn}
+        <button data-cmdk-user-action="note" data-user-id="${uid}" title="Notiz anlegen">Note</button>
+      </div>
+    </div>`
+}
+
+// View / Verify / Note Handler. Lazy-importiert panel-actions, damit cmdk.js
+// keine harten Top-Level-Imports von Panel-Code braucht (cmdk wird sehr früh geladen).
+async function runUserAction(action, userId, btn) {
+  try {
+    if (action === 'view') {
+      // Schließt Modal und navigiert zur Users-Liste mit Detail-Modal-Auto-Open.
+      closeCmdK()
+      location.hash = '#people/users?u=' + encodeURIComponent(userId)
+    } else if (action === 'verify') {
+      const mod = await import('/lib/panel-actions.js?v=20260608f').catch(() => null)
+      if (mod?.verifyUser) {
+        await mod.verifyUser(userId)
+        btn.disabled = true
+        btn.classList.add('verified')
+        btn.textContent = '✓'
+        btn.title = 'verifiziert'
+      } else {
+        // Fallback: direkt-Update via RPC, falls panel-actions nicht geladen.
+        await _sb?.rpc?.('admin_set_user_verified', { p_user_id: userId, p_verified: true })
+        btn.disabled = true
+        btn.classList.add('verified')
+        btn.textContent = '✓'
+      }
+    } else if (action === 'note') {
+      // Andere Module hören auf dieses Event und öffnen den Notiz-Composer.
+      window.dispatchEvent(new CustomEvent('cmdk:open-note', { detail: { userId } }))
+      closeCmdK()
+    }
+  } catch (err) {
+    console.warn('[cmdk] user-action', action, 'failed:', err)
+  }
 }
 
 function updateSel() {
@@ -316,7 +410,7 @@ export function openCmdK() {
     userSearchTimer = setTimeout(async () => {
       await searchUsers(v)
       render(v)
-    }, 220)
+    }, 80)
   })
   input.addEventListener('keydown', e => {
     if (e.key === 'ArrowDown' || (e.key === 'Tab' && !e.shiftKey)) {
