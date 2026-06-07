@@ -135,7 +135,11 @@ function trendArrow(trend) {
 }
 
 function rankList(items) {
-  if (!items.length) return '<div class="empty-mini">Keine Daten</div>'
+  if (!items.length) return `<div class="empty-mini" style="text-align:center;padding:24px 12px;color:var(--text-muted)">
+    <div style="font-size:24px;opacity:.45;margin-bottom:4px">${iconHtml('hash')}</div>
+    <div style="font-weight:600;color:var(--text);margin-bottom:2px">Noch keine Hashtags im Zeitraum</div>
+    <div style="font-size:12px;line-height:1.4">Sobald User in Posts oder Newslettern #tags verwenden, wird das Ranking hier aktualisiert.</div>
+  </div>`
   return `<table class="data-table hover sortable">
     <thead><tr><th style="width:48px">#</th><th>Tag</th><th style="width:90px">Anzahl</th><th style="width:60px">24h</th><th style="width:60px">Trend</th></tr></thead>
     <tbody>
