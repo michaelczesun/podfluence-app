@@ -1,7 +1,7 @@
-import { sb } from '/lib/supabase.js?v=20260608c'
-import { toast, modal, htmlEscape, iconHtml, debounce, fmtDateTime } from '/lib/ui.js?v=20260608c'
-import { exportCsv } from '/lib/export.js?v=20260608c'
-import { fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608c'
+import { sb } from '/lib/supabase.js?v=20260608d'
+import { toast, modal, htmlEscape, iconHtml, debounce, fmtDateTime } from '/lib/ui.js?v=20260608d'
+import { exportCsv } from '/lib/export.js?v=20260608d'
+import { fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608d'
 
 const REFRESH_MS = 60000
 

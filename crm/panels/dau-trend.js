@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608c'
-import { toast, fmtNumber, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608c'
-import { makeAreaChart, makeBarChart } from '/lib/charts.js?v=20260608c'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608c'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608c'
-import { drawer, segmentedControl } from '/lib/layout-extras.js?v=20260608c'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608c'
+import { sb } from '/lib/supabase.js?v=20260608d'
+import { toast, fmtNumber, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608d'
+import { makeAreaChart, makeBarChart } from '/lib/charts.js?v=20260608d'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608d'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608d'
+import { drawer, segmentedControl } from '/lib/layout-extras.js?v=20260608d'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608d'
 
 const RANGE_OPTIONS = [
   { value: '7', label: '7T' },

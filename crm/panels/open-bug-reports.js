@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608c'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js?v=20260608c'
-import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608c'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608c'
-import { countUp, fadeIn, skeletonLoader, slideInRight } from '/lib/animations.js?v=20260608c'
-import { drawer, glassCard, statHero } from '/lib/layout-extras.js?v=20260608c'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608c'
+import { sb } from '/lib/supabase.js?v=20260608d'
+import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js?v=20260608d'
+import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608d'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608d'
+import { countUp, fadeIn, skeletonLoader, slideInRight } from '/lib/animations.js?v=20260608d'
+import { drawer, glassCard, statHero } from '/lib/layout-extras.js?v=20260608d'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608d'
 
 // priority/category are NOT in the DB schema — UI-only mapping based on description keywords
 const STATUS_COLORS = {

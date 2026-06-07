@@ -1,6 +1,6 @@
-import { sb } from '/lib/supabase.js?v=20260608c'
-import { toast, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608c'
-import { fadeIn } from '/lib/animations.js?v=20260608c'
+import { sb } from '/lib/supabase.js?v=20260608d'
+import { toast, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608d'
+import { fadeIn } from '/lib/animations.js?v=20260608d'
 
 // ---------------------------------------------------------------------------
 // App-Settings Panel

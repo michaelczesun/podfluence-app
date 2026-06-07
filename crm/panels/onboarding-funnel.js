@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608c'
-import { toast, modal, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, confirmDialog } from '/lib/ui.js?v=20260608c'
-import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608c'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608c'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608c'
-import { drawer, statHero, glassCard, segmentedControl } from '/lib/layout-extras.js?v=20260608c'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608c'
+import { sb } from '/lib/supabase.js?v=20260608d'
+import { toast, modal, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, confirmDialog } from '/lib/ui.js?v=20260608d'
+import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608d'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608d'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608d'
+import { drawer, statHero, glassCard, segmentedControl } from '/lib/layout-extras.js?v=20260608d'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608d'
 
 const STAGES = [
   { key: 'signup',  label: 'Signup',          desc: 'Account erstellt',            icon: 'user-plus',   color: '#6366f1' },
