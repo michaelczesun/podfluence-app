@@ -230,7 +230,11 @@ function renderMultiLineChart(root, rows, labels, metric) {
   if (!root) return
   if (!rows.length) {
     const m = METRICS.find(x => x.key === metric)
-    root.innerHTML = `<div class="empty-mini">Keine Daten für ${htmlEscape(m ? m.label : metric)}.</div>`
+    root.innerHTML = `<div class="empty-mini" style="text-align:center;padding:32px 16px;color:var(--text-muted)">
+      <div style="font-size:28px;opacity:.45;margin-bottom:6px">${iconHtml('bar-chart-2')}</div>
+      <div style="font-weight:600;color:var(--text);margin-bottom:2px">Keine ${htmlEscape(m ? m.label : metric)}-Daten</div>
+      <div style="font-size:12px;line-height:1.4">Im aktuellen Fenster gab es bei den Top-Podcastern noch keine Aktivität für diese Metrik. Wähle einen längeren Zeitraum oder eine andere Metrik.</div>
+    </div>`
     return
   }
   const palette = ['#8b5cf6','#06b6d4','#10b981','#f59e0b','#ef4444']
