@@ -80,6 +80,52 @@ async function fetchData() {
   }
   const topLocations = [...compMap.values()].sort((a, b) => b.count - a.count).slice(0, 5)
 
+  // --- Trend-Schwellen / Δ vs. Vortag ---------------------------------
+  // 1) crash-free Rate gestern vs. heute (anhand der Buckets — Sessions per Tag
+  //    haben wir nicht, daher als Proxy: Crashes pro Tag → relative Veränderung)
+  const today0 = new Date(); today0.setHours(0, 0, 0, 0)
+  const yest0 = new Date(today0.getTime() - 86400e3)
+  const todayBucket = buckets.find(b => b.ts === today0.getTime())
+  const yestBucket = buckets.find(b => b.ts === yest0.getTime())
+  const todayCrashes = todayBucket ? todayBucket.count : 0
+  const yestCrashes = yestBucket ? yestBucket.count : 0
+  // Δ in Prozentpunkten der crash-free rate auf 7T-Sessions normalisiert
+  // einfache Heuristik: pro 1000 Sessions/Tag (geschätzt aus 7T-Schnitt)
+  const avgSessionsPerDay = sessionsCount > 0 ? sessionsCount / 7 : 0
+  let dailyRateDeltaPp = null
+  if (avgSessionsPerDay > 0) {
+    const todayRate = Math.max(0, Math.min(100, (avgSessionsPerDay - todayCrashes) / avgSessionsPerDay * 100))
+    const yestRate = Math.max(0, Math.min(100, (avgSessionsPerDay - yestCrashes) / avgSessionsPerDay * 100))
+    dailyRateDeltaPp = todayRate - yestRate
+  }
+
+  // 2) Komponente mit größtem Anstieg: letzte 24h vs. die 24h davor.
+  const t24 = Date.now() - 86400e3
+  const t48 = Date.now() - 2 * 86400e3
+  const compDelta = new Map()
+  for (const c of list) {
+    const k = c.component || 'Unbekannt'
+    const ts = new Date(c.created_at).getTime()
+    const cur = compDelta.get(k) || { component: k, today: 0, prev: 0 }
+    if (ts >= t24) cur.today++
+    else if (ts >= t48) cur.prev++
+    compDelta.set(k, cur)
+  }
+  const spikes = [...compDelta.values()]
+    .filter(d => d.today >= 3) // Rauschen unterdrücken — <3 Crashes ignorieren
+    .map(d => {
+      const growthPct = d.prev === 0 ? (d.today > 0 ? 999 : 0) : Math.round(((d.today - d.prev) / d.prev) * 100)
+      return { ...d, growthPct, ratio: d.prev === 0 ? Infinity : d.today / d.prev }
+    })
+  spikes.sort((a, b) => b.ratio - a.ratio || b.today - a.today)
+  // Median der "today" werte (für >2x Median Schwelle)
+  const todays = spikes.map(s => s.today).sort((a, b) => a - b)
+  const median = todays.length ? todays[Math.floor(todays.length / 2)] : 0
+  let topSpike = null
+  if (spikes.length && spikes[0].today > Math.max(2 * median, 3) && spikes[0].growthPct > 100) {
+    topSpike = spikes[0]
+  }
+
   return {
     crashFreeRate,
     totalCrashes,
@@ -90,6 +136,10 @@ async function fetchData() {
     series: buckets,
     topLocations,
     raw: list,
+    dailyRateDeltaPp,
+    todayCrashes,
+    yestCrashes,
+    topSpike,
   }
 }
 
@@ -137,9 +187,34 @@ function renderContent(body, data) {
         <div class="hero-stats" style="display:grid;gap:16px">
           <div>
             <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:var(--text-muted)">Crash-free Sessions</div>
-            <div style="font-size:44px;font-weight:700;line-height:1.1;color:${heroColor}" id="hero-rate">0.00%</div>
+            <div style="display:flex;align-items:baseline;gap:10px;flex-wrap:wrap">
+              <div style="font-size:44px;font-weight:700;line-height:1.1;color:${heroColor}" id="hero-rate">0.00%</div>
+              ${(() => {
+                if (data.dailyRateDeltaPp == null) return ''
+                const delta = data.dailyRateDeltaPp
+                const isNeg = delta < -0.1
+                const isPos = delta > 0.1
+                const col = isNeg ? '#ef4444' : isPos ? '#10b981' : 'var(--text-muted)'
+                const arrow = isNeg ? '▼' : isPos ? '▲' : '▬'
+                const sign = delta > 0 ? '+' : ''
+                return `<div title="Heute (${data.todayCrashes} Crashes) vs. gestern (${data.yestCrashes} Crashes)" style="font-size:14px;font-weight:600;color:${col};padding:4px 10px;border-radius:99px;background:color-mix(in srgb, ${col} 14%, transparent)">${arrow} ${sign}${delta.toFixed(2)}pp vs. gestern</div>`
+              })()}
+            </div>
             <div style="font-size:13px;color:var(--text-muted)">über die letzten 7 Tage</div>
           </div>
+          ${data.topSpike ? `
+          <div style="display:flex;align-items:center;gap:10px;padding:10px 14px;border-radius:12px;background:color-mix(in srgb, #ef4444 12%, transparent);border-left:3px solid #ef4444">
+            <span style="font-size:18px">${iconHtml('trending-up')}</span>
+            <div style="font-size:13px;line-height:1.35">
+              <div style="font-weight:600;color:#ef4444">Höchster Anstieg: <code style="font-size:12px">${htmlEscape(data.topSpike.component)}</code></div>
+              <div style="color:var(--text-muted);font-size:12px">
+                ${data.topSpike.prev === 0
+                  ? `Neu aufgetreten — ${data.topSpike.today} Crashes in 24h`
+                  : `${data.topSpike.prev} → ${data.topSpike.today} Crashes (+${data.topSpike.growthPct}%)`}
+              </div>
+            </div>
+            <button class="btn btn-ghost btn-sm" id="spike-details-btn" data-component="${htmlEscape(data.topSpike.component)}" style="margin-left:auto">Details</button>
+          </div>` : ''}
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
             <div class="mini-stat" style="padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04)">
               <div class="mini-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Crashes ges.</div>
@@ -296,6 +371,11 @@ function renderContent(body, data) {
   })
   body.querySelectorAll('.row-clickable').forEach(row => {
     row.addEventListener('click', () => openDrill(row.dataset.component))
+  })
+  const spikeBtn = body.querySelector('#spike-details-btn')
+  if (spikeBtn) spikeBtn.addEventListener('click', (e) => {
+    e.stopPropagation()
+    openDrill(spikeBtn.dataset.component)
   })
 }
 

@@ -3,7 +3,7 @@ import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, h
 import { makeDonutChart, makeBarChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, statHero } from '/lib/layout-extras.js'
+import { drawer, statHero, segmentedControl } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 async function fetchUsers() {
@@ -52,11 +52,45 @@ function fmtPremiumExpiry(u) {
   return isNaN(d.getTime()) ? null : fmtDateTime(raw)
 }
 
+// Premium-Expiry-Status: returns one of 'expired' | 'soon' | 'ok' | 'lifetime'
+// soon = expires within next 30 days
+function premiumExpiryStatus(u) {
+  if (!u.is_premium) return 'ok'
+  const raw = u.premium_expires_at || (typeof u.is_premium === 'string' ? u.is_premium : null)
+  if (!raw) return 'lifetime'
+  const ts = new Date(raw).getTime()
+  if (isNaN(ts)) return 'lifetime'
+  const days = (ts - Date.now()) / 86400_000
+  if (days < 0) return 'expired'
+  if (days < 30) return 'soon'
+  return 'ok'
+}
+
+function daysUntilExpiry(u) {
+  const raw = u.premium_expires_at || (typeof u.is_premium === 'string' ? u.is_premium : null)
+  if (!raw) return null
+  const ts = new Date(raw).getTime()
+  if (isNaN(ts)) return null
+  return Math.ceil((ts - Date.now()) / 86400_000)
+}
+
 function userRowHtml(u, kind) {
   let sub
+  let expiryChip = ''
+  let rowFlagClass = ''
   if (kind === 'premium') {
     const expiry = fmtPremiumExpiry(u)
     sub = expiry ? `bis ${expiry}` : 'Lifetime'
+    const status = premiumExpiryStatus(u)
+    if (status === 'expired') {
+      rowFlagClass = ' row-expired'
+      expiryChip = `<span class="badge badge-warn-red">ABGELAUFEN</span>`
+    } else if (status === 'soon') {
+      const d = daysUntilExpiry(u)
+      rowFlagClass = ' row-expiring-soon'
+      const label = d === null ? 'Läuft bald ab' : (d <= 0 ? 'Läuft heute ab' : `Läuft in ${d} Tag${d === 1 ? '' : 'en'} ab`)
+      expiryChip = `<span class="badge badge-warn-yellow" title="${htmlEscape(label)}">${htmlEscape(label)}</span>`
+    }
   } else {
     sub = u.verified_at ? `seit ${fmtRelativeTime(u.verified_at)}` : '—'
   }
@@ -64,12 +98,13 @@ function userRowHtml(u, kind) {
     ? `<span class="badge badge-premium">PREMIUM</span>`
     : `<span class="badge badge-verified">VERIFIED</span>`
   return `
-    <div class="user-row" data-id="${u.id}" data-kind="${kind}">
+    <div class="user-row${rowFlagClass}" data-id="${u.id}" data-kind="${kind}">
       ${avatarHtml(u)}
       <div class="user-row-main">
         <div class="user-row-name">
           <span class="name">${htmlEscape(u.full_name || u.username || 'Unbekannt')}</span>
           ${badge}
+          ${expiryChip}
         </div>
         <div class="user-row-sub">@${htmlEscape(u.username || '—')} · ${sub}</div>
       </div>
@@ -79,6 +114,21 @@ function userRowHtml(u, kind) {
       </div>
     </div>
   `
+}
+
+function injectExpiryStyles() {
+  if (document.getElementById('verified-premium-expiry-styles')) return
+  const s = document.createElement('style')
+  s.id = 'verified-premium-expiry-styles'
+  s.textContent = `
+    .user-row.row-expiring-soon { border-left: 3px solid #f59e0b; background: linear-gradient(90deg, rgba(245,158,11,.08), transparent 40%); }
+    .user-row.row-expired { border-left: 3px solid #ef4444; background: linear-gradient(90deg, rgba(239,68,68,.10), transparent 40%); }
+    .badge-warn-yellow { background: #fef3c7; color: #92400e; border: 1px solid #fcd34d; font-size: 11px; padding: 2px 6px; border-radius: 6px; margin-left: 4px; }
+    .badge-warn-red    { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; font-size: 11px; padding: 2px 6px; border-radius: 6px; margin-left: 4px; }
+    .premium-filter-bar { display:flex; align-items:center; gap:10px; padding: 8px 12px; border-bottom: 1px solid var(--border-light, #f3f4f6); }
+    .premium-filter-bar .muted { font-size: 12px; }
+  `
+  document.head.appendChild(s)
 }
 
 function emptyListHtml(label, ctaLabel, ctaId) {

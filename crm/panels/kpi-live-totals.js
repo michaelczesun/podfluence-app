@@ -1,6 +1,6 @@
 import { sb } from '/lib/supabase.js'
 import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
-import { makeAreaChart, makeLineChart } from '/lib/charts.js'
+import { makeAreaChart, makeLineChart, makeSparkline } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, pulse } from '/lib/animations.js'
 import { drawer } from '/lib/layout-extras.js'
@@ -8,11 +8,34 @@ import { drawer } from '/lib/layout-extras.js'
 const REFRESH_MS = 60_000
 
 const KPI_DEFS = [
-  { key: 'total_users',      label: 'User gesamt',        icon: 'users',     color: '#7C5CFF', fmt: 'int' },
-  { key: 'active_24h',       label: 'Aktiv (24h)',        icon: 'activity',  color: '#22D3EE', fmt: 'int' },
-  { key: 'posts_24h',        label: 'Beiträge (24h)',     icon: 'message',   color: '#F59E0B', fmt: 'int' },
-  { key: 'listening_hours',  label: 'Hörstunden (24h)',   icon: 'headphones',color: '#10B981', fmt: 'hours' }
+  { key: 'total_users',      label: 'User gesamt',        icon: 'users',     color: '#7C5CFF', fmt: 'int',   sparkMetric: 'signups',          warnBelow: null, alertChangePct: 50, alertMinPrev: 5 },
+  { key: 'active_24h',       label: 'Aktiv (24h)',        icon: 'activity',  color: '#22D3EE', fmt: 'int',   sparkMetric: 'app_opens',        warnBelow: 3,    alertChangePct: 50, alertMinPrev: 5 },
+  { key: 'posts_24h',        label: 'Beiträge (24h)',     icon: 'message',   color: '#F59E0B', fmt: 'int',   sparkMetric: 'posts',            warnBelow: null, alertChangePct: 50, alertMinPrev: 5 },
+  { key: 'listening_hours',  label: 'Hörstunden (24h)',   icon: 'headphones',color: '#10B981', fmt: 'hours', sparkMetric: 'listening_hours',  warnBelow: null, alertChangePct: 50, alertMinPrev: 5 }
 ]
+
+const SPARK_DAYS = 7
+
+async function fetchSparkData(def) {
+  const since = new Date(Date.now() - SPARK_DAYS * 86_400_000).toISOString()
+  try {
+    if (def.sparkMetric === 'app_opens') {
+      const { data } = await sb.from('app_opens').select('created_at').gte('created_at', since).limit(5000)
+      const rows = bucketByDay(data || [], 'created_at', SPARK_DAYS, false)
+      return rows.map(r => r.value)
+    }
+    if (def.sparkMetric === 'listening_hours') {
+      const { data } = await sb.from('listening_activity').select('created_at,listened_ms').gte('created_at', since).limit(5000)
+      const rows = bucketByDay(data || [], 'created_at', SPARK_DAYS, false, r => Number(r.listened_ms || 0) / 3600000)
+      return rows.map(r => r.value)
+    }
+    if (def.sparkMetric === 'signups' || def.sparkMetric === 'posts') {
+      const { data } = await sb.rpc('admin_daily_series', { p_metric: def.sparkMetric, p_days: SPARK_DAYS })
+      return (data || []).map(d => Number(d.value) || 0)
+    }
+  } catch (_) {}
+  return []
+}
 
 async function fetchTotals() {
   // Try dedicated RPC first
@@ -165,20 +188,32 @@ function formatValue(val, fmt) {
   return fmtNumber(val)
 }
 
+function isAlertChange(def, change, prev) {
+  return Math.abs(change) > (def.alertChangePct ?? 50) && prev > (def.alertMinPrev ?? 5)
+}
+
+function isLowActivityWarn(def, value) {
+  return def.warnBelow != null && value < def.warnBelow
+}
+
 function renderHeroGrid(totals) {
   return `<div class="hero-grid" id="hero-grid">
     ${KPI_DEFS.map(def => {
       const t = totals[def.key] || { value: 0, prev: 0 }
       const change = pctChange(t.value, t.prev)
       const up = change >= 0
+      const alert = isAlertChange(def, change, t.prev)
+      const warn = isLowActivityWarn(def, t.value)
       return `
-      <div class="stat-hero glass-card kpi-card" data-kpi="${def.key}" role="button" tabindex="0"
+      <div class="stat-hero glass-card kpi-card${alert ? ' kpi-alert' : ''}${warn ? ' kpi-warn' : ''}" data-kpi="${def.key}" role="button" tabindex="0"
            style="--accent:${def.color}">
+        ${warn ? `<span class="kpi-warn-badge" title="Wenig Aktivität heute">${iconHtml('alert-triangle')} Wenig Aktivität</span>` : ''}
         <div class="kpi-card-head">
           <span class="kpi-icon" style="background:${def.color}22;color:${def.color}">${iconHtml(def.icon)}</span>
           <span class="kpi-label">${htmlEscape(def.label)}</span>
         </div>
         <div class="kpi-value" id="kpi-val-${def.key}" data-fmt="${def.fmt}">${formatValue(t.value, def.fmt)}</div>
+        <div class="kpi-spark" data-kpi="${def.key}" id="kpi-spark-${def.key}"></div>
         <div class="kpi-change ${up ? 'up' : 'down'}">
           ${iconHtml(up ? 'trending-up' : 'trending-down')}
           <span>${up ? '+' : ''}${change.toFixed(1)}%</span>
@@ -190,6 +225,20 @@ function renderHeroGrid(totals) {
       </div>`
     }).join('')}
   </div>`
+}
+
+async function renderSparklines(container) {
+  await Promise.all(KPI_DEFS.map(async def => {
+    const el = container.querySelector(`#kpi-spark-${def.key}`)
+    if (!el) return
+    try {
+      const vals = await fetchSparkData(def)
+      if (!vals || vals.length === 0) { el.innerHTML = ''; return }
+      el.innerHTML = ''
+      try { makeSparkline(el, vals, { color: def.color, height: 28 }) }
+      catch (_) { el.innerHTML = '' }
+    } catch (_) {}
+  }))
 }
 
 function styles() {
@@ -218,6 +267,13 @@ function styles() {
     .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--accent); opacity:0.85; }
     .kpi-card:hover { transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,0.35), 0 0 0 1px var(--accent); }
     .kpi-card.pulsing { animation:kpipulse 1.2s ease-out; }
+    .kpi-card.kpi-alert { box-shadow:0 0 0 1px var(--accent), 0 0 22px -4px var(--accent), 0 8px 28px rgba(0,0,0,0.35); }
+    .kpi-card.kpi-alert::before { height:4px; opacity:1; box-shadow:0 0 14px var(--accent); }
+    .kpi-warn-badge { position:absolute; top:12px; right:12px; display:inline-flex; align-items:center; gap:4px;
+      padding:4px 8px; border-radius:999px; font-size:11px; font-weight:600;
+      background:rgba(249,115,22,0.15); color:#fb923c; border:1px solid rgba(249,115,22,0.3); cursor:help; z-index:2; }
+    .kpi-spark { margin:-4px 0 10px; height:28px; min-height:28px; }
+    .kpi-spark:empty { display:none; }
     @keyframes kpipulse { 0%{box-shadow:0 0 0 0 var(--accent)} 50%{box-shadow:0 0 0 14px transparent} 100%{box-shadow:0 0 0 0 transparent} }
     .kpi-card-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
     .kpi-icon { display:inline-flex; width:36px; height:36px; border-radius:10px; align-items:center; justify-content:center; }

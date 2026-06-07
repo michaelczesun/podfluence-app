@@ -6,6 +6,11 @@ import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
 import { drawer, glassCard, statHero } from '/lib/layout-extras.js'
 import { showUserDetailModal, sendBroadcastPush } from '/lib/panel-actions.js'
 
+// App Store Review 6.6.: Aktive Runtimes 1.3.0 / 1.3.1 / 1.4.0.
+// Alles darunter gilt als nicht mehr unterstützt und löst Force-Push-Empfehlung aus.
+const MIN_SUPPORTED_VERSION = '1.4.0'
+const STALE_RATE_THRESHOLD = 0.15 // 15%
+
 // ---------- Versionsvergleich (semver light) ----------
 function parseVersion(v) {
   if (!v) return [0, 0, 0]
@@ -193,9 +198,26 @@ function renderContent(body, state, refresh) {
   const stale = rows.filter(r => r.rank >= 2).reduce((a, r) => a + r.user_count, 0)
   const adoption = totalUsers ? Math.round((latestUsers / totalUsers) * 100) : 0
 
+  // Smart-Alert: User unterhalb MIN_SUPPORTED_VERSION
+  const unsupportedUsers = rows
+    .filter(r => cmpVersion(r.version, MIN_SUPPORTED_VERSION) < 0)
+    .reduce((a, r) => a + r.user_count, 0)
+  const unsupportedPct = totalUsers ? unsupportedUsers / totalUsers : 0
+  const showStaleBanner = unsupportedPct > STALE_RATE_THRESHOLD
+  const bannerHtml = showStaleBanner ? `
+    <div class="glass-card" style="border:1px solid #ef4444;background:rgba(239,68,68,0.08);padding:1rem 1.25rem;display:flex;align-items:center;gap:.85rem;margin-bottom:1rem;">
+      <div style="color:#ef4444;display:flex;align-items:center;">${iconHtml('alert-triangle')}</div>
+      <div style="flex:1;">
+        <strong style="color:#ef4444;">${fmtNumber(unsupportedUsers)} Nutzer (${Math.round(unsupportedPct * 100)}%) laufen auf einer Version &lt; ${htmlEscape(MIN_SUPPORTED_VERSION)}</strong>
+        <div class="muted" style="margin-top:.15rem;">Force-Push empfohlen — App Store Review erfordert aktuelle Runtime.</div>
+      </div>
+    </div>
+  ` : ''
+
   // FIX #2: Spalten "Plattformen" und "Zuletzt aktiv" entfernt — admin_build_versions liefert keine Plattform-/Last-seen-Daten
   body.innerHTML = `
     <div class="cbv-grid">
+      ${bannerHtml}
       <div class="cbv-heros">
         ${statHero({ label: 'Nutzer gesamt', value: '<span data-cu="' + totalUsers + '">0</span>', icon: 'users', tone: 'neutral' })}
         ${statHero({ label: 'Auf aktueller Version', value: '<span data-cu="' + latestUsers + '">0</span>', sub: adoption + '% Adoption', icon: 'check-circle', tone: 'violet' })}
@@ -236,10 +258,13 @@ function renderContent(body, state, refresh) {
             <tbody>
               ${rows.map(r => {
                 const c = colorFor(r.rank)
+                const unsupported = cmpVersion(r.version, MIN_SUPPORTED_VERSION) < 0
+                const rowStyle = unsupported ? ' style="box-shadow:inset 3px 0 0 #ef4444;background:rgba(239,68,68,0.04);"' : ''
+                const unsupportedBadge = unsupported ? ` <span class="badge badge-red" title="Unter MIN_SUPPORTED_VERSION ${MIN_SUPPORTED_VERSION}">Nicht unterstützt</span>` : ''
                 return `
-                  <tr data-version="${htmlEscape(r.version)}" class="row-clickable">
+                  <tr data-version="${htmlEscape(r.version)}" class="row-clickable"${rowStyle}>
                     <td><strong>${htmlEscape(r.version)}</strong></td>
-                    <td><span class="badge badge-${c.tone}">${c.label}</span></td>
+                    <td><span class="badge badge-${c.tone}">${c.label}</span>${unsupportedBadge}</td>
                     <td class="num">${fmtNumber(r.user_count)}</td>
                     <td class="row-actions">
                       <button class="btn btn-xs" data-act="users" data-version="${htmlEscape(r.version)}">${iconHtml('users')} Nutzer</button>
