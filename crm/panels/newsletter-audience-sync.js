@@ -170,7 +170,7 @@ function renderHero(audienceCount, lastBroadcast) {
       <div class="hero-card" style="--hc-accent:#7c5cff">
         <div class="hc-label">${iconHtml('users')} Aktive Audience</div>
         <div class="hc-value" id="hero-audience">0</div>
-        <div class="hc-sub">Verifizierte Nutzer (Newsletter-Empfänger)</div>
+        <div class="hc-sub">Verifizierte Nutzer · <em>accepts_marketing</em> wird aktuell nicht gefiltert</div>
       </div>
       <div class="hero-card" style="--hc-accent:#0a84ff">
         <div class="hc-label">${iconHtml('mail')} Letzter Broadcast</div>

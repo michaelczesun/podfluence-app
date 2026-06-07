@@ -315,7 +315,11 @@ export default {
             heroRow.appendChild(el)
             const valEl = el.querySelector('.hero-val')
             if (typeof countUp === 'function') {
-              countUp(valEl, h.value)
+              try {
+                countUp(valEl, { from: 0, to: h.value, duration: 900 })
+              } catch (_) {
+                try { countUp(valEl, h.value) } catch (_) { valEl.textContent = fmtNumber(h.value) }
+              }
             } else {
               valEl.textContent = fmtNumber(h.value)
             }
@@ -335,14 +339,21 @@ export default {
           // FIX LOW: agg-Snapshot für Chart-Callbacks, stabil gegen Re-Renders
           const aggSnapshot = agg.slice()
           barEl.innerHTML = ''
-          const barLabels = aggSnapshot.map(a => metaFor(a.type).icon + ' ' + metaFor(a.type).label)
+          const barCategories = aggSnapshot.map(a => metaFor(a.type).icon + ' ' + metaFor(a.type).label)
           const barValues = aggSnapshot.map(a => a.count)
           makeBarChart(barEl, {
-            labels: barLabels,
-            values: barValues,
-            height: 300,
-            onBarClick: (idx) => openTypeDrawer(aggSnapshot[idx].type, render),
-            tooltip: (idx) => `${metaFor(aggSnapshot[idx].type).label}: ${fmtNumber(aggSnapshot[idx].count)} Unlocks (${aggSnapshot[idx].uniqueUsers} User)`
+            categories: barCategories,
+            series: [{ name: 'Unlocks', data: barValues }],
+            colors: ['#7c5cff'],
+            height: 300
+          })
+          // Click-Delegation via overlay: ApexCharts-event-Bridge — falls Lib events ausstellt
+          barEl.addEventListener('click', (ev) => {
+            const bar = ev.target.closest('[data-cat-index],[data-index],.apexcharts-bar-area')
+            if (!bar) return
+            const idxAttr = bar.getAttribute('data-cat-index') || bar.getAttribute('data-index') || bar.getAttribute('j')
+            const idx = idxAttr != null ? parseInt(idxAttr, 10) : NaN
+            if (!Number.isNaN(idx) && aggSnapshot[idx]) openTypeDrawer(aggSnapshot[idx].type, render)
           })
 
           donutEl.innerHTML = ''
@@ -350,7 +361,12 @@ export default {
           const rest = aggSnapshot.slice(6).reduce((s, a) => s + a.count, 0)
           const donutLabels = topN.map(a => metaFor(a.type).label).concat(rest ? ['Andere'] : [])
           const donutValues = topN.map(a => a.count).concat(rest ? [rest] : [])
-          makeDonutChart(donutEl, { labels: donutLabels, values: donutValues, height: 300 })
+          makeDonutChart(donutEl, {
+            labels: donutLabels,
+            values: donutValues,
+            colors: ['#7c5cff', '#22d3ee', '#f59e0b', '#10b981', '#ef4444', '#ec4899', '#64748b'],
+            height: 300
+          })
 
           // FIX LOW: addEventListener statt inline onmouseover/onmouseout in Tabellenzeilen
           tableWrap.innerHTML = `

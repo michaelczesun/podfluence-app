@@ -54,8 +54,7 @@ function dayDrawer(bucket) {
 
   drawer({
     title: `Episoden am ${fmtDay(bucket.day)}`,
-    subtitle: `${bucket.count} ${bucket.count === 1 ? 'Episode' : 'Episoden'}`,
-    html: body,
+    contentHtml: body,
     width: 400
   })
 }
@@ -146,10 +145,16 @@ export default {
         if (chartEl) {
           try {
             makeBarChart(chartEl, {
-              labels: series.map(b => fmtDay(b.day)),
-              values: series.map(b => b.count),
-              color: '#7c5cff',
-              onBarClick: (i) => dayDrawer(series[i])
+              categories: series.map(b => fmtDay(b.day)),
+              series: [{ name: 'Episoden', data: series.map(b => b.count) }],
+              colors: ['#7c5cff'],
+              height: 320
+            })
+            chartEl.addEventListener('click', (ev) => {
+              const bar = ev.target.closest('[data-index]')
+              if (!bar) return
+              const i = parseInt(bar.dataset.index, 10)
+              if (Number.isFinite(i) && series[i]) dayDrawer(series[i])
             })
           } catch (chartErr) {
             chartEl.innerHTML = `<div class="error-inline">${iconHtml('alert-triangle')} Chart konnte nicht gerendert werden: ${htmlEscape(chartErr.message || '')}</div>`
@@ -162,7 +167,7 @@ export default {
       })
       container.querySelector('[data-act="pdf"]').addEventListener('click', () => {
         try {
-          exportPanelAsPdf(container, 'episoden-pro-tag.pdf', { title: 'Neue Episoden pro Tag' })
+          exportPanelAsPdf(container, { filename: 'episoden-pro-tag.pdf', title: 'Neue Episoden pro Tag' })
         } catch (e) {
           toast('PDF-Export fehlgeschlagen: ' + (e.message || ''), 'error')
         }
