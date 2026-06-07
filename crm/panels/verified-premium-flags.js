@@ -381,7 +381,8 @@ export default {
         </div>
       `
 
-      let state = { verified: [], premium: [], loading: true, error: null, truncated: false }
+      injectExpiryStyles()
+      let state = { verified: [], premium: [], loading: true, error: null, truncated: false, premiumFilter: 'all' }
 
       const renderBody = () => {
         if (state.error) {
