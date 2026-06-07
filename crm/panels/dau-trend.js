@@ -77,7 +77,7 @@ async function fetchUsersForDay(dateKey) {
   if (!ids.length) return []
   const { data: users } = await sb
     .from('users')
-    .select('id, username, display_name, avatar_url, is_verified, last_seen_at')
+    .select('id, username, display_name, avatar_url, is_verified, last_login_at')
     .in('id', ids)
     .limit(500)
   return users || []
@@ -296,7 +296,7 @@ async function openDayDrawer(dateKey) {
           username: u.username,
           display_name: u.display_name,
           verified: u.is_verified ? 'ja' : 'nein',
-          last_seen: u.last_seen_at || ''
+          last_seen: u.last_login_at || ''
         })))
         toast('CSV exportiert', 'success')
       } catch (e) {

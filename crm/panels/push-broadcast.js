@@ -23,7 +23,7 @@ async function fetchAudienceCounts() {
       if (a.value === 'podcasters') q = q.eq('is_podcaster', true)
       else if (a.value === 'premium') q = q.eq('is_premium', true)
       else if (a.value === 'new_7d') q = q.gte('created_at', new Date(Date.now()-7*864e5).toISOString())
-      else if (a.value === 'inactive_7d') q = q.lt('last_seen_at', new Date(Date.now()-7*864e5).toISOString())
+      else if (a.value === 'inactive_7d') q = q.lt('last_login_at', new Date(Date.now()-7*864e5).toISOString())
       else if (a.value === 'listeners') q = q.eq('is_podcaster', false)
       const { count } = await q
       counts[a.value] = count || 0

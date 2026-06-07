@@ -327,7 +327,7 @@ function openDropoffDrawer(data, stageKey) {
       const initial = (name[0] || '?').toUpperCase()
       const sub = u.email
         ? htmlEscape(u.email)
-        : (u.last_seen_at ? `zuletzt ${fmtRelativeTime(u.last_seen_at)}` : `seit ${fmtDateTime(u.created_at)}`)
+        : (u.last_login_at ? `zuletzt ${fmtRelativeTime(u.last_login_at)}` : `seit ${fmtDateTime(u.created_at)}`)
       const uid = htmlEscape(String(u.id || ''))
       return `
         <label class="of-drop-row" data-uid="${uid}">

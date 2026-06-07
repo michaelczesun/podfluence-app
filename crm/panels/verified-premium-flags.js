@@ -46,7 +46,7 @@ function avatarHtml(u) {
 
 function userRowHtml(u, kind) {
   const sub = kind === 'premium'
-    ? (u.premium_until ? `bis ${fmtDateTime(u.premium_until)}` : 'Lifetime')
+    ? (u.is_premium ? `bis ${fmtDateTime(u.is_premium)}` : 'Lifetime')
     : (u.verified_at   ? `seit ${fmtRelativeTime(u.verified_at)}` : '—')
   const badge = kind === 'premium'
     ? `<span class="badge badge-premium">PREMIUM</span>`
@@ -199,7 +199,7 @@ function openBulkGrantModal(onDone) {
         : new Date(Date.now() + durationDays * 86400_000).toISOString()
       // grant premium per user via RPC
       const results = await Promise.all(
-        userIds.map(uid => sb.rpc('admin_grant_premium', { target_user_id: uid, premium_until: until }))
+        userIds.map(uid => sb.rpc('admin_grant_premium', { target_user_id: uid, is_premium: until }))
       )
       const failed = results.filter(r => r.error)
       if (failed.length > 0) { toast(`Fehler bei ${failed.length} Nutzer(n)`, 'error'); return false }
@@ -254,8 +254,8 @@ function buildPremiumDurationBuckets(premium) {
   const now = Date.now()
   const buckets = { 'Lifetime': 0, '< 30 Tage': 0, '30–90 Tage': 0, '90–365 Tage': 0, '> 1 Jahr': 0, 'Abgelaufen': 0 }
   for (const u of premium) {
-    if (!u.premium_until) { buckets['Lifetime']++; continue }
-    const days = (new Date(u.premium_until).getTime() - now) / 86400_000
+    if (!u.is_premium) { buckets['Lifetime']++; continue }
+    const days = (new Date(u.is_premium).getTime() - now) / 86400_000
     if (days < 0)          buckets['Abgelaufen']++
     else if (days < 30)    buckets['< 30 Tage']++
     else if (days < 90)    buckets['30–90 Tage']++
@@ -476,7 +476,7 @@ export default {
             <div class="kv-list">
               <div class="kv"><span>Status</span><span>${kind === 'premium' ? 'Premium' : 'Verified'}</span></div>
               ${kind === 'premium' ? `
-                <div class="kv"><span>Premium bis</span><span>${u.premium_until ? fmtDateTime(u.premium_until) : 'Lifetime'}</span></div>
+                <div class="kv"><span>Premium bis</span><span>${u.is_premium ? fmtDateTime(u.is_premium) : 'Lifetime'}</span></div>
                 <div class="kv"><span>Vergeben am</span><span>${u.premium_granted_at ? fmtDateTime(u.premium_granted_at) : '—'}</span></div>
               ` : `
                 <div class="kv"><span>Verifiziert am</span><span>${u.verified_at ? fmtDateTime(u.verified_at) : '—'}</span></div>
@@ -523,8 +523,8 @@ export default {
     })
     container.querySelector('#btn-csv')?.addEventListener('click', () => {
       const rows = [
-        ...state.verified.map(u => ({ type: 'verified', id: u.id, username: u.username, display_name: u.display_name, since: u.verified_at, premium_until: '' })),
-        ...state.premium.map(u  => ({ type: 'premium',  id: u.id, username: u.username, display_name: u.display_name, since: u.premium_granted_at, premium_until: u.premium_until || 'lifetime' })),
+        ...state.verified.map(u => ({ type: 'verified', id: u.id, username: u.username, display_name: u.display_name, since: u.verified_at, is_premium: '' })),
+        ...state.premium.map(u  => ({ type: 'premium',  id: u.id, username: u.username, display_name: u.display_name, since: u.premium_granted_at, is_premium: u.is_premium || 'lifetime' })),
       ]
       exportCsv(rows, 'verified-premium.csv')
       toast('CSV exportiert', 'success')

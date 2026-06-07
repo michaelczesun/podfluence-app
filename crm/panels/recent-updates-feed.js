@@ -31,15 +31,13 @@ function classifyPost(p) {
   return 'standard'
 }
 
-// Tabelle 'posts' existiert nicht im Schema — leerer Datensatz mit Empty-State-Flag
-const POSTS_TABLE_MISSING = true
-
+// 7.6.: Tabelle heißt `updates`, nicht `posts`. Voriger Agent hatte das
+// als "missing" markiert — falsch. Hier echter Fetch gegen updates.
 async function fetchData() {
-  if (POSTS_TABLE_MISSING) return []
   const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
   const { data: posts, error } = await sb
-    .from('posts')
-    .select('id, user_id, content, image_url, media_url, type, kind, poll_id, likes_count, comments_count, created_at, profiles:user_id(id, username, display_name, avatar_url, is_verified)')
+    .from('updates')
+    .select('id, user_id, content, image_url, media_url, type, kind, poll_id, likes_count, comments_count, created_at, users:user_id(id, username, full_name, is_verified)')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -250,7 +248,7 @@ function editPost(post) {
   m.body.querySelector('#edit-save').addEventListener('click', async () => {
     const next = m.body.querySelector('#edit-content').value
     try {
-      const { error } = await sb.from('posts').update({ content: next }).eq('id', post.id)
+      const { error } = await sb.from('updates').update({ content: next }).eq('id', post.id)
       if (error) throw error
       toast({ kind: 'success', text: 'Post aktualisiert.' })
       m.close()
@@ -277,7 +275,7 @@ async function deletePostFlow(post) {
     if (typeof deletePost === 'function') {
       await deletePost(post.id)
     } else {
-      const { error } = await sb.from('posts').delete().eq('id', post.id)
+      const { error } = await sb.from('updates').delete().eq('id', post.id)
       if (error) throw error
     }
     toast({ kind: 'success', text: 'Post gelöscht.' })
