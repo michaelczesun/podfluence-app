@@ -3,7 +3,7 @@ import { toast, modal, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, icon
 import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
-import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+import { drawer, statHero, glassCard, segmentedControl } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
 const STAGES = [
@@ -13,10 +13,20 @@ const STAGES = [
   { key: 'active',  label: 'Active',          desc: 'Zuletzt aktiv ≤ 7 Tage',      icon: 'zap',         color: '#10b981' }
 ]
 
-async function fetchFunnel() {
+// Range → days. 'all' = effectively Lifetime (10y)
+function rangeToDays(range) {
+  if (range === '7d')  return 7
+  if (range === '30d') return 30
+  if (range === '90d') return 90
+  if (range === 'all') return 3650
+  return 90
+}
+
+async function fetchFunnel(range = '90d') {
+  const days = rangeToDays(range)
   // Try dedicated RPC first
   try {
-    const { data, error } = await sb.rpc('onboarding_funnel_stats', { p_days: 30 })
+    const { data, error } = await sb.rpc('onboarding_funnel_stats', { p_days: days })
     if (!error && data) return normalizeRpc(data)
     // RPC not available — fall through to manual build
     console.warn('[onboarding-funnel] onboarding_funnel_stats nicht verfügbar, nutze Fallback')
@@ -24,17 +34,21 @@ async function fetchFunnel() {
     console.warn('[onboarding-funnel] onboarding_funnel_stats nicht verfügbar, nutze Fallback')
   }
 
-  // Build from available RPCs: admin_users_list_full + admin_daily_series + episode_listening_pulses
-  const since30 = new Date(Date.now() - 30 * 86400000).toISOString()
+  // Build from available RPCs: admin_users_list_full + admin_daily_series + listening_activity
+  const sinceRange = new Date(Date.now() - days * 86400000).toISOString()
+  // 'Active' bleibt 7 Tage egal welcher Range — Definition von 'aktiv ≤ 7 Tage'
   const since7  = new Date(Date.now() - 7  * 86400000).toISOString()
+
+  // admin_daily_series ist auf 'episodes'-Metrik begrenzt — clampen wenn All Time
+  const seriesDays = Math.min(days, 365)
 
   // RPC-Param-Namen sind p_limit/p_offset/p_search bzw. p_metric/p_days
   const [usersRes, signupSeriesRes, listensRes] = await Promise.all([
     sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' }),
-    sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: 30 }),
+    sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: seriesDays }),
     sb.from('listening_activity')
       .select('listener_id')
-      .gte('created_at', since30)
+      .gte('created_at', sinceRange)
       .limit(20000)
   ])
 
@@ -46,18 +60,20 @@ async function fetchFunnel() {
   }
   const listenSet = new Set((listensRes.data || []).map(l => l.listener_id))
 
-  // Signup = all users (total registered)
-  const signupMembers = all
+  // Signup = Users innerhalb des Zeitraums registriert (bzw. all bei 'all')
+  const signupMembers = range === 'all'
+    ? all
+    : all.filter(u => u.created_at && u.created_at >= sinceRange)
 
-  // Profile filled = has avatar_url OR bio (best proxy available)
+  // Profile filled = has avatar_url OR bio (best proxy available) — gefiltert auf Range
   // FIX (med): columns depend on what admin_users_list_full returns — if missing, profileMembers = []
-  const profileMembers = all.filter(u => u.avatar_url || u.bio)
+  const profileMembers = signupMembers.filter(u => u.avatar_url || u.bio)
 
-  // First listen = appeared in listening_pulses in last 30d
-  const listenMembers = all.filter(u => listenSet.has(u.id))
+  // First listen = aus dem Signup-Set, die im Listening-Fenster auftauchen
+  const listenMembers = signupMembers.filter(u => listenSet.has(u.id))
 
-  // Active = logged in within last 7 days (last_seen_at proxy)
-  const activeMembers = all.filter(u => u.last_seen_at && u.last_seen_at >= since7)
+  // Active = logged in within last 7 days (last_seen_at proxy) — Schnittmenge mit Signup-Set
+  const activeMembers = signupMembers.filter(u => u.last_seen_at && u.last_seen_at >= since7)
 
   const members = {
     signup: signupMembers,
@@ -211,7 +227,7 @@ function renderFunnelHTML(data) {
   return html
 }
 
-function renderHeroes(host, data) {
+function renderHeroes(host, data, rangeLabel) {
   const c = data.counts
   const total = c.signup || 1
   const overallConv = Math.round((c.active / total) * 100)
@@ -224,7 +240,7 @@ function renderHeroes(host, data) {
   }
 
   host.innerHTML = ''
-  host.appendChild(statHero({ label: 'Signups (30d)',     value: c.signup,  icon: 'user-plus',  color: '#6366f1', countUp: true }))
+  host.appendChild(statHero({ label: `Signups (${rangeLabel || '90d'})`, value: c.signup,  icon: 'user-plus',  color: '#6366f1', countUp: true }))
   host.appendChild(statHero({ label: 'Aktive Nutzer',     value: c.active,  icon: 'zap',        color: '#10b981', countUp: true }))
   host.appendChild(statHero({ label: 'Gesamt-Conversion', value: overallConv, suffix: '%', icon: 'trending-up', color: '#8b5cf6', countUp: true }))
   host.appendChild(statHero({
@@ -425,12 +441,13 @@ export default {
 
         container.innerHTML = `
           <div class="panel-shell of-wrap">
-            <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+            <div class="panel-head" style="display:flex; align-items:center; justify-content:space-between; gap:12px; flex-wrap:wrap;">
               <div>
                 <h2 style="margin:0;">Onboarding-Funnel</h2>
-                <div style="font-size:13px; color:var(--text-secondary,#6b7280); margin-top:2px;">Signup → Profil → First Listen → Active · letzte 30 Tage</div>
+                <div id="of-subtitle" style="font-size:13px; color:var(--text-secondary,#6b7280); margin-top:2px;">Signup → Profil → First Listen → Active</div>
               </div>
-              <div class="toolbar" style="display:flex; gap:8px;">
+              <div class="toolbar" style="display:flex; gap:8px; align-items:center;">
+                <div id="of-range-seg"></div>
                 <button class="btn-secondary" id="of-refresh" title="Aktualisieren">${iconHtml('refresh-cw')}<span>Aktualisieren</span></button>
                 <button class="btn-secondary" id="of-pdf" title="PDF exportieren">${iconHtml('file-text')}<span>PDF</span></button>
                 <button class="btn-secondary" id="of-csv" title="CSV exportieren">${iconHtml('download')}<span>CSV</span></button>
@@ -469,11 +486,33 @@ export default {
         `
 
         let data = null
+        const state = { range: '90d', segRef: null }
+
+        const RANGE_LABELS = { '7d': '7d', '30d': '30d', '90d': '90d', 'all': 'All Time' }
+
+        // Smart-Default: bei <50 Total-Usern auf 90d bleiben (Default), aber wenn
+        // im 30d-Fenster <10 Signups → default schon auf 90d (bereits set). Logik:
+        // wir machen einen leichten Pre-Check; bei sehr wenig Users → All Time.
+        const smartDefault = async () => {
+          try {
+            const { data: stats } = await sb.rpc('admin_db_live_stats')
+            const total = stats?.users_total || stats?.total_users || 0
+            if (total > 0 && total < 50) return 'all'
+            return '90d'
+          } catch (_) {
+            return '90d'
+          }
+        }
 
         const load = async () => {
           try {
-            data = await fetchFunnel()
-            renderHeroes(heroes, data)
+            data = await fetchFunnel(state.range)
+            renderHeroes(heroes, data, RANGE_LABELS[state.range])
+            const sub = container.querySelector('#of-subtitle')
+            if (sub) {
+              const rl = state.range === 'all' ? 'gesamt' : `letzte ${RANGE_LABELS[state.range]}`
+              sub.textContent = `Signup → Profil → First Listen → Active · ${rl}`
+            }
             funnelHost.innerHTML = renderFunnelHTML(data)
             renderCharts(chartsHost, data)
 
@@ -495,6 +534,22 @@ export default {
             // FIX (low): show error UI in charts area too instead of leaving it empty
             chartsHost.innerHTML = `<div class="glass-card" style="padding:32px; text-align:center; color:var(--text-secondary,#6b7280); grid-column:1/-1;">${iconHtml('alert-triangle')}<div style="margin-top:8px;">Charts konnten nicht geladen werden</div></div>`
           }
+        }
+
+        // Apply smart-default before first load (kann durch User-Klick überschrieben werden)
+        state.range = await smartDefault()
+
+        // Range-Toggle: 30d | 90d | All Time
+        const segHost = container.querySelector('#of-range-seg')
+        if (segHost) {
+          state.segRef = segmentedControl(segHost, [
+            { key: '30d', label: '30T' },
+            { key: '90d', label: '90T' },
+            { key: 'all', label: 'All Time' },
+          ], state.range, async (key) => {
+            state.range = key
+            await load()
+          })
         }
 
         container.querySelector('#of-refresh')?.addEventListener('click', async () => {
