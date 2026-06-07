@@ -80,8 +80,19 @@ async function fetchTimeSeries(kpiKey, days = 30) {
     } else if (kpiKey === 'listening_hours') {
       const { data } = await sb.from('episode_listening_pulses').select('created_at,duration_sec,pulse_seconds').gte('created_at', since)
       rows = bucketByDay(data || [], 'created_at', days, false, r => Number(r.duration_sec || r.pulse_seconds || 0) / 3600)
+    } else if (kpiKey === 'total_users' || kpiKey === 'total_posts') {
+      // 7.6.: nutze admin_daily_series RPC die RLS via SECURITY DEFINER bypasst
+      const metric = kpiKey === 'total_users' ? 'signups' : 'posts'
+      const { data } = await sb.rpc('admin_daily_series', { p_metric: metric, p_days: days })
+      // cumulative = true für total_users (jeder neue User = +1 zum Total)
+      const isCum = kpiKey === 'total_users'
+      let acc = 0
+      rows = (data || []).map(d => {
+        const v = Number(d.value) || 0
+        if (isCum) { acc += v; return { date: d.date, value: acc } }
+        return { date: d.date, value: v }
+      })
     } else {
-      // total_users and total_posts: no accessible table — return empty
       rows = []
     }
   } catch (_) {}
