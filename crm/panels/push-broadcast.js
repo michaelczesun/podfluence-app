@@ -435,7 +435,11 @@ export default {
             })
           } else {
             bodyEl.querySelector('#chart-audience').innerHTML =
-              `<div class="history-empty">${iconHtml('pie-chart')} Noch keine Daten</div>`
+              `<div class="history-empty" style="text-align:center;padding:24px 16px;color:var(--text-muted)">
+                <div style="font-size:24px;opacity:.45;margin-bottom:6px">${iconHtml('pie-chart')}</div>
+                <div style="font-weight:600;color:var(--text);margin-bottom:2px">Noch keine Audience-Verteilung</div>
+                <div style="font-size:12px;line-height:1.4">Sobald Broadcasts mit Audience-Filter versendet wurden, erscheint hier die Aufteilung.</div>
+              </div>`
           }
         }
       } catch (chartErr) {
