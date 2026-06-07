@@ -240,12 +240,10 @@ function renderMultiLineChart(root, rows, labels, metric) {
     data: r.series[metric] || []
   }))
   makeLineChart(root, {
-    labels: labels.map(l => l.slice(5)),
+    categories: labels.map(l => l.slice(5)),
     series,
-    height: 320,
-    smooth: true,
-    legend: true,
-    yAxis: true
+    colors: series.map(s => s.color),
+    height: 320
   })
 }
 
