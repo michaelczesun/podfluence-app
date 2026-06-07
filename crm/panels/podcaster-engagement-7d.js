@@ -378,14 +378,16 @@ function openDrawer(row) {
       </div>
     </div>
   `
-  const d = drawer({ title: 'Podcaster-Details', body, width: 520 })
+  const d = drawer({ title: 'Podcaster-Details', contentHtml: body, width: 520 })
   const chartEl = d.el.querySelector('#drawer-chart')
   if (chartEl) {
-    const labels = buildDayLabels(RANGES[state.range].days).map(l => l.slice(5))
+    const categories = buildDayLabels(RANGES[state.range].days).map(l => l.slice(5))
+    const series = METRICS.map(m => ({ name: m.label, data: row.series[m.key] || [] }))
     makeLineChart(chartEl, {
-      labels,
-      series: METRICS.map(m => ({ name: m.label, color: m.color, data: row.series[m.key] || [] })),
-      height: 240, smooth: true, legend: true, yAxis: true
+      categories,
+      series,
+      colors: METRICS.map(m => m.color),
+      height: 240
     })
   }
   d.el.querySelector('[data-act="open-user"]')?.addEventListener('click', () => {
