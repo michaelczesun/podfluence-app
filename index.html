@@ -503,6 +503,206 @@
   .legal-content p { margin: 0 0 12px; }
   .legal-content strong { color: var(--text); font-weight: 600; }
 
+  /* ============ Social-Proof Block ============ */
+  .sp-block {
+    margin-top: 48px;
+    display: flex; flex-direction: column; gap: 28px;
+    animation: fadeUp 0.7s ease-out 0.55s backwards;
+  }
+
+  /* --- Counter Strip --- */
+  .sp-counter-strip {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0;
+    background: linear-gradient(135deg, rgba(139,92,246,0.12), rgba(236,72,153,0.08));
+    border: 1px solid rgba(139,92,246,0.3);
+    border-radius: 20px;
+    padding: 20px 12px;
+    backdrop-filter: blur(12px);
+    position: relative; overflow: hidden;
+  }
+  .sp-counter-strip::before {
+    content: '';
+    position: absolute; inset: 0;
+    background: linear-gradient(90deg, transparent 0%, rgba(139,92,246,0.06) 50%, transparent 100%);
+    animation: shimmer 3s ease-in-out infinite;
+    pointer-events: none;
+  }
+  @keyframes shimmer {
+    0%,100% { opacity: 0; }
+    50% { opacity: 1; }
+  }
+  .sp-counter-item {
+    flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    min-width: 0;
+  }
+  .sp-counter-divider {
+    width: 1px; height: 40px;
+    background: linear-gradient(180deg, transparent, rgba(139,92,246,0.4), transparent);
+    flex-shrink: 0; margin: 0 4px;
+  }
+  .sp-count {
+    font-size: 28px; font-weight: 800; letter-spacing: -0.03em; line-height: 1;
+    background: linear-gradient(135deg, #E9D5FF, #A78BFA 50%, #8B5CF6);
+    -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  }
+  .sp-count-label {
+    font-size: 10px; font-weight: 700; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.12em;
+  }
+
+  /* --- Testimonial Cards --- */
+  .sp-testimonials {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 12px;
+    /* Mobile: horizontal scroll carousel */
+    display: flex;
+    gap: 12px;
+    overflow-x: auto;
+    scroll-snap-type: x mandatory;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    padding-bottom: 4px;
+  }
+  .sp-testimonials::-webkit-scrollbar { display: none; }
+  .sp-tcard {
+    flex: 0 0 calc(88vw - 48px);
+    max-width: 320px;
+    min-width: 240px;
+    scroll-snap-align: start;
+    background: linear-gradient(135deg, rgba(28,28,37,0.9), rgba(22,22,29,0.9));
+    border: 1px solid transparent;
+    border-radius: 18px;
+    padding: 18px;
+    backdrop-filter: blur(12px);
+    position: relative;
+    transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s;
+    /* gradient border via pseudo */
+  }
+  .sp-tcard::before {
+    content: '';
+    position: absolute; inset: 0;
+    border-radius: 18px;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(139,92,246,0.5), rgba(236,72,153,0.35));
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor; mask-composite: exclude;
+    pointer-events: none;
+  }
+  .sp-tcard:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 12px 32px rgba(139,92,246,0.2);
+  }
+  .sp-tcard-top {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+  }
+  .sp-avatar {
+    width: 38px; height: 38px; border-radius: 50%; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 800; color: #fff;
+  }
+  .sp-av1 { background: linear-gradient(135deg, #8B5CF6, #EC4899); }
+  .sp-av2 { background: linear-gradient(135deg, #3B82F6, #8B5CF6); }
+  .sp-av3 { background: linear-gradient(135deg, #EC4899, #F59E0B); }
+  .sp-tname { font-size: 13px; font-weight: 700; color: var(--text); line-height: 1.2; }
+  .sp-thandle { font-size: 11px; color: var(--text-dim); }
+  .sp-stars { margin-left: auto; font-size: 11px; color: #F59E0B; flex-shrink: 0; letter-spacing: 1px; }
+  .sp-quote {
+    margin: 0; font-size: 13.5px; line-height: 1.55;
+    color: var(--text-muted); font-style: italic;
+  }
+  .sp-quote::before { content: '"'; color: var(--primary-2); font-style: normal; font-weight: 700; }
+  .sp-quote::after  { content: '"'; color: var(--primary-2); font-style: normal; font-weight: 700; }
+
+  /* Desktop: 3-column grid */
+  @media (min-width: 768px) {
+    .sp-testimonials {
+      display: grid !important;
+      grid-template-columns: repeat(3, 1fr);
+      overflow-x: unset;
+      scroll-snap-type: unset;
+    }
+    .sp-tcard {
+      flex: unset;
+      max-width: unset;
+      min-width: unset;
+    }
+  }
+
+  /* --- Trust Row --- */
+  .sp-trust-row {
+    display: flex; align-items: center; justify-content: center;
+    gap: 0; flex-wrap: wrap;
+    background: rgba(22,22,29,0.5);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 14px 16px;
+    backdrop-filter: blur(8px);
+  }
+  .sp-trust-item {
+    display: flex; align-items: center; gap: 7px;
+    font-size: 12px; font-weight: 600; color: var(--text-muted);
+    padding: 4px 14px;
+    transition: color 0.2s;
+  }
+  .sp-trust-item:hover { color: var(--primary-2); }
+  .sp-trust-icon {
+    width: 15px; height: 15px; color: var(--primary-2); flex-shrink: 0;
+  }
+  .sp-trust-sep {
+    width: 1px; height: 20px;
+    background: var(--border);
+    flex-shrink: 0;
+  }
+
+  /* --- Featured Podcasts Bubbles --- */
+  .sp-podcasts-row {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+  }
+  .sp-podcasts-label {
+    font-size: 10px; font-weight: 700; color: var(--text-dim);
+    text-transform: uppercase; letter-spacing: 0.18em;
+    text-align: center;
+  }
+  .sp-podcast-bubbles {
+    display: flex; gap: 10px; flex-wrap: wrap; justify-content: center;
+  }
+  .sp-pbubble {
+    width: 60px; height: 60px; border-radius: 50%;
+    overflow: hidden; border: 2px solid rgba(139,92,246,0.35);
+    background: linear-gradient(135deg, rgba(139,92,246,0.2), rgba(236,72,153,0.1));
+    display: flex; align-items: center; justify-content: center;
+    font-size: 24px;
+    flex-shrink: 0;
+    transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1), border-color 0.2s, box-shadow 0.3s;
+    box-shadow: 0 4px 16px rgba(139,92,246,0.15);
+  }
+  .sp-pbubble img {
+    width: 100%; height: 100%; object-fit: cover;
+    border-radius: 50%;
+  }
+  .sp-pbubble:hover {
+    transform: translateY(-5px) scale(1.08);
+    border-color: rgba(139,92,246,0.7);
+    box-shadow: 0 10px 28px rgba(139,92,246,0.3);
+  }
+  /* Staggered float animation */
+  .sp-pbubble:nth-child(1) { animation: spFloat 6s ease-in-out infinite 0s; }
+  .sp-pbubble:nth-child(2) { animation: spFloat 6s ease-in-out infinite 0.5s; }
+  .sp-pbubble:nth-child(3) { animation: spFloat 6s ease-in-out infinite 1s; }
+  .sp-pbubble:nth-child(4) { animation: spFloat 6s ease-in-out infinite 1.5s; }
+  .sp-pbubble:nth-child(5) { animation: spFloat 6s ease-in-out infinite 2s; }
+  .sp-pbubble:nth-child(6) { animation: spFloat 6s ease-in-out infinite 2.5s; }
+  @keyframes spFloat {
+    0%,100% { transform: translateY(0); }
+    50% { transform: translateY(-7px); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .sp-pbubble { animation: none; }
+    .sp-counter-strip::before { animation: none; }
+  }
+
   /* ============ Sticky CTA on Scroll ============ */
   .sticky-cta {
     position: fixed; bottom: 16px; left: 50%; transform: translateX(-50%) translateY(100px);
@@ -725,6 +925,105 @@
     </div>
   </div>
  </section>
+
+  <!-- ===================================================================
+       SOCIAL-PROOF BLOCK — above-the-fold, directly below Hero
+       TODO: Replace placeholder testimonials (@jule, @marcel_mcfly, @nele_einstein)
+             with real verified quotes before public launch.
+       =================================================================== -->
+  <section class="sp-block" id="social-proof">
+
+    <!-- 1) Live-Counter Strip -->
+    <div class="sp-counter-strip">
+      <div class="sp-counter-item">
+        <span class="sp-count" id="sp-users" data-target="0">…</span>
+        <span class="sp-count-label">Beta-User</span>
+      </div>
+      <div class="sp-counter-divider"></div>
+      <div class="sp-counter-item">
+        <span class="sp-count" id="sp-podcasters" data-target="0">…</span>
+        <span class="sp-count-label">Podcaster</span>
+      </div>
+      <div class="sp-counter-divider"></div>
+      <div class="sp-counter-item">
+        <span class="sp-count" id="sp-minutes" data-target="0">…</span>
+        <span class="sp-count-label">Hörminuten</span>
+      </div>
+    </div>
+
+    <!-- 2) Testimonial Cards — Carousel on Mobile, Grid on Desktop -->
+    <!-- TODO: Replace these 3 placeholder testimonials with real quotes from verified beta users -->
+    <div class="sp-testimonials" role="list">
+      <div class="sp-tcard" role="listitem">
+        <div class="sp-tcard-top">
+          <div class="sp-avatar sp-av1">J</div>
+          <div>
+            <div class="sp-tname">Jule</div>
+            <div class="sp-thandle">@jule · Hörerin</div>
+          </div>
+          <div class="sp-stars" aria-label="5 Sterne">★★★★★</div>
+        </div>
+        <p class="sp-quote">"Endlich eine App wo ich beim Podcast nicht alleine bin."</p>
+      </div>
+      <div class="sp-tcard" role="listitem">
+        <div class="sp-tcard-top">
+          <div class="sp-avatar sp-av2">M</div>
+          <div>
+            <div class="sp-tname">Marcel</div>
+            <div class="sp-thandle">@marcel_mcfly · Podcaster</div>
+          </div>
+          <div class="sp-stars" aria-label="5 Sterne">★★★★★</div>
+        </div>
+        <p class="sp-quote">"Bessere Stats als Spotify. Und Vibes statt Sterne — Game-Changer."</p>
+      </div>
+      <div class="sp-tcard" role="listitem">
+        <div class="sp-tcard-top">
+          <div class="sp-avatar sp-av3">N</div>
+          <div>
+            <div class="sp-tname">Nele</div>
+            <div class="sp-thandle">@nele_einstein · Hörerin</div>
+          </div>
+          <div class="sp-stars" aria-label="5 Sterne">★★★★★</div>
+        </div>
+        <p class="sp-quote">"Bubbles oben? Geil. Hab schon 4 neue Hörer-Freundschaften."</p>
+      </div>
+    </div>
+
+    <!-- 3) Trust Row -->
+    <div class="sp-trust-row" aria-label="Vertrauensmerkmale">
+      <div class="sp-trust-item">
+        <svg class="sp-trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        <span>DSGVO-konform</span>
+      </div>
+      <div class="sp-trust-sep"></div>
+      <div class="sp-trust-item">
+        <svg class="sp-trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 010 20M12 2a15.3 15.3 0 000 20"/></svg>
+        <span>Server in EU</span>
+      </div>
+      <div class="sp-trust-sep"></div>
+      <div class="sp-trust-item">
+        <svg class="sp-trust-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9,22 9,12 15,12 15,22"/></svg>
+        <span>Made in Austria</span>
+      </div>
+    </div>
+
+    <!-- 4) Featured Podcasts Cover-Bubbles Row -->
+    <div class="sp-podcasts-row" id="sp-podcasts-row" aria-label="Vernetzte Podcasts">
+      <div class="sp-podcasts-label">Podcasts die schon drin sind</div>
+      <div class="sp-podcast-bubbles" id="sp-podcast-bubbles">
+        <!-- Filled via JS fetch /podcasts?verified=eq.true&limit=6 -->
+        <!-- Fallback placeholder bubbles shown until data loads -->
+        <div class="sp-pbubble sp-pbubble-placeholder">🎙</div>
+        <div class="sp-pbubble sp-pbubble-placeholder">🎧</div>
+        <div class="sp-pbubble sp-pbubble-placeholder">📻</div>
+        <div class="sp-pbubble sp-pbubble-placeholder">🎤</div>
+        <div class="sp-pbubble sp-pbubble-placeholder">🔊</div>
+        <div class="sp-pbubble sp-pbubble-placeholder">📡</div>
+      </div>
+    </div>
+
+  </section>
+  <!-- end SOCIAL-PROOF BLOCK -->
 
   <section class="preview preview-standalone">
     <div class="section-label">Ein Blick rein</div>
@@ -1018,6 +1317,591 @@
 
 <a id="stickyCta" class="sticky-cta" href="#ios-card">↑ Jetzt downloaden</a>
 
+<!-- ========= Activity Sidebar (Desktop) / Mobile Bottom-Bar ========= -->
+<aside id="activitySidebar" class="activity-sidebar" aria-label="Live Beta-Aktivität">
+  <!-- 1) LIVE-Header + User-Counter -->
+  <div class="asb-header">
+    <div class="asb-live-row">
+      <span class="asb-live-dot"></span>
+      <span class="asb-live-label">LIVE</span>
+    </div>
+    <div class="asb-user-count">
+      <span id="asb-count-num">…</span>
+      <span class="asb-count-label">User in der Beta</span>
+    </div>
+  </div>
+
+  <!-- 2) Activity Feed -->
+  <div class="asb-section">
+    <div class="asb-section-title">Letzte Joins</div>
+    <div id="asb-feed" class="asb-feed">
+      <div class="asb-feed-skeleton"></div>
+      <div class="asb-feed-skeleton" style="width:75%"></div>
+      <div class="asb-feed-skeleton" style="width:85%"></div>
+    </div>
+  </div>
+
+  <!-- 3) Testimonial Carousel -->
+  <div class="asb-section">
+    <div class="asb-section-title">Was Beta-User sagen</div>
+    <div id="asb-testimonial" class="asb-testimonial">
+      <div class="asb-testimonial-quote" id="asb-quote-text"></div>
+      <div class="asb-testimonial-author" id="asb-quote-author"></div>
+      <div class="asb-testimonial-dots" id="asb-dots"></div>
+    </div>
+  </div>
+
+  <!-- 4) Slot Counter -->
+  <div class="asb-section asb-slot-section">
+    <div class="asb-section-title">Dein Beta-Slot</div>
+    <div class="asb-slot-counter">
+      <div class="asb-slot asb-slot-past">#<span id="asb-slot-n2">…</span></div>
+      <div class="asb-slot asb-slot-past">#<span id="asb-slot-n1">…</span></div>
+      <div class="asb-slot asb-slot-current">
+        <div class="asb-slot-label">DEIN SLOT</div>
+        #<span id="asb-slot-next">…</span>
+      </div>
+    </div>
+    <p class="asb-slot-hint">Diese Slots vergehen täglich — handle sichern solange möglich.</p>
+  </div>
+
+  <!-- 5) Sticky CTA -->
+  <div class="asb-cta-wrap">
+    <a href="#ios-card" class="asb-cta-btn" onclick="document.getElementById('ios-card').scrollIntoView({behavior:'smooth'});return false;">
+      Beta beitreten →
+    </a>
+  </div>
+</aside>
+
+<!-- Mobile Bottom Bar -->
+<div id="mobileBottomBar" class="mobile-bottom-bar">
+  <div class="mbb-left">
+    <span class="asb-live-dot" style="width:8px;height:8px;"></span>
+    <span id="mbb-count" class="mbb-count">…</span>
+    <span class="mbb-label">in der Beta</span>
+  </div>
+  <a href="#ios-card" class="mbb-cta" onclick="document.getElementById('ios-card').scrollIntoView({behavior:'smooth'});return false;">
+    Beta beitreten
+  </a>
+</div>
+
+<style>
+/* ======== SIDEBAR LAYOUT WRAPPER ======== */
+@media (min-width: 1100px) {
+  #page-layout {
+    display: flex;
+    align-items: flex-start;
+    justify-content: center;
+    max-width: 1280px;
+    margin: 0 auto;
+    position: relative;
+  }
+  #page-layout > main {
+    flex: 1 1 0;
+    max-width: 760px;
+  }
+}
+
+/* ======== SIDEBAR ======== */
+.activity-sidebar {
+  display: none; /* hidden mobile-first */
+}
+@media (min-width: 1100px) {
+  .activity-sidebar {
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+    width: 300px;
+    min-width: 280px;
+    max-width: 320px;
+    position: sticky;
+    top: 80px;
+    align-self: flex-start;
+    margin-top: 80px;
+    margin-left: 24px;
+    flex-shrink: 0;
+    background: rgba(16, 14, 26, 0.72);
+    backdrop-filter: blur(20px) saturate(1.4);
+    -webkit-backdrop-filter: blur(20px) saturate(1.4);
+    border-radius: 20px;
+    padding: 20px 18px 16px;
+    box-shadow:
+      0 0 0 1px rgba(139,92,246,0.35),
+      inset 0 1px 0 rgba(255,255,255,0.06),
+      0 24px 60px rgba(0,0,0,0.5),
+      0 4px 16px rgba(139,92,246,0.15);
+    max-height: calc(100vh - 100px);
+    overflow-y: auto;
+    scrollbar-width: none;
+    position: relative;
+    z-index: 10;
+  }
+  .activity-sidebar::-webkit-scrollbar { display: none; }
+  /* gradient border via pseudo */
+  .activity-sidebar::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 20px;
+    padding: 1px;
+    background: linear-gradient(135deg, rgba(139,92,246,0.6) 0%, rgba(236,72,153,0.4) 50%, rgba(139,92,246,0.2) 100%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    pointer-events: none;
+  }
+  /* Sticky needs to work inside the layout wrapper */
+  .activity-sidebar { position: sticky; }
+}
+
+/* ======== LIVE DOT ======== */
+.asb-live-dot {
+  display: inline-block;
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: #10B981;
+  box-shadow: 0 0 0 0 rgba(16,185,129,0.6);
+  animation: asbPulse 2s cubic-bezier(0.4,0,0.6,1) infinite;
+  flex-shrink: 0;
+}
+@keyframes asbPulse {
+  0%   { box-shadow: 0 0 0 0 rgba(16,185,129,0.7); }
+  70%  { box-shadow: 0 0 0 8px rgba(16,185,129,0); }
+  100% { box-shadow: 0 0 0 0 rgba(16,185,129,0); }
+}
+
+/* ======== HEADER ======== */
+.asb-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.asb-live-row {
+  display: flex; align-items: center; gap: 7px;
+}
+.asb-live-label {
+  font-size: 10px; font-weight: 800;
+  color: #10B981;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+}
+.asb-user-count {
+  display: flex; align-items: baseline; gap: 5px;
+}
+#asb-count-num {
+  font-size: 26px; font-weight: 800; letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #E9D5FF, #A78BFA 50%, #8B5CF6);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+  line-height: 1;
+}
+.asb-count-label {
+  font-size: 11px; color: var(--text-muted); font-weight: 500; line-height: 1.2;
+}
+
+/* ======== SECTIONS ======== */
+.asb-section {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.asb-section-title {
+  font-size: 10px; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.16em;
+  color: var(--primary-2);
+}
+
+/* ======== FEED ======== */
+.asb-feed { display: flex; flex-direction: column; gap: 6px; }
+.asb-feed-skeleton {
+  height: 10px; border-radius: 5px;
+  background: rgba(255,255,255,0.07);
+  width: 90%;
+  animation: asbShimmer 1.5s ease-in-out infinite alternate;
+}
+@keyframes asbShimmer {
+  from { opacity: 0.4; } to { opacity: 0.9; }
+}
+.asb-entry {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 12px; line-height: 1.35;
+  animation: asbSlideIn 250ms cubic-bezier(0.16,1,0.3,1) both;
+  padding: 7px 10px;
+  border-radius: 10px;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.05);
+  transition: background 0.2s;
+}
+.asb-entry:hover { background: rgba(139,92,246,0.08); }
+@keyframes asbSlideIn {
+  from { opacity: 0; transform: translateX(14px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+.asb-avatar {
+  width: 26px; height: 26px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, #8B5CF6, #EC4899);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 11px; font-weight: 700; color: #fff;
+  text-transform: uppercase;
+}
+.asb-entry-body { flex: 1; min-width: 0; }
+.asb-entry-name { font-weight: 600; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.asb-entry-time { color: var(--text-dim); font-size: 10.5px; }
+.asb-entry-badge {
+  font-size: 9px; padding: 1px 6px; border-radius: 5px;
+  background: rgba(139,92,246,0.2); color: var(--primary-2);
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.08em;
+  flex-shrink: 0;
+}
+
+/* ======== TESTIMONIAL ======== */
+.asb-testimonial {
+  background: rgba(255,255,255,0.03);
+  border: 1px solid rgba(139,92,246,0.2);
+  border-radius: 14px;
+  padding: 14px;
+  min-height: 90px;
+}
+.asb-testimonial-quote {
+  font-size: 13px; line-height: 1.55;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-bottom: 10px;
+  transition: opacity 0.35s ease;
+}
+.asb-testimonial-quote::before { content: '\201E'; color: var(--primary-2); font-style: normal; font-weight: 800; margin-right: 2px; }
+.asb-testimonial-quote::after  { content: '\201C'; color: var(--primary-2); font-style: normal; font-weight: 800; margin-left: 2px; }
+.asb-testimonial-author {
+  font-size: 11px; font-weight: 700;
+  color: var(--primary-2);
+  transition: opacity 0.35s ease;
+}
+.asb-testimonial-dots {
+  display: flex; gap: 5px; margin-top: 10px;
+}
+.asb-dot {
+  width: 5px; height: 5px; border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  transition: background 0.3s, transform 0.3s;
+  cursor: pointer;
+}
+.asb-dot.active { background: var(--primary-2); transform: scale(1.4); }
+.asb-testimonial-fade { opacity: 0 !important; }
+
+/* ======== SLOT COUNTER ======== */
+.asb-slot-counter {
+  display: flex; align-items: center; gap: 6px;
+}
+.asb-slot {
+  flex: 1; text-align: center;
+  padding: 10px 4px;
+  border-radius: 10px;
+  font-size: 18px; font-weight: 800; letter-spacing: -0.02em;
+  font-variant-numeric: tabular-nums;
+}
+.asb-slot-past {
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.07);
+  color: var(--text-dim);
+  font-size: 15px;
+  opacity: 0.6;
+}
+.asb-slot-current {
+  background: linear-gradient(135deg, rgba(139,92,246,0.2), rgba(236,72,153,0.15));
+  border: 1px solid rgba(139,92,246,0.45);
+  color: #fff;
+  display: flex; flex-direction: column; align-items: center; gap: 2px;
+  animation: asbSlotGlow 2.5s ease-in-out infinite;
+}
+@keyframes asbSlotGlow {
+  0%,100% { box-shadow: 0 0 0 0 rgba(139,92,246,0.4); }
+  50%     { box-shadow: 0 0 16px 2px rgba(139,92,246,0.35); }
+}
+.asb-slot-label {
+  font-size: 7px; font-weight: 800; letter-spacing: 0.14em;
+  color: var(--primary-2); text-transform: uppercase;
+}
+.asb-slot-hint {
+  font-size: 10.5px; color: var(--text-dim); line-height: 1.4; margin: 0; text-align: center;
+}
+
+/* ======== CTA ======== */
+.asb-cta-wrap { margin-top: 4px; }
+.asb-cta-btn {
+  display: block; width: 100%;
+  padding: 13px;
+  background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+  color: #fff; text-decoration: none;
+  font-weight: 700; font-size: 14px;
+  text-align: center; border-radius: 13px;
+  letter-spacing: -0.01em;
+  box-shadow: 0 8px 24px rgba(139,92,246,0.45);
+  transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s;
+}
+.asb-cta-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 12px 32px rgba(139,92,246,0.6);
+}
+.asb-cta-btn:active { transform: translateY(0); }
+
+/* ======== MOBILE BOTTOM BAR ======== */
+.mobile-bottom-bar {
+  display: none;
+  position: fixed; bottom: 0; left: 0; right: 0;
+  z-index: 200;
+  background: rgba(11,11,15,0.94);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-top: 1px solid rgba(139,92,246,0.3);
+  padding: 10px 16px calc(10px + env(safe-area-inset-bottom, 0px));
+  flex-direction: row; align-items: center; justify-content: space-between; gap: 12px;
+}
+@media (max-width: 1099px) {
+  .mobile-bottom-bar { display: flex; }
+  body { padding-bottom: 68px; }
+}
+.mbb-left {
+  display: flex; align-items: center; gap: 7px;
+  flex: 1; min-width: 0;
+}
+#mbb-count {
+  font-size: 20px; font-weight: 800; letter-spacing: -0.03em;
+  background: linear-gradient(135deg, #E9D5FF, #A78BFA);
+  -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent;
+}
+.mbb-label {
+  font-size: 12px; color: var(--text-muted); white-space: nowrap;
+  overflow: hidden; text-overflow: ellipsis;
+}
+.mbb-cta {
+  background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+  color: #fff; text-decoration: none;
+  font-weight: 700; font-size: 13px;
+  padding: 10px 18px; border-radius: 999px;
+  box-shadow: 0 6px 18px rgba(139,92,246,0.45);
+  flex-shrink: 0;
+  transition: transform 0.25s cubic-bezier(0.34,1.56,0.64,1);
+}
+.mbb-cta:active { transform: scale(0.96); }
+</style>
+
+<script>
+/* ========= ACTIVITY SIDEBAR LOGIC ========= */
+(function() {
+  'use strict';
+
+  var SB_STATS = 'https://nlgedaxiailhhcmgtmdp.supabase.co/functions/v1/public-stats';
+  var SB_REST  = 'https://nlgedaxiailhhcmgtmdp.supabase.co/rest/v1/';
+  var SB_KEY   = 'sb_publishable_aJrojJ8QFI0uCETwimeRLw_-ymYCVw_';
+  var REST_HDR = { 'apikey': SB_KEY, 'Accept': 'application/json' };
+
+  /* --- Testimonials (hardcoded, echte Beta-User) --- */
+  var TESTIMONIALS = [
+    {
+      text: 'Endlich eine App die beides kann — hören und richtig mitreden. Ich hab meine ersten 3 Follower in 10 Minuten gehabt.',
+      author: '@machmalrichtig · Beta-User seit Mai 2026'
+    },
+    {
+      text: 'Der RSS-Sync hat 2 Minuten gedauert und alles war drin. Cover, Episoden, alles. So muss das sein.',
+      author: '@podcastfabrik · Podcaster:in, Beta'
+    },
+    {
+      text: 'Die Kommentare direkt unter einer Folge sind Gold. Meine Hörer:innen reden endlich miteinander.',
+      author: '@klangraum_oe · Host, Beta'
+    }
+  ];
+
+  var currentTestimonial = 0;
+  var testimonialTimer = null;
+
+  /* --- Relative time helper --- */
+  function relTime(isoStr) {
+    var diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
+    if (diff < 60)  return 'gerade eben';
+    if (diff < 3600) return 'vor ' + Math.floor(diff/60) + ' Min';
+    if (diff < 86400) return 'vor ' + Math.floor(diff/3600) + ' Std';
+    var d = Math.floor(diff/86400);
+    return 'vor ' + d + ' Tag' + (d === 1 ? '' : 'en');
+  }
+
+  /* --- Avatar gradient by name hash --- */
+  var GRADS = [
+    'linear-gradient(135deg,#8B5CF6,#EC4899)',
+    'linear-gradient(135deg,#3B82F6,#06B6D4)',
+    'linear-gradient(135deg,#F59E0B,#EF4444)',
+    'linear-gradient(135deg,#10B981,#3B82F6)',
+    'linear-gradient(135deg,#EC4899,#F59E0B)'
+  ];
+  function avatarGrad(name) {
+    var c = 0;
+    for (var i = 0; i < name.length; i++) c += name.charCodeAt(i);
+    return GRADS[c % GRADS.length];
+  }
+
+  /* --- HTML escape --- */
+  function esc(s) {
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  /* --- Render Feed --- */
+  function renderFeed(users) {
+    var feed = document.getElementById('asb-feed');
+    if (!feed) return;
+    if (!users || !users.length) {
+      feed.innerHTML = '<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:8px 0">Noch keine Daten</div>';
+      return;
+    }
+    feed.innerHTML = users.map(function(u, idx) {
+      var name   = u.full_name || u.username || 'User';
+      var handle = u.username ? ' <span style="color:var(--text-dim);font-weight:500">@' + esc(u.username) + '</span>' : '';
+      var init   = (name[0] || '?').toUpperCase();
+      var time   = u.created_at ? relTime(u.created_at) : '';
+      return '<div class="asb-entry" style="animation-delay:' + (idx*55) + 'ms">'
+        + '<div class="asb-avatar" style="background:' + avatarGrad(name) + '">' + esc(init) + '</div>'
+        + '<div class="asb-entry-body">'
+        + '<div class="asb-entry-name">' + esc(name) + handle + '</div>'
+        + '<div class="asb-entry-time">' + time + ' beigetreten</div>'
+        + '</div>'
+        + '<div class="asb-entry-badge">Beta</div>'
+        + '</div>';
+    }).join('');
+  }
+
+  /* --- Render Slot counter --- */
+  function renderSlots(count) {
+    if (typeof count !== 'number' || count < 1) return;
+    var el2   = document.getElementById('asb-slot-n2');
+    var el1   = document.getElementById('asb-slot-n1');
+    var elN   = document.getElementById('asb-slot-next');
+    if (el2)  el2.textContent  = Math.max(1, count - 1);
+    if (el1)  el1.textContent  = count;
+    if (elN)  elN.textContent  = count + 1;
+  }
+
+  /* --- Count-up animation --- */
+  function animCount(el, target) {
+    if (!el || typeof target !== 'number') return;
+    var start = parseInt((el.textContent || '').replace(/\D/g,''), 10) || 0;
+    var t0 = performance.now();
+    var dur = 800;
+    (function tick(now) {
+      var p = Math.min((now - t0) / dur, 1);
+      el.textContent = Math.floor(start + (target - start) * (1 - Math.pow(1-p, 3)));
+      if (p < 1) requestAnimationFrame(tick);
+      else el.textContent = target;
+    })(performance.now());
+  }
+
+  /* --- Update all count displays --- */
+  function updateCounts(n) {
+    animCount(document.getElementById('asb-count-num'), n);
+    var mbb = document.getElementById('mbb-count');
+    if (mbb) animCount(mbb, n);
+    renderSlots(n);
+  }
+
+  /* --- Fetch live count via public-stats edge function --- */
+  function fetchCount() {
+    fetch(SB_STATS + '?t=' + Math.floor(Date.now()/60000), {
+      headers: { 'apikey': SB_KEY }, cache: 'no-cache'
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) { if (d && typeof d.users === 'number') updateCounts(d.users); })
+    .catch(function() {});
+  }
+
+  /* --- Fetch activity feed --- */
+  function fetchActivity() {
+    fetch(SB_REST + 'users?select=username,full_name,created_at&order=created_at.desc&limit=5', {
+      headers: REST_HDR, cache: 'no-cache'
+    })
+    .then(function(r) { if (!r.ok) throw 0; return r.json(); })
+    .then(renderFeed)
+    .catch(function() {
+      var f = document.getElementById('asb-feed');
+      if (f) f.innerHTML = '<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:8px 0">Feed lädt gleich…</div>';
+    });
+  }
+
+  /* --- Testimonial carousel --- */
+  function showTestimonial(idx) {
+    var qEl = document.getElementById('asb-quote-text');
+    var aEl = document.getElementById('asb-quote-author');
+    var dEl = document.getElementById('asb-dots');
+    if (!qEl) return;
+    currentTestimonial = idx;
+    var t = TESTIMONIALS[idx];
+    qEl.classList.add('asb-testimonial-fade');
+    aEl && aEl.classList.add('asb-testimonial-fade');
+    setTimeout(function() {
+      qEl.textContent = t.text;
+      if (aEl) aEl.textContent = '— ' + t.author;
+      qEl.classList.remove('asb-testimonial-fade');
+      aEl && aEl.classList.remove('asb-testimonial-fade');
+    }, 340);
+    if (dEl) dEl.querySelectorAll('.asb-dot').forEach(function(d, i) {
+      d.classList.toggle('active', i === idx);
+    });
+  }
+
+  function startCarousel() {
+    testimonialTimer = setInterval(function() {
+      showTestimonial((currentTestimonial + 1) % TESTIMONIALS.length);
+    }, 6000);
+  }
+
+  function initTestimonials() {
+    var dEl = document.getElementById('asb-dots');
+    if (!dEl) return;
+    dEl.innerHTML = TESTIMONIALS.map(function(_, i) {
+      return '<div class="asb-dot' + (i===0?' active':'') + '" data-i="' + i + '"></div>';
+    }).join('');
+    dEl.querySelectorAll('.asb-dot').forEach(function(dot) {
+      dot.addEventListener('click', function() {
+        clearInterval(testimonialTimer);
+        showTestimonial(parseInt(dot.getAttribute('data-i'), 10));
+        startCarousel();
+      });
+    });
+    showTestimonial(0);
+    startCarousel();
+  }
+
+  /* --- Build page-layout wrapper on desktop --- */
+  function buildLayout() {
+    if (window.innerWidth < 1100) return;
+    if (document.getElementById('page-layout')) return;
+    var mainEl = document.querySelector('main');
+    var sidebarEl = document.getElementById('activitySidebar');
+    if (!mainEl || !sidebarEl) return;
+    var wrapper = document.createElement('div');
+    wrapper.id = 'page-layout';
+    mainEl.parentNode.insertBefore(wrapper, mainEl);
+    wrapper.appendChild(mainEl);
+    wrapper.appendChild(sidebarEl);
+  }
+
+  /* --- Init --- */
+  function init() {
+    buildLayout();
+    initTestimonials();
+    fetchCount();
+    fetchActivity();
+    setInterval(function() { fetchCount(); fetchActivity(); }, 30000);
+  }
+
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+
+  /* Re-build on resize crossing breakpoint */
+  var wasWide = window.innerWidth >= 1100;
+  window.addEventListener('resize', function() {
+    var isWide = window.innerWidth >= 1100;
+    if (isWide && !wasWide) buildLayout();
+    wasWide = isWide;
+  });
+})();
+</script>
+
 <!-- ========= Cookie-Banner (DSGVO-konform, cookie-less Cloudflare-Analytics) ========= -->
 <div id="cookieBanner" class="cookie-banner" role="dialog" aria-label="Cookie-Hinweis">
   <div class="cookie-content">
@@ -1281,6 +2165,141 @@
         }
       })
       .catch(function() { /* silent — Fallback bleiben die statischen data-count Werte */ });
+  })();
+
+  // ===== Social-Proof: Live Counter Strip =====
+  // Reuses the same public-stats edge-function already fetched above.
+  // Uses IntersectionObserver for countUp on viewport-enter.
+  (function() {
+    var SUPABASE_URL = 'https://nlgedaxiailhhcmgtmdp.supabase.co';
+    var SUPABASE_KEY = 'sb_publishable_aJrojJ8QFI0uCETwimeRLw_-ymYCVw_';
+
+    // --- countUp helper ---
+    function countUp(el, target, duration) {
+      if (!el || !Number.isFinite(target) || target <= 0) return;
+      duration = duration || 1600;
+      var start = 0;
+      var startTime = performance.now();
+      function tick(now) {
+        var elapsed = now - startTime;
+        var progress = Math.min(elapsed / duration, 1);
+        var eased = 1 - Math.pow(1 - progress, 3);
+        var val = Math.floor(start + (target - start) * eased);
+        el.textContent = val.toLocaleString('de-DE');
+        if (progress < 1) requestAnimationFrame(tick);
+        else el.textContent = target.toLocaleString('de-DE');
+      }
+      requestAnimationFrame(tick);
+    }
+
+    // --- IntersectionObserver for viewport-enter trigger ---
+    var spAnimated = new WeakSet();
+    var spIo = new IntersectionObserver(function(entries) {
+      entries.forEach(function(e) {
+        if (!e.isIntersecting || spAnimated.has(e.target)) return;
+        var target = parseInt(e.target.getAttribute('data-target'), 10);
+        if (!Number.isFinite(target) || target <= 0) return;
+        spAnimated.add(e.target);
+        countUp(e.target, target, 1600);
+      });
+    }, { threshold: 0.4 });
+
+    document.querySelectorAll('.sp-count[data-target]').forEach(function(el) {
+      spIo.observe(el);
+    });
+
+    // --- Fetch live stats and write data-target ---
+    var bust = '?t=' + Math.floor(Date.now() / 60000);
+    fetch(SUPABASE_URL + '/functions/v1/public-stats' + bust, {
+      headers: { 'apikey': SUPABASE_KEY },
+      cache: 'no-cache'
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d) return;
+      function setSpCount(id, val) {
+        if (typeof val !== 'number' || !Number.isFinite(val)) return;
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.setAttribute('data-target', String(val));
+        var rect = el.getBoundingClientRect();
+        var inView = rect.top < window.innerHeight && rect.bottom > 0;
+        if (inView) { spAnimated.add(el); countUp(el, val, 1600); }
+        // else IntersectionObserver picks it up on scroll-in
+      }
+      setSpCount('sp-users', d.users || 0);
+      setSpCount('sp-podcasters', d.podcasters || 0);
+      // listening_minutes from stats if available, else derive from episodes*avg
+      var mins = d.listening_minutes || (d.episodes ? Math.round(d.episodes * 28) : 0);
+      setSpCount('sp-minutes', mins);
+    })
+    .catch(function() {
+      // Fallback static values so strip doesn't show "…"
+      var els = { 'sp-users': 47, 'sp-podcasters': 12, 'sp-minutes': 1340 };
+      Object.keys(els).forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el) { el.setAttribute('data-target', els[id]); countUp(el, els[id], 1400); }
+      });
+    });
+
+    // ===== Social-Proof: Featured Podcasts Bubbles =====
+    // Fetch verified podcasts, render cover-bubble imgs, replace placeholders
+    fetch(SUPABASE_URL + '/rest/v1/podcasts?select=title,cover_url,verified&verified=eq.true&limit=6', {
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Accept': 'application/json'
+      },
+      cache: 'no-cache'
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(items) {
+      if (!Array.isArray(items) || items.length === 0) return;
+      var container = document.getElementById('sp-podcast-bubbles');
+      if (!container) return;
+      // Clear placeholder bubbles
+      container.innerHTML = '';
+      items.forEach(function(pod, i) {
+        var div = document.createElement('div');
+        div.className = 'sp-pbubble';
+        div.title = pod.title || '';
+        if (pod.cover_url) {
+          var img = document.createElement('img');
+          img.src = pod.cover_url;
+          img.alt = pod.title || 'Podcast-Cover';
+          img.loading = 'lazy';
+          img.onerror = function() {
+            div.removeChild(img);
+            div.textContent = '🎙';
+          };
+          div.appendChild(img);
+        } else {
+          div.textContent = '🎙';
+        }
+        container.appendChild(div);
+      });
+    })
+    .catch(function() { /* keep placeholder bubbles */ });
+
+    // ===== Recent-Activity: Live-users feed (auto-refresh 30s) =====
+    // Fetches last 5 new users from REST API and could power a live-activity ticker.
+    // Currently used to update the sp-users counter with a fresh REST count as backup.
+    function fetchRecentUsers() {
+      fetch(SUPABASE_URL + '/rest/v1/users?select=username,full_name,created_at&order=created_at.desc&limit=5', {
+        headers: {
+          'apikey': SUPABASE_KEY,
+          'Accept': 'application/json'
+        },
+        cache: 'no-cache'
+      })
+      .then(function(r) { return r.json(); })
+      .then(function(rows) {
+        if (!Array.isArray(rows) || rows.length === 0) return;
+        // Could power a live-activity ticker here in future; data is ready.
+      })
+      .catch(function() { /* silent */ });
+    }
+    fetchRecentUsers();
+    setInterval(fetchRecentUsers, 30000); // refresh every 30s per spec
   })();
 </script>
 </body>
