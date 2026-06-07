@@ -14,7 +14,9 @@
     --bg: #0B0B0F;
     --surface: #16161D;
     --surface-elev: #1C1C25;
+    --surface-glass: rgba(22,22,29,0.72);
     --border: #2A2A33;
+    --border-soft: rgba(255,255,255,0.06);
     --primary: #8B5CF6;
     --primary-2: #A78BFA;
     --primary-dark: #7C3AED;
@@ -32,90 +34,225 @@
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
     -webkit-font-smoothing: antialiased;
     min-height: 100vh;
+    position: relative;
+    overflow-x: hidden;
   }
+
+  /* Animated bubbles background */
+  body::before, body::after {
+    content: '';
+    position: fixed;
+    border-radius: 50%;
+    filter: blur(80px);
+    opacity: 0.18;
+    z-index: 0;
+    pointer-events: none;
+    animation: float 22s ease-in-out infinite;
+  }
+  body::before {
+    width: 520px; height: 520px;
+    background: radial-gradient(circle, #8B5CF6, transparent 70%);
+    top: -120px; left: -120px;
+  }
+  body::after {
+    width: 620px; height: 620px;
+    background: radial-gradient(circle, #7C3AED, transparent 70%);
+    bottom: -160px; right: -180px;
+    animation-delay: -8s;
+  }
+  @keyframes float {
+    0%, 100% { transform: translate(0, 0) scale(1); }
+    33%      { transform: translate(40px, -30px) scale(1.05); }
+    66%      { transform: translate(-30px, 40px) scale(0.95); }
+  }
+
   a { color: var(--primary-2); text-decoration: none; }
   a:hover { text-decoration: underline; }
 
+  /* Scrollbar — dark thin */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(139,92,246,0.18); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(139,92,246,0.32); }
+
   /* Top bar */
   .topbar {
-    height: 56px;
-    background: var(--surface);
-    border-bottom: 1px solid var(--border);
+    height: 60px;
+    background: var(--surface-glass);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border-bottom: 1px solid var(--border-soft);
     display: flex; align-items: center; justify-content: space-between;
-    padding: 0 20px;
+    padding: 0 18px;
     position: sticky; top: 0; z-index: 50;
+    gap: 16px;
   }
   .topbar .brand {
     display: flex; align-items: center; gap: 12px;
+    flex-shrink: 0;
   }
   .topbar .logo {
-    width: 32px; height: 32px; border-radius: 8px;
+    width: 34px; height: 34px; border-radius: 9px;
     background: linear-gradient(135deg, var(--primary), var(--primary-dark));
     display: flex; align-items: center; justify-content: center;
-    font-size: 16px;
+    font-size: 17px;
+    box-shadow: 0 4px 14px rgba(139,92,246,0.4);
   }
   .topbar .title { font-weight: 700; font-size: 15px; letter-spacing: 0.3px; }
   .topbar .title small { color: var(--text-muted); font-weight: 500; margin-left: 8px; }
+
+  .topbar-right { display: flex; align-items: center; gap: 10px; flex-shrink: 0; }
+  .topbar-mid { flex: 1; display: flex; justify-content: center; max-width: 540px; margin: 0 auto; }
+
+  .global-search {
+    position: relative;
+    width: 100%;
+    max-width: 420px;
+  }
+  .global-search input {
+    width: 100%;
+    background: rgba(255,255,255,0.04);
+    border: 1px solid var(--border-soft);
+    color: var(--text);
+    padding: 8px 14px 8px 36px;
+    border-radius: 9px;
+    font-family: inherit; font-size: 13px;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .global-search input::placeholder { color: var(--text-dim); }
+  .global-search input:focus {
+    outline: none;
+    border-color: rgba(139,92,246,0.55);
+    background: rgba(255,255,255,0.06);
+  }
+  .global-search::before {
+    content: '⌕';
+    position: absolute;
+    left: 12px; top: 50%; transform: translateY(-50%);
+    color: var(--text-dim);
+    font-size: 14px;
+    pointer-events: none;
+  }
+  .global-search .kbd {
+    position: absolute;
+    right: 8px; top: 50%; transform: translateY(-50%);
+    background: rgba(255,255,255,0.06);
+    color: var(--text-dim);
+    border: 1px solid var(--border-soft);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-family: ui-monospace, monospace;
+    pointer-events: none;
+  }
+
+  .icon-btn {
+    width: 36px; height: 36px;
+    display: inline-flex; align-items: center; justify-content: center;
+    background: transparent;
+    color: var(--text-muted);
+    border: 1px solid var(--border-soft);
+    border-radius: 9px;
+    cursor: pointer;
+    font-size: 16px;
+    transition: all 0.15s;
+  }
+  .icon-btn:hover { background: var(--surface-elev); color: var(--text); border-color: var(--border); }
+
   #logout {
     background: transparent;
     color: var(--text-muted);
-    border: 1px solid var(--border);
+    border: 1px solid var(--border-soft);
     padding: 7px 14px;
-    border-radius: 8px;
+    border-radius: 9px;
     font-family: inherit; font-size: 13px; font-weight: 600;
     cursor: pointer;
+    transition: all 0.15s;
   }
-  #logout:hover { background: var(--surface-elev); color: var(--text); }
+  #logout:hover { background: var(--surface-elev); color: var(--text); border-color: var(--border); }
 
   /* Layout */
-  .shell { display: flex; min-height: calc(100vh - 56px); }
+  .shell { display: flex; min-height: calc(100vh - 60px); position: relative; z-index: 1; }
   aside {
-    width: 240px; flex-shrink: 0;
-    background: var(--surface);
-    border-right: 1px solid var(--border);
-    padding: 16px 10px;
-    display: flex; flex-direction: column; gap: 2px;
-    position: sticky; top: 56px;
-    height: calc(100vh - 56px);
+    width: 248px; flex-shrink: 0;
+    background: var(--surface-glass);
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    border-right: 1px solid var(--border-soft);
+    padding: 18px 10px;
+    display: flex; flex-direction: column; gap: 4px;
+    position: sticky; top: 60px;
+    height: calc(100vh - 60px);
     overflow-y: auto;
+    transition: transform 0.24s cubic-bezier(.4,0,.2,1), width 0.24s;
   }
-  .cat { margin-bottom: 6px; }
+  .shell.sidebar-collapsed aside {
+    transform: translateX(-100%);
+    width: 0; padding-left: 0; padding-right: 0;
+    border-right-width: 0;
+  }
+  .cat { margin-bottom: 8px; }
   .cat-head {
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 8px 12px;
+    display: flex; align-items: center; gap: 8px; justify-content: space-between;
+    padding: 9px 12px;
     cursor: pointer;
     color: var(--text-muted);
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
-    letter-spacing: 0.8px;
+    letter-spacing: 0.9px;
     user-select: none;
+    border-radius: 7px;
+    transition: color 0.12s, background 0.12s;
   }
-  .cat-head:hover { color: var(--text); }
-  .cat-head .caret { font-size: 9px; transition: transform 0.15s; }
+  .cat-head:hover { color: var(--text); background: rgba(255,255,255,0.03); }
+  .cat-head .ic { font-size: 14px; }
+  .cat-head .lbl { flex: 1; }
+  .cat-head .caret { font-size: 9px; transition: transform 0.18s; opacity: 0.7; }
   .cat.collapsed .caret { transform: rotate(-90deg); }
-  .cat.collapsed .cat-items { display: none; }
-  .cat-items { display: flex; flex-direction: column; gap: 1px; }
+  .cat.collapsed .cat-items { max-height: 0; opacity: 0; pointer-events: none; }
+  .cat-items {
+    display: flex; flex-direction: column; gap: 1px;
+    max-height: 1200px; opacity: 1;
+    overflow: hidden;
+    transition: max-height 0.24s ease, opacity 0.18s;
+  }
   .cat-items a {
     display: block;
-    padding: 8px 12px 8px 22px;
+    padding: 8px 12px 8px 26px;
     border-radius: 7px;
     color: var(--text-muted);
     font-size: 13px;
     font-weight: 500;
     text-decoration: none;
-    transition: background 0.12s, color 0.12s;
+    border-left: 2px solid transparent;
+    transition: background 0.12s, color 0.12s, border-color 0.12s, transform 0.12s;
   }
-  .cat-items a:hover { background: var(--surface-elev); color: var(--text); text-decoration: none; }
+  .cat-items a:hover {
+    background: rgba(255,255,255,0.03);
+    color: var(--text);
+    text-decoration: none;
+    transform: translateX(2px);
+  }
   .cat-items a.active {
-    background: rgba(139,92,246,0.18);
+    background: linear-gradient(90deg, rgba(139,92,246,0.22), rgba(139,92,246,0.06));
     color: #fff;
+    border-left-color: var(--primary-2);
+    font-weight: 600;
   }
 
   main {
     flex: 1;
-    background: var(--bg-deep);
+    background: transparent;
     min-width: 0;
+    position: relative;
+  }
+
+  /* Page-transition (fade) */
+  #panel-mount { animation: fadeInUp 0.28s ease both; }
+  @keyframes fadeInUp {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
   }
 
   /* Shared panel styles */
@@ -143,6 +280,78 @@
   .chips { display: flex; flex-wrap: wrap; gap: 4px; }
   .toast { position: fixed; top: 20px; right: 20px; background: #16161D; border: 1px solid #2A2A33; padding: 12px 18px; border-radius: 10px; color: #fff; z-index: 9999; animation: fadeUp 0.3s; }
   @keyframes fadeUp { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+
+  /* Quick-Search Modal (Cmd+K) */
+  .qs-backdrop {
+    position: fixed; inset: 0;
+    background: rgba(0,0,0,0.55);
+    backdrop-filter: blur(6px);
+    z-index: 9500;
+    display: flex; align-items: flex-start; justify-content: center;
+    padding-top: 12vh;
+    animation: fadeUp 0.18s;
+  }
+  .qs-modal {
+    width: min(620px, calc(100% - 32px));
+    background: var(--surface-elev);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+    overflow: hidden;
+  }
+  .qs-modal input {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: #fff;
+    padding: 18px 20px;
+    font-size: 16px;
+    font-family: inherit;
+    border-bottom: 1px solid var(--border);
+  }
+  .qs-modal input:focus { outline: none; }
+  .qs-list { max-height: 56vh; overflow-y: auto; padding: 6px; }
+  .qs-item {
+    display: flex; align-items: center; gap: 10px;
+    padding: 10px 14px;
+    border-radius: 8px;
+    cursor: pointer;
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+  .qs-item .qs-cat { color: var(--text-dim); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
+  .qs-item .qs-title { color: var(--text); flex: 1; font-weight: 500; }
+  .qs-item.sel, .qs-item:hover { background: rgba(139,92,246,0.15); }
+  .qs-item.sel .qs-title { color: #fff; }
+  .qs-empty { padding: 28px; text-align: center; color: var(--text-dim); font-size: 13px; }
+  .qs-footer {
+    display: flex; gap: 14px;
+    padding: 10px 16px;
+    border-top: 1px solid var(--border);
+    color: var(--text-dim);
+    font-size: 11px;
+  }
+  .qs-footer kbd {
+    background: rgba(255,255,255,0.06);
+    border: 1px solid var(--border);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-family: ui-monospace, monospace;
+    font-size: 10px;
+    color: var(--text-muted);
+  }
+
+  /* Sidebar-toggle (mobile + cmd+/) */
+  #sidebar-toggle { display: none; }
+  @media (max-width: 1024px) {
+    #sidebar-toggle { display: inline-flex; }
+    aside {
+      position: fixed; left: 0; top: 60px;
+      z-index: 60;
+      box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+    }
+    .shell:not(.sidebar-open) aside { transform: translateX(-100%); }
+  }
 
   /* Mobile overlay */
   .mobile-block {
@@ -177,13 +386,23 @@
 
 <header class="topbar">
   <div class="brand">
+    <button id="sidebar-toggle" class="icon-btn" title="Sidebar (Cmd+/)">☰</button>
     <div class="logo">🎧</div>
     <div class="title">hozd <small>CRM</small></div>
   </div>
-  <button id="logout">Abmelden</button>
+  <div class="topbar-mid">
+    <div class="global-search">
+      <input id="global-search-input" type="text" placeholder="Suche Panels, Nutzer…" autocomplete="off" spellcheck="false" />
+      <span class="kbd">⌘K</span>
+    </div>
+  </div>
+  <div class="topbar-right">
+    <button id="settings-btn" class="icon-btn" title="Einstellungen">⚙</button>
+    <button id="logout">Abmelden</button>
+  </div>
 </header>
 
-<div class="shell">
+<div class="shell" id="shell">
   <aside id="sidebar"></aside>
   <main><div id="panel-mount"><div class="loading">Lädt…</div></div></main>
 </div>
@@ -192,9 +411,6 @@
 import { sb } from '/lib/supabase.js'
 
 // ---- Auth-Guard (Admin-Only) ----
-// Vorher: hardcoded /login.html (existiert nicht — Pfad ist /login/),
-// und kein Admin-Check → jeder eingeloggte User sah das CRM.
-// Jetzt: korrekte Pfade + is_app_admin-Check, sonst Redirect /app/.
 const mountEl = document.getElementById('panel-mount')
 try {
   const { data: { session }, error: sessionError } = await sb.auth.getSession()
@@ -203,7 +419,6 @@ try {
     location.replace('/login/?next=/crm/')
     throw new Error('no session — redirecting')
   }
-  // Admin-Check
   const { data: profile, error: profileError } = await sb
     .from('users')
     .select('is_app_admin')
@@ -262,14 +477,14 @@ const PANELS = [
 ]
 
 const CATEGORIES = [
-  { key: 'overview',      label: 'Überblick' },
-  { key: 'users',         label: 'Nutzer' },
-  { key: 'content',       label: 'Content' },
-  { key: 'listening',     label: 'Hören' },
-  { key: 'growth',        label: 'Wachstum' },
-  { key: 'engagement',    label: 'Engagement' },
-  { key: 'marketing',     label: 'Marketing' },
-  { key: 'admin_actions', label: 'Admin-Aktionen' }
+  { key: 'overview',      label: 'Überblick',       icon: '📊' },
+  { key: 'users',         label: 'Nutzer',          icon: '👥' },
+  { key: 'content',       label: 'Content',         icon: '📝' },
+  { key: 'listening',     label: 'Hören',           icon: '🎧' },
+  { key: 'growth',        label: 'Wachstum',        icon: '📈' },
+  { key: 'engagement',    label: 'Engagement',      icon: '❤️' },
+  { key: 'marketing',     label: 'Marketing',       icon: '📣' },
+  { key: 'admin_actions', label: 'Admin-Aktionen',  icon: '⚙️' }
 ]
 
 // ---- Sidebar rendern ----
@@ -278,7 +493,7 @@ const sidebarHtml = CATEGORIES.map(cat => {
   const items = PANELS.filter(p => p.category === cat.key)
   if (!items.length) return ''
   return `<div class="cat" data-cat="${cat.key}">
-    <div class="cat-head"><span>${cat.label}</span><span class="caret">▼</span></div>
+    <div class="cat-head"><span class="ic">${cat.icon}</span><span class="lbl">${cat.label}</span><span class="caret">▼</span></div>
     <div class="cat-items">
       ${items.map(p => `<a href="#${p.id}" data-pid="${p.id}">${p.title}</a>`).join('')}
     </div>
@@ -299,17 +514,231 @@ window.toast = function(msg) {
   setTimeout(() => el.remove(), 3000)
 }
 
+// ---- Sidebar Toggle (mobile + Cmd+/) ----
+const shellEl = document.getElementById('shell')
+const sidebarToggle = document.getElementById('sidebar-toggle')
+sidebarToggle?.addEventListener('click', () => {
+  shellEl.classList.toggle('sidebar-open')
+  shellEl.classList.toggle('sidebar-collapsed')
+})
+
+// ---- Settings stub ----
+document.getElementById('settings-btn')?.addEventListener('click', () => {
+  window.toast?.('Einstellungen — coming soon')
+})
+
+// ---- Quick-Search (Cmd+K) ----
+let qsBackdrop = null
+let qsItems = []
+let qsSel = 0
+let qsUserResults = []
+
+function buildQuickSearchItems(query) {
+  const q = (query || '').trim().toLowerCase()
+  const panels = PANELS.map(p => {
+    const cat = CATEGORIES.find(c => c.key === p.category)
+    return {
+      type: 'panel',
+      id: p.id,
+      title: p.title,
+      cat: cat?.label || '',
+      icon: cat?.icon || '•',
+      match: scoreMatch(p.title.toLowerCase() + ' ' + (cat?.label || '').toLowerCase(), q)
+    }
+  })
+  let items = panels.filter(i => !q || i.match > 0)
+  items.sort((a,b) => b.match - a.match || a.title.localeCompare(b.title))
+  // append user results if loaded
+  if (qsUserResults.length && q) {
+    items = items.concat(qsUserResults.map(u => ({
+      type: 'user',
+      id: u.id,
+      title: u.display_name || u.username || u.email || u.id.slice(0,8),
+      cat: 'Nutzer',
+      icon: '👤',
+      match: 1
+    })))
+  }
+  return items.slice(0, 30)
+}
+
+function scoreMatch(haystack, needle) {
+  if (!needle) return 1
+  if (haystack.includes(needle)) return 10
+  // fuzzy: every char appears in order
+  let idx = 0
+  for (const ch of needle) {
+    idx = haystack.indexOf(ch, idx)
+    if (idx === -1) return 0
+    idx++
+  }
+  return 1
+}
+
+async function searchUsers(query) {
+  if (!query || query.length < 2) { qsUserResults = []; return }
+  try {
+    const { data } = await sb.from('users')
+      .select('id, display_name, username, email')
+      .or(`display_name.ilike.%${query}%,username.ilike.%${query}%,email.ilike.%${query}%`)
+      .limit(5)
+    qsUserResults = data || []
+  } catch { qsUserResults = [] }
+}
+
+function renderQuickSearch(query) {
+  qsItems = buildQuickSearchItems(query)
+  qsSel = 0
+  const list = qsBackdrop?.querySelector('.qs-list')
+  if (!list) return
+  if (!qsItems.length) {
+    list.innerHTML = `<div class="qs-empty">Nichts gefunden für „${escapeHtml(query)}"</div>`
+    return
+  }
+  list.innerHTML = qsItems.map((it, i) => `
+    <div class="qs-item ${i===0?'sel':''}" data-idx="${i}">
+      <span style="font-size:14px">${it.icon}</span>
+      <span class="qs-title">${escapeHtml(it.title)}</span>
+      <span class="qs-cat">${escapeHtml(it.cat)}</span>
+    </div>
+  `).join('')
+  list.querySelectorAll('.qs-item').forEach(el => {
+    el.addEventListener('mouseenter', () => {
+      list.querySelectorAll('.qs-item').forEach(x => x.classList.remove('sel'))
+      el.classList.add('sel')
+      qsSel = +el.dataset.idx
+    })
+    el.addEventListener('click', () => activateQuickSearchItem(qsItems[+el.dataset.idx]))
+  })
+}
+
+function activateQuickSearchItem(it) {
+  if (!it) return
+  if (it.type === 'panel') {
+    location.hash = '#' + it.id
+  } else if (it.type === 'user') {
+    location.hash = '#users-list?u=' + it.id
+  }
+  closeQuickSearch()
+}
+
+function openQuickSearch() {
+  if (qsBackdrop) return
+  qsBackdrop = document.createElement('div')
+  qsBackdrop.className = 'qs-backdrop'
+  qsBackdrop.innerHTML = `
+    <div class="qs-modal">
+      <input type="text" placeholder="Panels, Nutzer suchen…" autofocus />
+      <div class="qs-list"></div>
+      <div class="qs-footer">
+        <span><kbd>↑↓</kbd> Navigieren</span>
+        <span><kbd>↵</kbd> Öffnen</span>
+        <span><kbd>Esc</kbd> Schließen</span>
+      </div>
+    </div>
+  `
+  document.body.appendChild(qsBackdrop)
+  const input = qsBackdrop.querySelector('input')
+  renderQuickSearch('')
+  let timer = null
+  input.addEventListener('input', e => {
+    const v = e.target.value
+    renderQuickSearch(v)
+    clearTimeout(timer)
+    timer = setTimeout(async () => {
+      await searchUsers(v)
+      renderQuickSearch(v)
+    }, 220)
+  })
+  input.addEventListener('keydown', e => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      qsSel = Math.min(qsItems.length - 1, qsSel + 1)
+      updateQsSel()
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      qsSel = Math.max(0, qsSel - 1)
+      updateQsSel()
+    } else if (e.key === 'Enter') {
+      e.preventDefault()
+      activateQuickSearchItem(qsItems[qsSel])
+    }
+  })
+  qsBackdrop.addEventListener('click', e => {
+    if (e.target === qsBackdrop) closeQuickSearch()
+  })
+  setTimeout(() => input.focus(), 10)
+}
+
+function updateQsSel() {
+  const list = qsBackdrop?.querySelector('.qs-list')
+  if (!list) return
+  list.querySelectorAll('.qs-item').forEach((el, i) => {
+    el.classList.toggle('sel', i === qsSel)
+    if (i === qsSel) el.scrollIntoView({ block: 'nearest' })
+  })
+}
+
+function closeQuickSearch() {
+  qsBackdrop?.remove()
+  qsBackdrop = null
+  qsUserResults = []
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))
+}
+
+// Global-search input in top-bar opens Cmd+K modal
+document.getElementById('global-search-input')?.addEventListener('focus', e => {
+  e.target.blur()
+  openQuickSearch()
+})
+
+// ---- Keyboard Shortcuts ----
+window.addEventListener('keydown', e => {
+  const meta = e.metaKey || e.ctrlKey
+  // Cmd+K
+  if (meta && e.key.toLowerCase() === 'k') {
+    e.preventDefault()
+    if (qsBackdrop) closeQuickSearch(); else openQuickSearch()
+    return
+  }
+  // Cmd+/
+  if (meta && e.key === '/') {
+    e.preventDefault()
+    shellEl.classList.toggle('sidebar-collapsed')
+    shellEl.classList.toggle('sidebar-open')
+    return
+  }
+  // ESC
+  if (e.key === 'Escape') {
+    if (qsBackdrop) { closeQuickSearch(); return }
+    // close any open drawer/modal
+    document.querySelectorAll('.drawer.open, .modal.open, [data-dismiss-on-esc].open').forEach(el => {
+      el.classList.remove('open')
+    })
+    document.querySelectorAll('.drawer-backdrop, .modal-backdrop').forEach(el => el.remove())
+  }
+})
+
 // ---- Routing / Lazy-Load ----
 const cache = new Map()
 const mount = document.getElementById('panel-mount')
 
 async function loadPanel() {
-  const hash = location.hash.replace(/^#/, '').trim()
+  const hashRaw = location.hash.replace(/^#/, '').trim()
+  const [hash] = hashRaw.split('?')
   const id = hash || PANELS.find(p => p.category === 'overview').id
 
   // Set active state
   sidebar.querySelectorAll('a[data-pid]').forEach(a => {
     a.classList.toggle('active', a.dataset.pid === id)
+  })
+  // Expand parent category for active item
+  sidebar.querySelectorAll('.cat').forEach(c => {
+    const hasActive = c.querySelector('a.active')
+    if (hasActive) c.classList.remove('collapsed')
   })
 
   const meta = PANELS.find(p => p.id === id)
@@ -317,6 +746,11 @@ async function loadPanel() {
     mount.innerHTML = `<div class="panel-shell"><div class="empty">Panel „${id}" nicht gefunden.</div></div>`
     return
   }
+
+  // Re-trigger fade animation
+  mount.style.animation = 'none'
+  void mount.offsetWidth
+  mount.style.animation = ''
 
   mount.innerHTML = `<div class="panel-shell"><div class="panel-head"><h2>${meta.title}</h2></div><div class="loading">Lädt…</div></div>`
 

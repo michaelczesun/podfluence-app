@@ -1,130 +1,450 @@
 import { sb } from '/lib/supabase.js'
+import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js'
+import { makeBarChart, makeDonutChart, makeAreaChart } from '/lib/charts.js'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+import { showUserDetailModal } from '/lib/panel-actions.js'
+
+const PALETTE = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#ef4444', '#84cc16']
+
+async function fetchPolls() {
+  const tries = ['polls', 'community_polls', 'post_polls']
+  for (const t of tries) {
+    try {
+      const { data, error } = await sb.from(t)
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(200)
+      if (!error && data) return { rows: data, table: t }
+    } catch (_) {}
+  }
+  return { rows: [], table: null }
+}
+
+async function fetchVotes(table, pollIds) {
+  if (!pollIds.length) return { byPoll: {}, table: null }
+  const voteTables = [
+    table ? table.replace(/s$/, '') + '_votes' : null,
+    'poll_votes',
+    'community_poll_votes'
+  ].filter(Boolean)
+  for (const vt of voteTables) {
+    try {
+      const { data, error } = await sb.from(vt)
+        .select('*')
+        .in('poll_id', pollIds)
+      if (!error && data) {
+        const grouped = {}
+        for (const v of data) {
+          if (!grouped[v.poll_id]) grouped[v.poll_id] = []
+          grouped[v.poll_id].push(v)
+        }
+        return { byPoll: grouped, table: vt }
+      }
+    } catch (_) {}
+  }
+  return { byPoll: {}, table: null }
+}
+
+function normalizePoll(p) {
+  let options = p.options || p.choices || p.answers || []
+  if (typeof options === 'string') {
+    try { options = JSON.parse(options) } catch { options = [] }
+  }
+  if (!Array.isArray(options)) options = []
+  const normalized = options.map((o, i) => {
+    if (typeof o === 'string') return { id: i, label: o, votes: 0 }
+    return {
+      id: o.id ?? i,
+      label: o.label ?? o.text ?? o.title ?? `Option ${i + 1}`,
+      votes: Number(o.votes ?? o.count ?? 0)
+    }
+  })
+  const closesAt = p.closes_at || p.ends_at || p.expires_at || null
+  const isActive = (p.is_active ?? p.active ?? true) && (!closesAt || new Date(closesAt) > new Date())
+  return {
+    id: p.id,
+    question: p.question || p.title || p.text || 'Umfrage',
+    creator_id: p.user_id || p.creator_id || p.author_id,
+    created_at: p.created_at,
+    closes_at: closesAt,
+    is_active: isActive,
+    options: normalized,
+    raw: p
+  }
+}
+
+function mergeVotes(poll, votes) {
+  const counts = {}
+  for (const v of votes) {
+    const k = v.option_id ?? v.choice_id ?? v.option_index ?? v.value
+    counts[k] = (counts[k] || 0) + 1
+  }
+  let total = 0
+  const opts = poll.options.map((o, i) => {
+    const c = counts[o.id] ?? counts[i] ?? o.votes ?? 0
+    total += c
+    return { ...o, votes: c }
+  })
+  return { ...poll, options: opts, totalVotes: total, voters: votes }
+}
+
+function pollCard(poll) {
+  const total = poll.totalVotes || 0
+  const top = [...poll.options].sort((a, b) => b.votes - a.votes)[0]
+  const topPct = total ? Math.round((top?.votes || 0) / total * 100) : 0
+  const closesIn = poll.closes_at ? fmtRelativeTime(poll.closes_at) : 'Kein Enddatum'
+  return `
+    <div class="glass-card poll-card" data-poll-id="${htmlEscape(String(poll.id))}">
+      <div class="poll-card-head">
+        <div class="poll-status-dot ${poll.is_active ? 'active' : 'closed'}"></div>
+        <div class="poll-meta">
+          <div class="poll-q">${htmlEscape(poll.question)}</div>
+          <div class="poll-sub">
+            <span>${fmtNumber(total)} Stimmen</span>
+            <span class="dot-sep">·</span>
+            <span>Endet ${htmlEscape(closesIn)}</span>
+          </div>
+        </div>
+      </div>
+      <div class="poll-chart"></div>
+      <div class="poll-leader">
+        <span class="leader-label">Führend</span>
+        <span class="leader-opt">${htmlEscape(top?.label || '—')}</span>
+        <span class="leader-pct">${topPct}%</span>
+      </div>
+      <div class="poll-actions">
+        <button class="btn btn-ghost" data-action="details">${iconHtml('eye')} Details</button>
+        <button class="btn btn-danger" data-action="close" ${!poll.is_active ? 'disabled' : ''}>${iconHtml('lock')} Schließen</button>
+      </div>
+    </div>
+  `
+}
+
+function renderBars(el, poll) {
+  if (!el) return
+  try {
+    makeBarChart(el, {
+      categories: poll.options.map(o => o.label.length > 18 ? o.label.slice(0, 16) + '…' : o.label),
+      series: [{ name: 'Stimmen', data: poll.options.map(o => o.votes) }],
+      colors: PALETTE,
+      height: 140,
+      horizontal: true,
+      compact: true,
+      distributed: true,
+      showLegend: false
+    })
+  } catch (e) {
+    const max = Math.max(1, ...poll.options.map(o => o.votes))
+    el.innerHTML = poll.options.map((o, i) => `
+      <div class="mini-bar-row">
+        <span class="mini-bar-label">${htmlEscape(o.label)}</span>
+        <div class="mini-bar-track"><div class="mini-bar-fill" style="width:${(o.votes / max * 100).toFixed(1)}%;background:${PALETTE[i % PALETTE.length]}"></div></div>
+        <span class="mini-bar-val">${fmtNumber(o.votes)}</span>
+      </div>
+    `).join('')
+  }
+}
+
+async function closePoll(table, pollId) {
+  const ok = await confirmDialog({
+    title: 'Umfrage schließen?',
+    message: 'Die Umfrage wird sofort beendet. Nutzer können nicht mehr abstimmen.',
+    confirmText: 'Schließen',
+    danger: true
+  })
+  if (!ok) return false
+  try {
+    const { error } = await sb.from(table)
+      .update({ is_active: false, closes_at: new Date().toISOString() })
+      .eq('id', pollId)
+    if (error) throw error
+    toast({ type: 'success', message: 'Umfrage geschlossen' })
+    return true
+  } catch (e) {
+    toast({ type: 'error', message: 'Fehler: ' + (e.message || e) })
+    return false
+  }
+}
+
+function openVoterDrawer(poll) {
+  const voters = poll.voters || []
+  const byOption = {}
+  for (const v of voters) {
+    const k = v.option_id ?? v.choice_id ?? v.option_index ?? v.value ?? '?'
+    if (!byOption[k]) byOption[k] = []
+    byOption[k].push(v)
+  }
+  const chartHostId = `drawer-chart-${poll.id}`
+  const totalsHtml = `
+    <div class="drawer-stat-grid">
+      <div class="drawer-stat"><div class="ds-val" data-cu="${poll.totalVotes}">0</div><div class="ds-lbl">Stimmen</div></div>
+      <div class="drawer-stat"><div class="ds-val">${poll.options.length}</div><div class="ds-lbl">Optionen</div></div>
+      <div class="drawer-stat"><div class="ds-val">${poll.is_active ? 'Aktiv' : 'Beendet'}</div><div class="ds-lbl">Status</div></div>
+    </div>
+  `
+  const votersListHtml = poll.options.map((o, i) => {
+    const list = byOption[String(o.id)] || byOption[String(i)] || []
+    return `
+      <div class="voter-group">
+        <div class="voter-group-head">
+          <span class="vg-dot" style="background:${PALETTE[i % PALETTE.length]}"></span>
+          <span class="vg-label">${htmlEscape(o.label)}</span>
+          <span class="vg-count">${fmtNumber(list.length)}</span>
+        </div>
+        <div class="voter-list">
+          ${list.length === 0 ? '<div class="voter-empty">Noch keine Stimmen</div>' : list.slice(0, 50).map(v => `
+            <div class="voter-row" data-user-id="${htmlEscape(String(v.user_id || ''))}">
+              <div class="voter-avatar">${(v.user_id || '?').toString().slice(0, 2).toUpperCase()}</div>
+              <div class="voter-meta">
+                <div class="voter-id">${htmlEscape(String(v.user_id || 'Anonym'))}</div>
+                <div class="voter-time">${v.created_at ? fmtRelativeTime(v.created_at) : ''}</div>
+              </div>
+              ${v.user_id ? '<button class="btn btn-ghost btn-sm" data-action="open-user">Profil</button>' : ''}
+            </div>
+          `).join('')}
+          ${list.length > 50 ? `<div class="voter-more">+ ${list.length - 50} weitere</div>` : ''}
+        </div>
+      </div>
+    `
+  }).join('')
+
+  const d = drawer({
+    title: 'Umfrage-Details',
+    width: 560,
+    html: `
+      <div class="drawer-body poll-drawer">
+        <div class="drawer-question">${htmlEscape(poll.question)}</div>
+        <div class="drawer-meta-line">
+          <span>Erstellt ${poll.created_at ? fmtRelativeTime(poll.created_at) : '—'}</span>
+          ${poll.closes_at ? `<span class="dot-sep">·</span><span>Endet ${fmtDateTime(poll.closes_at)}</span>` : ''}
+        </div>
+        ${totalsHtml}
+        <div class="drawer-section-title">Verteilung</div>
+        <div id="${chartHostId}" style="height:220px"></div>
+        <div class="drawer-section-title">Wähler (${fmtNumber(poll.voters?.length || 0)})</div>
+        ${votersListHtml || '<div class="empty-inline">Keine Wähler-Daten verfügbar</div>'}
+      </div>
+    `
+  })
+
+  try {
+    const cu = d?.querySelector?.('[data-cu]')
+    if (cu) countUp(cu, Number(cu.dataset.cu || 0))
+  } catch (_) {}
+
+  setTimeout(() => {
+    const host = document.getElementById(chartHostId)
+    if (!host) return
+    try {
+      makeDonutChart(host, {
+        labels: poll.options.map(o => o.label),
+        values: poll.options.map(o => o.votes),
+        colors: PALETTE,
+        height: 220
+      })
+    } catch (_) {}
+  }, 30)
+
+  try {
+    d?.querySelectorAll?.('[data-action="open-user"]').forEach(btn => {
+      btn.addEventListener('click', (ev) => {
+        const row = ev.currentTarget.closest('[data-user-id]')
+        const uid = row?.dataset.userId
+        if (uid) showUserDetailModal(uid)
+      })
+    })
+  } catch (_) {}
+}
+
+function emptyState(container) {
+  container.innerHTML = `
+    <div class="empty-state">
+      <div class="empty-icon">${iconHtml('poll', 48) || '📊'}</div>
+      <h3>Keine aktiven Umfragen</h3>
+      <p>Sobald Nutzer Umfragen starten, erscheinen sie hier mit Live-Verteilung und Voter-Insights.</p>
+    </div>
+  `
+}
+
+function errorState(container, msg, onRetry) {
+  container.innerHTML = `
+    <div class="error-state">
+      <div class="error-icon">${iconHtml('alert', 40) || '⚠️'}</div>
+      <h3>Daten konnten nicht geladen werden</h3>
+      <p>${htmlEscape(msg || 'Unbekannter Fehler')}</p>
+      <button class="btn btn-primary" id="retry-btn">${iconHtml('refresh')} Erneut versuchen</button>
+    </div>
+  `
+  container.querySelector('#retry-btn')?.addEventListener('click', onRetry)
+}
 
 export default {
   id: 'active-polls',
   title: 'Aktive Umfragen',
   category: 'content',
-  summary: 'Laufende Polls mit Optionen und Votes.',
+
   async mount(container) {
-    container.innerHTML = `<div class="panel-shell">
-      <div class="panel-head"><h2>Aktive Umfragen</h2><button class="refresh-btn">Aktualisieren</button></div>
-      <div class="panel-body"><div class="loading">Lädt…</div></div>
-    </div>`
-    const body = container.querySelector('.panel-body')
+    container.innerHTML = `
+      <div class="panel-shell active-polls-panel">
+        <div class="panel-head">
+          <div class="panel-head-left">
+            <h2>Aktive Umfragen</h2>
+            <span class="panel-sub">Live-Verteilung & Voter-Insights</span>
+          </div>
+          <div class="toolbar">
+            <button class="btn btn-ghost" id="btn-refresh" title="Aktualisieren">${iconHtml('refresh')} Aktualisieren</button>
+            <button class="btn btn-ghost" id="btn-pdf" title="PDF Export">${iconHtml('file-text')} PDF</button>
+            <button class="btn btn-ghost" id="btn-csv" title="CSV Export">${iconHtml('download')} CSV</button>
+          </div>
+        </div>
+        <div class="hero-row" id="hero-row"></div>
+        <div class="panel-body" id="body"></div>
+      </div>
+    `
 
-    const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({
-      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
-    }[c]))
+    const body = container.querySelector('#body')
+    const heroRow = container.querySelector('#hero-row')
+    const state = { polls: [], pollsTable: null, votesTable: null }
 
-    const fmtDate = (iso) => {
-      if (!iso) return '—'
-      try {
-        const d = new Date(iso)
-        return d.toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-      } catch { return String(iso) }
+    const renderSkeleton = () => {
+      heroRow.innerHTML = `<div class="hero-skel"></div><div class="hero-skel"></div><div class="hero-skel"></div>`
+      body.innerHTML = `<div class="poll-grid">${Array.from({ length: 6 }).map(() => `
+        <div class="glass-card skel-card">
+          <div class="skel skel-line w-70"></div>
+          <div class="skel skel-line w-40"></div>
+          <div class="skel skel-block h-120"></div>
+          <div class="skel skel-line w-50"></div>
+        </div>
+      `).join('')}</div>`
+      try { skeletonLoader(body) } catch (_) {}
     }
 
-    const refresh = async () => {
-      body.innerHTML = '<div class="loading">Lädt…</div>'
+    const render = () => {
+      const polls = state.polls
+      const totalVotes = polls.reduce((s, p) => s + (p.totalVotes || 0), 0)
+      const avgVotes = polls.length ? Math.round(totalVotes / polls.length) : 0
+      const closingSoon = polls.filter(p => p.closes_at && (new Date(p.closes_at) - Date.now() < 24 * 3600 * 1000)).length
+
+      heroRow.innerHTML = ''
       try {
-        const nowIso = new Date().toISOString()
-        const { data: polls, error: pollsErr } = await sb
-          .from('polls')
-          .select('id, question, closes_at, created_at')
-          .gt('closes_at', nowIso)
-          .order('closes_at', { ascending: true })
-          .limit(200)
-        if (pollsErr) throw pollsErr
+        heroRow.appendChild(statHero({ label: 'Aktive Umfragen', value: polls.length, icon: 'poll', accent: 'indigo', countUpTo: polls.length }))
+        heroRow.appendChild(statHero({ label: 'Stimmen gesamt', value: totalVotes, icon: 'vote', accent: 'violet', countUpTo: totalVotes }))
+        heroRow.appendChild(statHero({ label: 'Schließen < 24h', value: closingSoon, icon: 'clock', accent: 'amber', countUpTo: closingSoon }))
+      } catch (_) {
+        heroRow.innerHTML = `
+          <div class="stat-hero"><div class="sh-label">Aktive Umfragen</div><div class="sh-value" data-cu="${polls.length}">0</div></div>
+          <div class="stat-hero"><div class="sh-label">Stimmen gesamt</div><div class="sh-value" data-cu="${totalVotes}">0</div></div>
+          <div class="stat-hero"><div class="sh-label">Schließen < 24h</div><div class="sh-value" data-cu="${closingSoon}">0</div></div>
+        `
+        heroRow.querySelectorAll('[data-cu]').forEach(el => { try { countUp(el, Number(el.dataset.cu)) } catch (_) {} })
+      }
 
-        if (!polls || polls.length === 0) {
-          body.innerHTML = '<div class="empty">Keine aktiven Umfragen.</div>'
-          return
+      if (!polls.length) {
+        emptyState(body)
+        try { fadeIn(container) } catch (_) {}
+        return
+      }
+
+      const top = [...polls].sort((a, b) => (b.totalVotes || 0) - (a.totalVotes || 0)).slice(0, 8)
+      body.innerHTML = `
+        <div class="glass-card overview-card">
+          <div class="overview-head">
+            <div>
+              <div class="overview-title">Top Umfragen nach Beteiligung</div>
+              <div class="overview-sub">${polls.length} aktiv · Ø ${fmtNumber(avgVotes)} Stimmen / Umfrage</div>
+            </div>
+          </div>
+          <div id="overview-chart" style="height:260px"></div>
+        </div>
+        <div class="section-title-row">
+          <h3>Alle aktiven Umfragen</h3>
+          <span class="muted">${polls.length}</span>
+        </div>
+        <div class="poll-grid" id="poll-grid">
+          ${polls.map(pollCard).join('')}
+        </div>
+      `
+
+      setTimeout(() => {
+        const host = document.getElementById('overview-chart')
+        if (host) {
+          try {
+            makeBarChart(host, {
+              categories: top.map(p => (p.question.length > 24 ? p.question.slice(0, 22) + '…' : p.question)),
+              series: [{ name: 'Stimmen', data: top.map(p => p.totalVotes || 0) }],
+              colors: PALETTE,
+              height: 260,
+              horizontal: true,
+              distributed: true,
+              showLegend: false
+            })
+          } catch (_) {}
         }
+        polls.forEach(p => {
+          const card = body.querySelector(`.poll-card[data-poll-id="${CSS.escape(String(p.id))}"]`)
+          if (!card) return
+          const chartEl = card.querySelector('.poll-chart')
+          renderBars(chartEl, p)
+        })
+      }, 20)
 
-        const pollIds = polls.map(p => p.id)
-        const { data: options, error: optsErr } = await sb
-          .from('poll_options')
-          .select('id, poll_id, label, ord, votes_count')
-          .in('poll_id', pollIds)
-          .order('ord', { ascending: true })
-        if (optsErr) throw optsErr
+      body.querySelectorAll('.poll-card').forEach(card => {
+        const id = card.dataset.pollId
+        const poll = polls.find(p => String(p.id) === id)
+        if (!poll) return
+        card.querySelector('[data-action="details"]')?.addEventListener('click', () => openVoterDrawer(poll))
+        card.querySelector('[data-action="close"]')?.addEventListener('click', async () => {
+          if (!state.pollsTable) return toast({ type: 'error', message: 'Tabelle unbekannt' })
+          const ok = await closePoll(state.pollsTable, poll.id)
+          if (ok) load()
+        })
+      })
 
-        const optsByPoll = new Map()
-        for (const o of (options || [])) {
-          if (!optsByPoll.has(o.poll_id)) optsByPoll.set(o.poll_id, [])
-          optsByPoll.get(o.poll_id).push(o)
-        }
+      try { fadeIn(container) } catch (_) {}
+    }
 
-        let rows = ''
-        let totalVotesAll = 0
-        let totalOptionsAll = 0
-        for (const p of polls) {
-          const opts = optsByPoll.get(p.id) || []
-          const total = opts.reduce((s, o) => s + (Number(o.votes_count) || 0), 0)
-          totalVotesAll += total
-          totalOptionsAll += opts.length
-          const optChips = opts.length
-            ? `<div class="chips" style="display:flex;flex-wrap:wrap;gap:6px;">${opts.map(o => {
-                const v = Number(o.votes_count) || 0
-                const pct = total > 0 ? Math.round((v / total) * 100) : 0
-                return `<span style="background:#1F1F28;border:1px solid #2A2A33;border-radius:999px;padding:4px 10px;font-size:12px;color:#fff;">
-                  ${escapeHtml(o.label)} · <span style="color:#8B5CF6;font-weight:600;">${v}</span> <span style="color:#6b7280;">(${pct}%)</span>
-                </span>`
-              }).join('')}</div>`
-            : '<span style="color:#6b7280;font-size:12px;">keine Optionen</span>'
-
-          rows += `<tr>
-            <td style="vertical-align:top;padding:10px;border-bottom:1px solid #2A2A33;color:#fff;max-width:340px;">${escapeHtml(p.question)}</td>
-            <td style="vertical-align:top;padding:10px;border-bottom:1px solid #2A2A33;color:#cbd5e1;white-space:nowrap;">${fmtDate(p.closes_at)}</td>
-            <td style="vertical-align:top;padding:10px;border-bottom:1px solid #2A2A33;">${optChips}</td>
-            <td style="vertical-align:top;padding:10px;border-bottom:1px solid #2A2A33;color:#fff;font-weight:600;text-align:right;">${total}</td>
-          </tr>`
-        }
-
-        const kpis = `
-          <div class="kpi-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:12px;margin-bottom:16px;">
-            <div class="kpi-tile" style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:14px;">
-              <div style="color:#6b7280;font-size:12px;">Aktive Polls</div>
-              <div style="color:#fff;font-size:22px;font-weight:700;">${polls.length}</div>
-              <div style="color:#8B5CF6;font-size:11px;">laufend</div>
-            </div>
-            <div class="kpi-tile" style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:14px;">
-              <div style="color:#6b7280;font-size:12px;">Optionen gesamt</div>
-              <div style="color:#fff;font-size:22px;font-weight:700;">${totalOptionsAll}</div>
-              <div style="color:#8B5CF6;font-size:11px;">über alle Polls</div>
-            </div>
-            <div class="kpi-tile" style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:14px;">
-              <div style="color:#6b7280;font-size:12px;">Votes gesamt</div>
-              <div style="color:#fff;font-size:22px;font-weight:700;">${totalVotesAll}</div>
-              <div style="color:#8B5CF6;font-size:11px;">aktive Polls</div>
-            </div>
-            <div class="kpi-tile" style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:14px;">
-              <div style="color:#6b7280;font-size:12px;">Ø Votes / Poll</div>
-              <div style="color:#fff;font-size:22px;font-weight:700;">${polls.length ? Math.round(totalVotesAll / polls.length) : 0}</div>
-              <div style="color:#8B5CF6;font-size:11px;">Durchschnitt</div>
-            </div>
-          </div>`
-
-        body.innerHTML = `
-          ${kpis}
-          <div style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;overflow:hidden;">
-            <table class="data-table" style="width:100%;border-collapse:collapse;font-size:13px;">
-              <thead>
-                <tr style="background:#1F1F28;">
-                  <th style="text-align:left;padding:10px;color:#8B5CF6;border-bottom:1px solid #2A2A33;">Frage</th>
-                  <th style="text-align:left;padding:10px;color:#8B5CF6;border-bottom:1px solid #2A2A33;">Schließt</th>
-                  <th style="text-align:left;padding:10px;color:#8B5CF6;border-bottom:1px solid #2A2A33;">Optionen</th>
-                  <th style="text-align:right;padding:10px;color:#8B5CF6;border-bottom:1px solid #2A2A33;">Votes</th>
-                </tr>
-              </thead>
-              <tbody>${rows}</tbody>
-            </table>
-          </div>`
+    const load = async () => {
+      renderSkeleton()
+      try {
+        const { rows, table } = await fetchPolls()
+        state.pollsTable = table
+        const normalized = rows.map(normalizePoll)
+        const active = normalized.filter(p => p.is_active)
+        const ids = active.map(p => p.id)
+        const { byPoll, table: vt } = await fetchVotes(table, ids)
+        state.votesTable = vt
+        state.polls = active.map(p => mergeVotes(p, byPoll[p.id] || []))
+        render()
       } catch (e) {
-        body.innerHTML = '<div class="empty">Daten kommen bald: ' + escapeHtml(e?.message || 'unbekannt') + '</div>'
+        errorState(body, e.message || String(e), load)
       }
     }
-    container.querySelector('.refresh-btn').addEventListener('click', refresh)
-    await refresh()
+
+    container.querySelector('#btn-refresh')?.addEventListener('click', () => {
+      toast({ type: 'info', message: 'Aktualisiere …' })
+      load()
+    })
+    container.querySelector('#btn-pdf')?.addEventListener('click', () => {
+      try { exportPanelAsPdf(container, { title: 'Aktive Umfragen', filename: 'aktive-umfragen.pdf' }) }
+      catch (e) { toast({ type: 'error', message: 'PDF-Export fehlgeschlagen' }) }
+    })
+    container.querySelector('#btn-csv')?.addEventListener('click', () => {
+      const rows = state.polls.flatMap(p => p.options.map(o => ({
+        poll_id: p.id,
+        frage: p.question,
+        option: o.label,
+        stimmen: o.votes,
+        gesamt_stimmen: p.totalVotes,
+        endet: p.closes_at || '',
+        erstellt: p.created_at || ''
+      })))
+      if (!rows.length) return toast({ type: 'info', message: 'Keine Daten zum Export' })
+      try { exportCsv(rows, 'aktive-umfragen.csv') }
+      catch (e) { toast({ type: 'error', message: 'CSV-Export fehlgeschlagen' }) }
+    })
+
+    await load()
   }
 }

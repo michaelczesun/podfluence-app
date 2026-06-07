@@ -1,93 +1,169 @@
 import { sb } from '/lib/supabase.js'
+import { toast, modal, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
+import { makeBarChart } from '/lib/charts.js'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+
+const DAYS = 30
+
+function fmtDay(d) {
+  const dt = new Date(d)
+  return dt.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit' })
+}
+function isoDay(d) {
+  return new Date(d).toISOString().slice(0, 10)
+}
+
+async function fetchSeries() {
+  const since = new Date()
+  since.setDate(since.getDate() - (DAYS - 1))
+  since.setHours(0, 0, 0, 0)
+
+  const { data, error } = await sb
+    .from('podcast_episodes')
+    .select('id, title, published_at, audio_url, podcast_id, podcasts(title, cover_url)')
+    .gte('published_at', since.toISOString())
+    .order('published_at', { ascending: false })
+    .limit(2000)
+
+  if (error) throw error
+
+  const buckets = new Map()
+  for (let i = 0; i < DAYS; i++) {
+    const d = new Date(since)
+    d.setDate(d.getDate() + i)
+    buckets.set(isoDay(d), { day: isoDay(d), count: 0, episodes: [] })
+  }
+  for (const ep of (data || [])) {
+    const k = isoDay(ep.published_at)
+    if (buckets.has(k)) {
+      buckets.get(k).count++
+      buckets.get(k).episodes.push(ep)
+    }
+  }
+  return Array.from(buckets.values())
+}
+
+function dayDrawer(bucket) {
+  const eps = bucket.episodes
+  const body = eps.length === 0
+    ? `<div class="empty-state"><div class="empty-icon">${iconHtml('mic-off')}</div><h3>Keine Episoden</h3><p>An diesem Tag wurde keine Episode veröffentlicht.</p></div>`
+    : `<div class="episode-list">${eps.map(ep => `
+        <div class="episode-row glass-card" data-id="${htmlEscape(ep.id)}">
+          <div class="ep-cover">${ep.podcasts?.cover_url ? `<img src="${htmlEscape(ep.podcasts.cover_url)}" alt="">` : iconHtml('mic')}</div>
+          <div class="ep-meta">
+            <div class="ep-title">${htmlEscape(ep.title || 'Ohne Titel')}</div>
+            <div class="ep-sub">${htmlEscape(ep.podcasts?.title || 'Unbekannter Podcast')} · ${fmtDateTime(ep.published_at)}</div>
+            ${ep.audio_url ? `<audio class="ep-audio" controls preload="none" src="${htmlEscape(ep.audio_url)}"></audio>` : `<div class="ep-noaudio">${iconHtml('alert-circle')} Kein Audio verfügbar</div>`}
+          </div>
+        </div>`).join('')}</div>`
+
+  drawer({
+    title: `Episoden am ${fmtDay(bucket.day)}`,
+    subtitle: `${eps.length} ${eps.length === 1 ? 'Episode' : 'Episoden'}`,
+    html: body,
+    width: 560
+  })
+}
 
 export default {
   id: 'episodes-per-day',
   title: 'Neue Episoden pro Tag',
   category: 'content',
-  summary: "Tägliche Anzahl neuer Podcast-Episoden.",
-  async mount(container) {
-    container.innerHTML = `<div class="panel-shell">
-      <div class="panel-head"><h2>Neue Episoden pro Tag</h2><button class="refresh-btn">Aktualisieren</button></div>
-      <div class="panel-body"><div class="loading">Lädt…</div></div>
-    </div>`
-    const body = container.querySelector('.panel-body')
 
-    const renderBars = (rows) => {
-      if (!rows || rows.length === 0) {
-        body.innerHTML = '<div class="empty">Noch keine Episoden-Daten.</div>'
+  async mount(container) {
+    container.innerHTML = `
+      <div class="panel-shell">
+        <div class="panel-head">
+          <div>
+            <h2>Neue Episoden pro Tag</h2>
+            <div class="panel-sub">Letzte ${DAYS} Tage · Klick auf einen Balken zeigt die Episoden des Tages</div>
+          </div>
+          <div class="toolbar">
+            <button class="btn btn-ghost" data-act="refresh">${iconHtml('refresh-cw')} Aktualisieren</button>
+            <button class="btn btn-ghost" data-act="pdf">${iconHtml('file-text')} PDF</button>
+            <button class="btn btn-ghost" data-act="csv">${iconHtml('download')} CSV</button>
+          </div>
+        </div>
+        <div class="panel-body" id="body">${skeletonLoader({ rows: 4, height: 80 })}</div>
+      </div>`
+
+    const body = container.querySelector('#body')
+    fadeIn(container)
+
+    const render = async () => {
+      body.innerHTML = skeletonLoader({ rows: 4, height: 80 })
+      let series
+      try {
+        series = await fetchSeries()
+      } catch (e) {
+        body.innerHTML = `
+          <div class="error-state glass-card">
+            <div class="error-icon">${iconHtml('alert-triangle')}</div>
+            <h3>Daten konnten nicht geladen werden</h3>
+            <p>${htmlEscape(e.message || 'Unbekannter Fehler')}</p>
+            <button class="btn btn-primary" data-act="retry">${iconHtml('refresh-cw')} Erneut versuchen</button>
+          </div>`
+        body.querySelector('[data-act="retry"]').addEventListener('click', render)
         return
       }
-      const W = 720, H = 260, PAD_L = 40, PAD_B = 36, PAD_T = 16, PAD_R = 16
-      const innerW = W - PAD_L - PAD_R
-      const innerH = H - PAD_T - PAD_B
-      const max = Math.max(1, ...rows.map(r => Number(r.count) || 0))
-      const n = rows.length
-      const gap = 4
-      const barW = Math.max(2, (innerW - gap * (n - 1)) / n)
-      const fmtDay = (d) => {
-        try {
-          const dt = new Date(d)
-          return String(dt.getDate()).padStart(2, '0') + '.' + String(dt.getMonth() + 1).padStart(2, '0')
-        } catch { return String(d) }
-      }
-      const total = rows.reduce((a, r) => a + (Number(r.count) || 0), 0)
-      const avg = total / rows.length
-      const peak = rows.reduce((acc, r) => (Number(r.count) > Number(acc.count) ? r : acc), rows[0])
 
-      const bars = rows.map((r, i) => {
-        const v = Number(r.count) || 0
-        const h = (v / max) * innerH
-        const x = PAD_L + i * (barW + gap)
-        const y = PAD_T + (innerH - h)
-        return `<rect x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${barW.toFixed(2)}" height="${h.toFixed(2)}" rx="3" fill="#8B5CF6"><title>${fmtDay(r.day)}: ${v}</title></rect>`
-      }).join('')
-
-      const ticks = 4
-      const gridLines = Array.from({ length: ticks + 1 }, (_, i) => {
-        const y = PAD_T + (innerH / ticks) * i
-        const val = Math.round(max - (max / ticks) * i)
-        return `<line x1="${PAD_L}" y1="${y}" x2="${W - PAD_R}" y2="${y}" stroke="#2A2A33" stroke-width="1"/>
-                <text x="${PAD_L - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="#9CA3AF">${val}</text>`
-      }).join('')
-
-      const labelStep = Math.max(1, Math.ceil(n / 10))
-      const xLabels = rows.map((r, i) => {
-        if (i % labelStep !== 0 && i !== n - 1) return ''
-        const x = PAD_L + i * (barW + gap) + barW / 2
-        return `<text x="${x.toFixed(2)}" y="${H - PAD_B + 16}" text-anchor="middle" font-size="10" fill="#9CA3AF">${fmtDay(r.day)}</text>`
-      }).join('')
+      const total = series.reduce((s, b) => s + b.count, 0)
+      const avg = total / DAYS
+      const peak = series.reduce((m, b) => b.count > m.count ? b : m, { count: 0, day: null })
+      const today = series[series.length - 1]
+      const yesterday = series[series.length - 2] || { count: 0 }
+      const delta = today.count - yesterday.count
 
       body.innerHTML = `
-        <div class="kpi-grid">
-          <div class="kpi-tile"><div class="kpi-label">Gesamt (Zeitraum)</div><div class="kpi-value">${total}</div><div class="kpi-hint">${rows.length} Tage</div></div>
-          <div class="kpi-tile"><div class="kpi-label">Ø pro Tag</div><div class="kpi-value">${avg.toFixed(1)}</div><div class="kpi-hint">Durchschnitt</div></div>
-          <div class="kpi-tile"><div class="kpi-label">Spitzentag</div><div class="kpi-value">${Number(peak.count) || 0}</div><div class="kpi-hint">${fmtDay(peak.day)}</div></div>
+        <div class="hero-row">
+          <div class="glass-card hero-stat"><div class="hero-label">Gesamt (${DAYS} Tage)</div><div class="hero-value" data-v="${total}">0</div></div>
+          <div class="glass-card hero-stat"><div class="hero-label">⌀ pro Tag</div><div class="hero-value" data-v="${avg.toFixed(1)}">0</div></div>
+          <div class="glass-card hero-stat"><div class="hero-label">Spitzentag</div><div class="hero-value" data-v="${peak.count}">0</div><div class="hero-sub">${peak.day ? fmtDay(peak.day) : '–'}</div></div>
+          <div class="glass-card hero-stat"><div class="hero-label">Heute</div><div class="hero-value" data-v="${today.count}">0</div><div class="hero-sub ${delta >= 0 ? 'pos' : 'neg'}">${delta >= 0 ? '+' : ''}${delta} vs. gestern</div></div>
         </div>
-        <div style="margin-top:16px;background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:12px;">
-          <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet">
-            ${gridLines}
-            ${bars}
-            ${xLabels}
-          </svg>
-        </div>`
+        <div class="glass-card chart-wrap">
+          <div class="chart-head">
+            <h3>Veröffentlichungen pro Tag</h3>
+            <div class="chart-hint">Klick auf einen Balken → Episoden des Tages</div>
+          </div>
+          <div id="bar-chart" style="height:320px"></div>
+        </div>
+        ${total === 0 ? `
+          <div class="empty-state glass-card">
+            <div class="empty-icon">${iconHtml('inbox')}</div>
+            <h3>Keine Episoden in den letzten ${DAYS} Tagen</h3>
+            <p>Sobald Podcasts neue Episoden veröffentlichen, erscheinen sie hier.</p>
+          </div>` : ''}`
+
+      body.querySelectorAll('.hero-value').forEach(el => {
+        const v = parseFloat(el.dataset.v)
+        countUp(el, v, { duration: 900, decimals: el.dataset.v.includes('.') ? 1 : 0 })
+      })
+
+      const chartEl = body.querySelector('#bar-chart')
+      makeBarChart(chartEl, {
+        labels: series.map(b => fmtDay(b.day)),
+        values: series.map(b => b.count),
+        color: '#7c5cff',
+        onBarClick: (i) => dayDrawer(series[i])
+      })
     }
 
-    const refresh = async () => {
-      body.innerHTML = '<div class="loading">Lädt…</div>'
+    container.querySelector('[data-act="refresh"]').addEventListener('click', () => {
+      render().then(() => toast('Aktualisiert'))
+    })
+    container.querySelector('[data-act="pdf"]').addEventListener('click', () => {
+      exportPanelAsPdf(container, { filename: 'episoden-pro-tag.pdf', title: 'Neue Episoden pro Tag' })
+    })
+    container.querySelector('[data-act="csv"]').addEventListener('click', async () => {
       try {
-        const { data, error } = await sb.rpc('admin_episodes_per_day')
-        if (error) throw error
-        const rows = (Array.isArray(data) ? data : []).map(r => ({
-          day: r.day ?? r.date ?? r.bucket ?? r.d,
-          count: r.count ?? r.episodes ?? r.n ?? r.total ?? 0
-        })).filter(r => r.day != null)
-        rows.sort((a, b) => new Date(a.day) - new Date(b.day))
-        renderBars(rows)
-      } catch (e) {
-        body.innerHTML = '<div class="empty">Daten kommen bald: ' + (e?.message || 'unbekannt') + '</div>'
-      }
-    }
-    container.querySelector('.refresh-btn').addEventListener('click', refresh)
-    await refresh()
+        const s = await fetchSeries()
+        exportCsv(s.map(b => ({ Tag: b.day, Episoden: b.count })), 'episoden-pro-tag.csv')
+      } catch (e) { toast('CSV-Export fehlgeschlagen: ' + e.message, 'error') }
+    })
+
+    await render()
   }
 }

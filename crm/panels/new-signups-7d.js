@@ -1,106 +1,363 @@
 import { sb } from '/lib/supabase.js'
+import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js'
+import { makeBarChart } from '/lib/charts.js'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { segmentedControl } from '/lib/layout-extras.js'
+import { showUserDetailModal } from '/lib/panel-actions.js'
+
+const PANEL_ID = 'new-signups-7d'
+
+function startOfDay(d) {
+  const x = new Date(d)
+  x.setHours(0, 0, 0, 0)
+  return x
+}
+
+function dayKey(d) {
+  return startOfDay(d).toISOString().slice(0, 10)
+}
+
+function dayLabel(d) {
+  return new Date(d).toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
+}
+
+function buildDayBuckets(rangeDays) {
+  const buckets = []
+  const today = startOfDay(new Date())
+  for (let i = rangeDays - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    buckets.push({ date: d, key: dayKey(d), label: dayLabel(d), count: 0 })
+  }
+  return buckets
+}
+
+async function fetchSignupsInRange(rangeDays) {
+  const since = new Date()
+  since.setDate(since.getDate() - (rangeDays - 1))
+  since.setHours(0, 0, 0, 0)
+
+  const { data, error } = await sb
+    .from('users')
+    .select('id, username, display_name, avatar_url, created_at, is_verified')
+    .gte('created_at', since.toISOString())
+    .order('created_at', { ascending: false })
+
+  if (error) throw error
+  return data || []
+}
+
+async function fetchLatestSignups(limit = 20) {
+  const { data, error } = await sb
+    .from('users')
+    .select('id, username, display_name, avatar_url, created_at, is_verified')
+    .order('created_at', { ascending: false })
+    .limit(limit)
+
+  if (error) throw error
+  return data || []
+}
+
+function aggregate(rows, rangeDays) {
+  const buckets = buildDayBuckets(rangeDays)
+  const idx = new Map(buckets.map((b, i) => [b.key, i]))
+  for (const r of rows) {
+    const k = dayKey(r.created_at)
+    if (idx.has(k)) buckets[idx.get(k)].count++
+  }
+  return buckets
+}
+
+function avatarHtml(row) {
+  const name = row.display_name || row.username || 'Unbekannt'
+  const initial = (name[0] || '?').toUpperCase()
+  if (row.avatar_url) {
+    return `<img class="avatar" src="${htmlEscape(row.avatar_url)}" alt="${htmlEscape(name)}" />`
+  }
+  return `<div class="avatar avatar-fallback">${htmlEscape(initial)}</div>`
+}
+
+function renderSignupRow(row) {
+  const name = row.display_name || row.username || 'Unbekannt'
+  const handle = row.username ? `@${row.username}` : ''
+  const verified = row.is_verified
+    ? `<span class="badge badge-success" title="Verifiziert">✓</span>`
+    : ''
+  return `
+    <tr class="signup-row" data-user-id="${htmlEscape(row.id)}">
+      <td class="cell-avatar">${avatarHtml(row)}</td>
+      <td class="cell-name">
+        <div class="name-primary">${htmlEscape(name)} ${verified}</div>
+        <div class="name-secondary">${htmlEscape(handle)}</div>
+      </td>
+      <td class="cell-time">
+        <div class="time-primary">${htmlEscape(fmtRelativeTime ? fmtRelativeTime(row.created_at) : new Date(row.created_at).toLocaleString('de-DE'))}</div>
+        <div class="time-secondary">${htmlEscape(fmtDateTime ? fmtDateTime(row.created_at) : '')}</div>
+      </td>
+      <td class="cell-action">
+        <button class="btn btn-ghost btn-sm" data-action="open-user" data-user-id="${htmlEscape(row.id)}">Öffnen</button>
+      </td>
+    </tr>
+  `
+}
+
+function emptyState(msg, cta) {
+  return `
+    <div class="empty-state glass-card">
+      <div class="empty-icon" style="font-size:42px;">👥</div>
+      <div class="empty-title">Noch keine Anmeldungen</div>
+      <div class="empty-text">${htmlEscape(msg)}</div>
+      ${cta ? `<button class="btn btn-primary" data-action="refresh">${htmlEscape(cta)}</button>` : ''}
+    </div>
+  `
+}
+
+function errorState(err) {
+  return `
+    <div class="error-state glass-card">
+      <div class="error-icon" style="font-size:42px;">⚠️</div>
+      <div class="error-title">Daten konnten nicht geladen werden</div>
+      <div class="error-text">${htmlEscape(err?.message || String(err))}</div>
+      <button class="btn btn-primary" data-action="retry">Erneut versuchen</button>
+    </div>
+  `
+}
 
 export default {
-  id: 'new-signups-7d',
-  title: 'Neue Anmeldungen (7 Tage)',
+  id: PANEL_ID,
+  title: 'Neue Anmeldungen',
   category: 'overview',
-  summary: 'Tägliche Signups der letzten Woche.',
+
   async mount(container) {
-    container.innerHTML = `<div class="panel-shell">
-      <div class="panel-head"><h2>Neue Anmeldungen (7 Tage)</h2><button class="refresh-btn">Aktualisieren</button></div>
-      <div class="panel-body"><div class="loading">Lädt…</div></div>
-    </div>`
-    const body = container.querySelector('.panel-body')
+    let range = 7
+    const state = { rows: [], latest: [], buckets: [], loading: true, error: null }
 
-    const fmtDay = (d) => {
-      const dd = new Date(d)
-      return dd.toLocaleDateString('de-DE', { weekday: 'short', day: '2-digit', month: '2-digit' })
-    }
+    container.innerHTML = `
+      <div class="panel-shell" data-panel="${PANEL_ID}">
+        <div class="panel-head glass-card">
+          <div class="panel-head-left">
+            <h2 class="panel-title">Neue Anmeldungen</h2>
+            <p class="panel-sub">Wer ist neu auf Podfluence dazugekommen?</p>
+          </div>
+          <div class="toolbar" id="toolbar">
+            <div id="range-switch" class="toolbar-segment"></div>
+            <button class="btn btn-ghost" data-action="refresh" title="Aktualisieren">🔄 <span>Aktualisieren</span></button>
+            <button class="btn btn-ghost" data-action="export-pdf" title="Als PDF exportieren">📄 <span>PDF</span></button>
+            <button class="btn btn-ghost" data-action="export-csv" title="Als CSV exportieren">💾 <span>CSV</span></button>
+          </div>
+        </div>
 
-    const refresh = async () => {
-      body.innerHTML = '<div class="loading">Lädt…</div>'
+        <div class="panel-body" id="body">
+          ${skeletonLoader ? skeletonLoader({ rows: 6 }) : '<div class="skeleton skeleton-block"></div>'}
+        </div>
+      </div>
+    `
+
+    const rangeMount = container.querySelector('#range-switch')
+    if (rangeMount && segmentedControl) {
       try {
-        const since = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
-        const sinceIso = since.toISOString()
-
-        const { data, error } = await sb
-          .from('users')
-          .select('created_at')
-          .gte('created_at', sinceIso)
-          .order('created_at', { ascending: true })
-
-        if (error) throw error
-
-        // Bucket pro Tag (letzte 7 Tage inkl. heute)
-        const buckets = []
-        const today = new Date()
-        today.setHours(0, 0, 0, 0)
-        for (let i = 6; i >= 0; i--) {
-          const d = new Date(today)
-          d.setDate(d.getDate() - i)
-          buckets.push({ day: d, count: 0 })
-        }
-        const keyOf = (d) => {
-          const x = new Date(d)
-          x.setHours(0, 0, 0, 0)
-          return x.getTime()
-        }
-        const map = new Map(buckets.map((b) => [keyOf(b.day), b]))
-        for (const row of data || []) {
-          const k = keyOf(row.created_at)
-          const b = map.get(k)
-          if (b) b.count++
-        }
-
-        const total = buckets.reduce((a, b) => a + b.count, 0)
-        const max = Math.max(1, ...buckets.map((b) => b.count))
-        const avg = Math.round((total / 7) * 10) / 10
-        const peak = buckets.reduce((a, b) => (b.count > a.count ? b : a), buckets[0])
-
-        // Inline SVG bar chart
-        const W = 560
-        const H = 220
-        const padL = 36
-        const padR = 12
-        const padT = 16
-        const padB = 36
-        const innerW = W - padL - padR
-        const innerH = H - padT - padB
-        const bw = innerW / buckets.length
-        const barW = Math.max(8, bw * 0.6)
-
-        let bars = ''
-        let labels = ''
-        buckets.forEach((b, i) => {
-          const h = (b.count / max) * innerH
-          const x = padL + i * bw + (bw - barW) / 2
-          const y = padT + innerH - h
-          bars += `<rect x="${x.toFixed(1)}" y="${y.toFixed(1)}" width="${barW.toFixed(1)}" height="${h.toFixed(1)}" rx="6" ry="6" fill="#8B5CF6"></rect>`
-          bars += `<text x="${(x + barW / 2).toFixed(1)}" y="${(y - 6).toFixed(1)}" text-anchor="middle" font-size="11" fill="#fff">${b.count}</text>`
-          labels += `<text x="${(padL + i * bw + bw / 2).toFixed(1)}" y="${(H - 12).toFixed(1)}" text-anchor="middle" font-size="11" fill="#9b9bab">${fmtDay(b.day)}</text>`
+        segmentedControl(rangeMount, {
+          options: [
+            { value: 7, label: '7 Tage' },
+            { value: 30, label: '30 Tage' },
+          ],
+          value: range,
+          onChange: (v) => {
+            range = Number(v)
+            load()
+          },
         })
-
-        const baseline = `<line x1="${padL}" y1="${padT + innerH}" x2="${W - padR}" y2="${padT + innerH}" stroke="#2A2A33" stroke-width="1"></line>`
-
-        body.innerHTML = `
-          <div class="kpi-grid">
-            <div class="kpi-tile"><div class="label">Gesamt (7T)</div><div class="value">${total}</div><div class="hint">Neue User</div></div>
-            <div class="kpi-tile"><div class="label">Ø pro Tag</div><div class="value">${avg}</div><div class="hint">Schnitt 7 Tage</div></div>
-            <div class="kpi-tile"><div class="label">Peak-Tag</div><div class="value">${peak.count}</div><div class="hint">${fmtDay(peak.day)}</div></div>
-          </div>
-          <div style="margin-top:16px; background:#16161D; border:1px solid #2A2A33; border-radius:12px; padding:12px;">
-            <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet">
-              ${baseline}
-              ${bars}
-              ${labels}
-            </svg>
-          </div>
-        `
       } catch (e) {
-        body.innerHTML = '<div class="empty">Daten kommen bald: ' + (e?.message || 'unbekannt') + '</div>'
+        rangeMount.innerHTML = `
+          <button class="btn btn-sm" data-action="range" data-range="7">7T</button>
+          <button class="btn btn-sm" data-action="range" data-range="30">30T</button>
+        `
       }
     }
-    container.querySelector('.refresh-btn').addEventListener('click', refresh)
-    await refresh()
-  }
+
+    const body = container.querySelector('#body')
+
+    async function load() {
+      state.loading = true
+      state.error = null
+      body.innerHTML = skeletonLoader ? skeletonLoader({ rows: 6 }) : '<div class="skeleton skeleton-block"></div>'
+      try {
+        const [rangeRows, latest] = await Promise.all([
+          fetchSignupsInRange(range),
+          fetchLatestSignups(20),
+        ])
+        state.rows = rangeRows
+        state.latest = latest
+        state.buckets = aggregate(rangeRows, range)
+        state.loading = false
+        render()
+      } catch (e) {
+        console.error('[new-signups-7d] load failed', e)
+        state.loading = false
+        state.error = e
+        body.innerHTML = errorState(e)
+      }
+    }
+
+    function render() {
+      const totalRange = state.rows.length
+      const avgPerDay = totalRange / range
+      const peak = state.buckets.reduce((m, b) => (b.count > m.count ? b : m), { count: 0, label: '—' })
+      const todayCount = state.buckets[state.buckets.length - 1]?.count || 0
+
+      const heroHtml = `
+        <div class="hero-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-bottom:18px;">
+          <div class="hero-stat glass-card">
+            <div class="hero-label">Gesamt (${range}T)</div>
+            <div class="hero-value" data-countup="${totalRange}">0</div>
+            <div class="hero-sub">${avgPerDay.toFixed(1)} pro Tag im Schnitt</div>
+          </div>
+          <div class="hero-stat glass-card">
+            <div class="hero-label">Heute</div>
+            <div class="hero-value" data-countup="${todayCount}">0</div>
+            <div class="hero-sub">Neue Profile in 24h</div>
+          </div>
+          <div class="hero-stat glass-card">
+            <div class="hero-label">Spitzentag</div>
+            <div class="hero-value" data-countup="${peak.count}">0</div>
+            <div class="hero-sub">${htmlEscape(peak.label || '—')}</div>
+          </div>
+        </div>
+      `
+
+      const chartHtml = `
+        <div class="chart-card glass-card" style="margin-bottom:18px;">
+          <div class="chart-head" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px;">
+            <h3 style="margin:0;">Anmeldungen pro Tag</h3>
+            <div class="chart-sub" style="opacity:.7;font-size:13px;">${range}-Tage-Verlauf</div>
+          </div>
+          <div id="signup-chart" class="chart-area" style="min-height:320px;"></div>
+        </div>
+      `
+
+      const listHtml = state.latest.length === 0
+        ? emptyState('Sobald sich neue Nutzer registrieren, erscheinen sie hier.', 'Aktualisieren')
+        : `
+          <div class="list-card glass-card">
+            <div class="list-head" style="display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;">
+              <h3 style="margin:0;">Letzte 20 Signups</h3>
+              <div class="list-sub" style="opacity:.7;font-size:13px;">Klick auf eine Zeile öffnet das Profil</div>
+            </div>
+            <table class="data-table data-table-hover">
+              <thead>
+                <tr>
+                  <th style="width:64px;"></th>
+                  <th>Name</th>
+                  <th>Registriert</th>
+                  <th style="width:96px;"></th>
+                </tr>
+              </thead>
+              <tbody id="signup-tbody">
+                ${state.latest.map(renderSignupRow).join('')}
+              </tbody>
+            </table>
+          </div>
+        `
+
+      body.innerHTML = `${heroHtml}${chartHtml}${listHtml}`
+
+      const chartMount = body.querySelector('#signup-chart')
+      if (chartMount) {
+        try {
+          makeBarChart(chartMount, {
+            labels: state.buckets.map((b) => b.label),
+            series: [{ name: 'Anmeldungen', data: state.buckets.map((b) => b.count) }],
+            color: '#8B5CF6',
+            height: 320,
+            animate: true,
+            valueFormatter: (v) => (fmtNumber ? fmtNumber(v) : String(v)),
+          })
+        } catch (e) {
+          console.warn('[new-signups-7d] chart failed', e)
+          chartMount.innerHTML = '<div class="chart-fallback" style="padding:24px;opacity:.6;">Chart konnte nicht geladen werden</div>'
+        }
+      }
+
+      if (countUp) {
+        body.querySelectorAll('[data-countup]').forEach((el) => {
+          const target = Number(el.getAttribute('data-countup')) || 0
+          try { countUp(el, { from: 0, to: target, duration: 900 }) } catch { el.textContent = String(target) }
+        })
+      }
+
+      body.querySelectorAll('.signup-row').forEach((tr) => {
+        tr.addEventListener('click', () => {
+          const userId = tr.getAttribute('data-user-id')
+          if (userId) openUserDrawer(userId)
+        })
+      })
+
+      if (fadeIn) {
+        try { fadeIn(body, { duration: 280 }) } catch {}
+      }
+    }
+
+    function openUserDrawer(userId) {
+      try {
+        showUserDetailModal(userId)
+      } catch (e) {
+        console.error('[new-signups-7d] open user failed', e)
+        toast?.('Profil konnte nicht geöffnet werden', 'error')
+      }
+    }
+
+    function doExportCsv() {
+      if (!state.latest.length) {
+        toast?.('Keine Daten zum Exportieren', 'warn')
+        return
+      }
+      const rows = state.latest.map((r) => ({
+        id: r.id,
+        username: r.username || '',
+        name: r.display_name || '',
+        verified: r.is_verified ? 'ja' : 'nein',
+        created_at: r.created_at,
+      }))
+      try {
+        exportCsv(rows, `signups-${new Date().toISOString().slice(0, 10)}.csv`)
+        toast?.('CSV exportiert', 'success')
+      } catch (e) {
+        console.error(e)
+        toast?.('CSV-Export fehlgeschlagen', 'error')
+      }
+    }
+
+    async function doExportPdf() {
+      try {
+        await exportPanelAsPdf(container.querySelector('.panel-shell'), {
+          title: `Neue Anmeldungen – ${range} Tage`,
+          filename: `signups-${range}d-${new Date().toISOString().slice(0, 10)}.pdf`,
+        })
+        toast?.('PDF erstellt', 'success')
+      } catch (e) {
+        console.error(e)
+        toast?.('PDF-Export fehlgeschlagen', 'error')
+      }
+    }
+
+    container.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-action]')
+      if (!btn) return
+      const action = btn.getAttribute('data-action')
+      if (action === 'refresh' || action === 'retry') load()
+      else if (action === 'export-csv') doExportCsv()
+      else if (action === 'export-pdf') doExportPdf()
+      else if (action === 'open-user') {
+        e.stopPropagation()
+        const uid = btn.getAttribute('data-user-id')
+        if (uid) openUserDrawer(uid)
+      } else if (action === 'range') {
+        const r = Number(btn.getAttribute('data-range'))
+        if (r) { range = r; load() }
+      }
+    })
+
+    await load()
+  },
 }

@@ -1,109 +1,480 @@
 import { sb } from '/lib/supabase.js'
+import { toast, modal, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
+import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { drawer, tabs, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
+import { showUserDetailModal } from '/lib/panel-actions.js'
+
+const TYPES = [
+  { key: 'announcement', label: 'Ankündigung', color: '#6366f1' },
+  { key: 'episode',      label: 'Episode',     color: '#10b981' },
+  { key: 'poll',         label: 'Umfrage',     color: '#f59e0b' },
+  { key: 'longform',     label: 'Longform',    color: '#ec4899' },
+]
+
+const RANGE_LABELS = { '7':  'Letzte 7 Tage', '30': 'Letzte 30 Tage', '90': 'Letzte 90 Tage' }
+
+let state = {
+  range: '30',
+  raw: [],
+  days: [],
+  perType: {},
+  totalsPerDay: [],
+  totals: { total: 0, perType: {}, avg: 0, peakDay: null, peakCount: 0 },
+}
+
+function toISO(d) { return d.toISOString().slice(0, 10) }
+
+function buildDayAxis(rangeDays) {
+  const days = []
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  for (let i = rangeDays - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(today.getDate() - i)
+    days.push(toISO(d))
+  }
+  return days
+}
+
+async function fetchData(rangeDays) {
+  const since = new Date()
+  since.setHours(0, 0, 0, 0)
+  since.setDate(since.getDate() - (rangeDays - 1))
+
+  const { data, error } = await sb
+    .from('posts')
+    .select('id, created_at, type')
+    .gte('created_at', since.toISOString())
+    .order('created_at', { ascending: true })
+
+  if (error) throw error
+  return data || []
+}
+
+function aggregate(rows, rangeDays) {
+  const days = buildDayAxis(rangeDays)
+  const dayIndex = Object.fromEntries(days.map((d, i) => [d, i]))
+  const perType = {}
+  TYPES.forEach(t => { perType[t.key] = new Array(days.length).fill(0) })
+
+  const totalsPerType = {}
+  TYPES.forEach(t => { totalsPerType[t.key] = 0 })
+  let total = 0
+  const totalsPerDay = new Array(days.length).fill(0)
+
+  for (const row of rows) {
+    const day = (row.created_at || '').slice(0, 10)
+    if (!(day in dayIndex)) continue
+    const idx = dayIndex[day]
+    const type = TYPES.some(t => t.key === row.type) ? row.type : 'announcement'
+    perType[type][idx] += 1
+    totalsPerType[type] += 1
+    totalsPerDay[idx] += 1
+    total += 1
+  }
+
+  let peakCount = 0, peakIdx = -1
+  totalsPerDay.forEach((c, i) => { if (c > peakCount) { peakCount = c; peakIdx = i } })
+  const avg = days.length ? +(total / days.length).toFixed(1) : 0
+
+  return {
+    days,
+    perType,
+    totalsPerDay,
+    totals: {
+      total,
+      perType: totalsPerType,
+      avg,
+      peakDay: peakIdx >= 0 ? days[peakIdx] : null,
+      peakCount,
+    }
+  }
+}
+
+async function fetchPostsForDay(day) {
+  const start = new Date(day + 'T00:00:00')
+  const end   = new Date(day + 'T23:59:59.999')
+  const { data, error } = await sb
+    .from('posts')
+    .select('id, type, title, content, created_at, user_id, profiles:user_id(username, display_name, avatar_url)')
+    .gte('created_at', start.toISOString())
+    .lte('created_at', end.toISOString())
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return data || []
+}
+
+function typeBadge(type) {
+  const t = TYPES.find(x => x.key === type) || { label: type, color: '#64748b' }
+  return `<span class="type-pill" style="background:${t.color}1a;color:${t.color};border:1px solid ${t.color}55">${htmlEscape(t.label)}</span>`
+}
+
+async function openDayDrawer(day) {
+  const dr = drawer({
+    title: `Posts am ${day}`,
+    width: 560,
+    content: `<div id="day-drawer-body">${skeletonLoader({ rows: 6, height: 56 })}</div>`,
+  })
+  try {
+    const posts = await fetchPostsForDay(day)
+    const body = document.getElementById('day-drawer-body')
+    if (!body) return
+    if (!posts.length) {
+      body.innerHTML = `
+        <div class="empty-state">
+          <div class="empty-icon">${iconHtml('inbox')}</div>
+          <h3>Keine Posts an diesem Tag</h3>
+          <p>An ${htmlEscape(day)} wurde nichts veröffentlicht.</p>
+        </div>`
+      return
+    }
+    const byType = {}
+    posts.forEach(p => { byType[p.type] = (byType[p.type] || 0) + 1 })
+    const summary = TYPES.filter(t => byType[t.key])
+      .map(t => `<span class="day-sum-pill" style="--c:${t.color}">${t.label} · <b>${byType[t.key]}</b></span>`)
+      .join('')
+
+    body.innerHTML = `
+      <div class="day-summary glass-card">
+        <div class="day-summary-total"><span class="big">${fmtNumber(posts.length)}</span> Posts insgesamt</div>
+        <div class="day-summary-pills">${summary}</div>
+      </div>
+      <ul class="day-post-list">
+        ${posts.map(p => {
+          const prof = p.profiles || {}
+          const name = htmlEscape(prof.display_name || prof.username || 'Unbekannt')
+          const avatar = prof.avatar_url
+            ? `<img src="${htmlEscape(prof.avatar_url)}" alt="" class="dp-avatar" />`
+            : `<div class="dp-avatar dp-avatar-fallback">${name.slice(0, 1).toUpperCase()}</div>`
+          const title = htmlEscape(p.title || (p.content || '').slice(0, 90) || '(ohne Titel)')
+          return `
+            <li class="day-post-item" data-user="${htmlEscape(p.user_id || '')}">
+              ${avatar}
+              <div class="dp-main">
+                <div class="dp-row1">
+                  ${typeBadge(p.type)}
+                  <span class="dp-time">${fmtDateTime(p.created_at)}</span>
+                </div>
+                <div class="dp-title">${title}</div>
+                <div class="dp-meta">von <button class="dp-user" data-user="${htmlEscape(p.user_id || '')}">${name}</button></div>
+              </div>
+            </li>`
+        }).join('')}
+      </ul>
+    `
+    body.querySelectorAll('.dp-user').forEach(b => {
+      b.addEventListener('click', e => {
+        const uid = e.currentTarget.getAttribute('data-user')
+        if (uid) showUserDetailModal(uid)
+      })
+    })
+  } catch (err) {
+    const body = document.getElementById('day-drawer-body')
+    if (body) {
+      body.innerHTML = `<div class="error-state"><p>${htmlEscape(err.message || 'Fehler beim Laden')}</p></div>`
+    }
+  }
+  return dr
+}
+
+function renderHero(container) {
+  const el = container.querySelector('#hero')
+  if (!el) return
+  el.innerHTML = `
+    ${statHero({
+      label: 'Posts im Zeitraum',
+      value: '<span id="hero-total">0</span>',
+      hint: `${RANGE_LABELS[state.range]} · Ø <span id="hero-avg">0</span>/Tag`,
+      trend: state.totals.peakDay
+        ? `Spitze: <b>${fmtNumber(state.totals.peakCount)}</b> am ${state.totals.peakDay}`
+        : '—'
+    })}
+  `
+  countUp(el.querySelector('#hero-total'), state.totals.total, { duration: 900 })
+  countUp(el.querySelector('#hero-avg'),   state.totals.avg,   { duration: 900, decimals: 1 })
+}
+
+function renderChart(container) {
+  const el = container.querySelector('#chart')
+  if (!el) return
+  el.innerHTML = ''
+  const series = TYPES.map(t => ({
+    name: t.label,
+    color: t.color,
+    data: state.perType[t.key],
+  }))
+  makeAreaChart(el, {
+    categories: state.days,
+    series,
+    stacked: true,
+    height: 320,
+    formatX: v => v.slice(5),
+    onPointClick: (idx) => {
+      const day = state.days[idx]
+      if (day) openDayDrawer(day)
+    }
+  })
+}
+
+function renderBreakdown(container) {
+  const el = container.querySelector('#breakdown')
+  if (!el) return
+  const donutData = TYPES.map(t => ({
+    label: t.label,
+    value: state.totals.perType[t.key] || 0,
+    color: t.color,
+  }))
+  const total = state.totals.total || 1
+  el.innerHTML = `
+    <div class="break-grid">
+      <div class="break-donut" id="break-donut"></div>
+      <ul class="break-list">
+        ${TYPES.map(t => {
+          const v = state.totals.perType[t.key] || 0
+          const pct = ((v / total) * 100).toFixed(1)
+          return `
+            <li class="break-item">
+              <span class="break-dot" style="background:${t.color}"></span>
+              <span class="break-label">${t.label}</span>
+              <span class="break-bar"><span class="break-bar-fill" style="width:${pct}%;background:${t.color}"></span></span>
+              <span class="break-val"><b>${fmtNumber(v)}</b> <em>${pct}%</em></span>
+            </li>`
+        }).join('')}
+      </ul>
+    </div>
+  `
+  makeDonutChart(el.querySelector('#break-donut'), { data: donutData, size: 180, thickness: 22 })
+}
+
+function renderTopDays(container) {
+  const el = container.querySelector('#topdays')
+  if (!el) return
+  const rows = state.days
+    .map((d, i) => ({ day: d, count: state.totalsPerDay[i] }))
+    .filter(r => r.count > 0)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 8)
+
+  if (!rows.length) {
+    el.innerHTML = `
+      <div class="empty-state subtle">
+        <div class="empty-icon">${iconHtml('calendar')}</div>
+        <h3>Keine aktiven Tage</h3>
+        <p>Im gewählten Zeitraum gibt es keine Posts.</p>
+      </div>`
+    return
+  }
+  el.innerHTML = `
+    <table class="data-table sortable hover">
+      <thead><tr><th>Tag</th><th>Posts</th><th class="ta-right">Anteil</th><th></th></tr></thead>
+      <tbody>
+        ${rows.map(r => {
+          const pct = ((r.count / (state.totals.total || 1)) * 100).toFixed(1)
+          return `
+            <tr class="td-row" data-day="${r.day}">
+              <td><b>${r.day}</b></td>
+              <td>${fmtNumber(r.count)}</td>
+              <td class="ta-right">${pct}%</td>
+              <td class="ta-right"><button class="btn-mini" data-day="${r.day}">Öffnen ›</button></td>
+            </tr>`
+        }).join('')}
+      </tbody>
+    </table>
+  `
+  el.querySelectorAll('.td-row, .btn-mini').forEach(node => {
+    node.addEventListener('click', e => {
+      const day = e.currentTarget.getAttribute('data-day')
+      if (day) openDayDrawer(day)
+    })
+  })
+}
+
+function renderBody(container) {
+  renderHero(container)
+  renderChart(container)
+  renderBreakdown(container)
+  renderTopDays(container)
+}
+
+async function loadAndRender(container) {
+  const body = container.querySelector('#body')
+  if (!body) return
+  body.innerHTML = `
+    <div class="grid-skeleton">
+      ${skeletonLoader({ rows: 1, height: 92 })}
+      ${skeletonLoader({ rows: 1, height: 320 })}
+      <div class="row2">
+        ${skeletonLoader({ rows: 1, height: 240 })}
+        ${skeletonLoader({ rows: 1, height: 240 })}
+      </div>
+    </div>`
+  try {
+    const rows = await fetchData(parseInt(state.range, 10))
+    const agg = aggregate(rows, parseInt(state.range, 10))
+    Object.assign(state, agg)
+    body.innerHTML = `
+      <div class="ppd-layout">
+        <section class="glass-card" id="hero"></section>
+        <section class="glass-card chart-card">
+          <header class="card-head">
+            <h3>Posts pro Tag · gestapelt nach Typ</h3>
+            <div class="card-hint">Klick auf einen Tag öffnet die Post-Liste</div>
+          </header>
+          <div id="chart"></div>
+          <div class="legend-row">
+            ${TYPES.map(t => `<span class="lg-item"><span class="lg-dot" style="background:${t.color}"></span>${t.label}</span>`).join('')}
+          </div>
+        </section>
+        <div class="row2">
+          <section class="glass-card">
+            <header class="card-head"><h3>Typ-Verteilung</h3></header>
+            <div id="breakdown"></div>
+          </section>
+          <section class="glass-card">
+            <header class="card-head"><h3>Top Tage</h3></header>
+            <div id="topdays"></div>
+          </section>
+        </div>
+      </div>`
+    renderBody(container)
+    fadeIn(body, { duration: 300 })
+  } catch (err) {
+    body.innerHTML = `
+      <div class="error-state glass-card">
+        <div class="empty-icon">${iconHtml('alert-triangle')}</div>
+        <h3>Daten konnten nicht geladen werden</h3>
+        <p>${htmlEscape(err.message || 'Unbekannter Fehler')}</p>
+        <button class="btn-primary" id="retry">Erneut versuchen</button>
+      </div>`
+    body.querySelector('#retry')?.addEventListener('click', () => loadAndRender(container))
+  }
+}
+
+function buildToolbar(container) {
+  const tb = container.querySelector('#toolbar')
+  if (!tb) return
+  tb.innerHTML = `
+    <div class="tb-left" id="range-seg"></div>
+    <div class="tb-right">
+      <button class="btn-ghost" id="btn-refresh" title="Aktualisieren">${iconHtml('refresh-cw')}<span>Aktualisieren</span></button>
+      <button class="btn-ghost" id="btn-pdf"     title="Als PDF exportieren">${iconHtml('file-text')}<span>PDF</span></button>
+      <button class="btn-ghost" id="btn-csv"     title="Als CSV exportieren">${iconHtml('download')}<span>CSV</span></button>
+    </div>
+  `
+  segmentedControl(tb.querySelector('#range-seg'), {
+    value: state.range,
+    options: [
+      { value: '7',  label: '7 Tage' },
+      { value: '30', label: '30 Tage' },
+      { value: '90', label: '90 Tage' },
+    ],
+    onChange: (v) => {
+      state.range = v
+      loadAndRender(container)
+    },
+  })
+  tb.querySelector('#btn-refresh').addEventListener('click', () => {
+    loadAndRender(container)
+    toast('Daten werden aktualisiert', { type: 'info' })
+  })
+  tb.querySelector('#btn-pdf').addEventListener('click', async () => {
+    try {
+      await exportPanelAsPdf(container, { filename: `posts-pro-tag-${state.range}d.pdf`, title: 'Posts pro Tag' })
+      toast('PDF erstellt', { type: 'success' })
+    } catch (e) { toast('PDF-Export fehlgeschlagen', { type: 'error' }) }
+  })
+  tb.querySelector('#btn-csv').addEventListener('click', () => {
+    const rows = state.days.map((d, i) => {
+      const o = { tag: d, total: state.totalsPerDay[i] }
+      TYPES.forEach(t => { o[t.key] = state.perType[t.key][i] })
+      return o
+    })
+    exportCsv(rows, { filename: `posts-pro-tag-${state.range}d.csv` })
+    toast('CSV heruntergeladen', { type: 'success' })
+  })
+}
 
 export default {
   id: 'posts-per-day',
   title: 'Posts pro Tag',
   category: 'content',
-  summary: "Volumen neuer Updates über die Zeit.",
   async mount(container) {
-    container.innerHTML = `<div class="panel-shell">
-      <div class="panel-head"><h2>Posts pro Tag</h2><button class="refresh-btn">Aktualisieren</button></div>
-      <div class="panel-body"><div class="loading">Lädt…</div></div>
-    </div>`
-    const body = container.querySelector('.panel-body')
-
-    const refresh = async () => {
-      body.innerHTML = '<div class="loading">Lädt…</div>'
-      try {
-        const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
-        const { data, error } = await sb
-          .from('updates')
-          .select('created_at')
-          .gte('created_at', since)
-          .order('created_at', { ascending: true })
-        if (error) throw error
-
-        // Bucket per day
-        const buckets = new Map()
-        for (let i = 29; i >= 0; i--) {
-          const d = new Date(Date.now() - i * 24 * 60 * 60 * 1000)
-          const key = d.toISOString().slice(0, 10)
-          buckets.set(key, 0)
-        }
-        for (const row of data || []) {
-          const key = (row.created_at || '').slice(0, 10)
-          if (buckets.has(key)) buckets.set(key, buckets.get(key) + 1)
-        }
-
-        const points = Array.from(buckets.entries()).map(([day, count]) => ({ day, count }))
-        const total = points.reduce((s, p) => s + p.count, 0)
-        const avg = points.length ? (total / points.length) : 0
-        const peak = points.reduce((m, p) => p.count > m.count ? p : m, { day: '-', count: 0 })
-        const last7 = points.slice(-7).reduce((s, p) => s + p.count, 0)
-
-        // SVG line chart
-        const W = 720, H = 240, padL = 40, padR = 16, padT = 16, padB = 28
-        const innerW = W - padL - padR
-        const innerH = H - padT - padB
-        const maxY = Math.max(1, ...points.map(p => p.count))
-        const step = points.length > 1 ? innerW / (points.length - 1) : 0
-        const xy = points.map((p, i) => {
-          const x = padL + i * step
-          const y = padT + innerH - (p.count / maxY) * innerH
-          return { x, y, ...p }
-        })
-        const path = xy.map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')
-        const areaPath = `${path} L${xy[xy.length - 1].x.toFixed(1)},${(padT + innerH).toFixed(1)} L${xy[0].x.toFixed(1)},${(padT + innerH).toFixed(1)} Z`
-
-        const yTicks = 4
-        const yAxis = []
-        for (let i = 0; i <= yTicks; i++) {
-          const val = Math.round((maxY / yTicks) * i)
-          const y = padT + innerH - (i / yTicks) * innerH
-          yAxis.push(`<line x1="${padL}" x2="${W - padR}" y1="${y}" y2="${y}" stroke="#2A2A33" stroke-width="1"/>
-            <text x="${padL - 6}" y="${y + 4}" fill="#8a8a96" font-size="10" text-anchor="end">${val}</text>`)
-        }
-
-        const xLabelEvery = Math.ceil(points.length / 6)
-        const xAxis = xy.map((pt, i) => {
-          if (i % xLabelEvery !== 0 && i !== xy.length - 1) return ''
-          const lbl = pt.day.slice(5)
-          return `<text x="${pt.x}" y="${H - padB + 16}" fill="#8a8a96" font-size="10" text-anchor="middle">${lbl}</text>`
-        }).join('')
-
-        const dots = xy.map(pt =>
-          `<circle cx="${pt.x.toFixed(1)}" cy="${pt.y.toFixed(1)}" r="3" fill="#8B5CF6"><title>${pt.day}: ${pt.count}</title></circle>`
-        ).join('')
-
-        body.innerHTML = `
-          <div class="kpi-grid">
-            <div class="kpi-tile"><div style="color:#8a8a96;font-size:12px">Posts (30d)</div><div style="font-size:22px;font-weight:600;color:#fff">${total}</div><div style="color:#8a8a96;font-size:11px">Gesamt</div></div>
-            <div class="kpi-tile"><div style="color:#8a8a96;font-size:12px">Ø pro Tag</div><div style="font-size:22px;font-weight:600;color:#fff">${avg.toFixed(1)}</div><div style="color:#8a8a96;font-size:11px">Durchschnitt</div></div>
-            <div class="kpi-tile"><div style="color:#8a8a96;font-size:12px">Peak</div><div style="font-size:22px;font-weight:600;color:#fff">${peak.count}</div><div style="color:#8a8a96;font-size:11px">${peak.day}</div></div>
-            <div class="kpi-tile"><div style="color:#8a8a96;font-size:12px">Letzte 7d</div><div style="font-size:22px;font-weight:600;color:#fff">${last7}</div><div style="color:#8a8a96;font-size:11px">Posts</div></div>
+    container.innerHTML = `
+      <div class="panel-shell ppd-panel">
+        <div class="panel-head">
+          <div class="head-titles">
+            <h2>Posts pro Tag</h2>
+            <p class="subtle">Veröffentlichungen gestapelt nach Typ</p>
           </div>
-          <div style="margin-top:16px;background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:12px">
-            <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="none" style="display:block">
-              <defs>
-                <linearGradient id="ppd-area" x1="0" x2="0" y1="0" y2="1">
-                  <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.35"/>
-                  <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0"/>
-                </linearGradient>
-              </defs>
-              ${yAxis.join('')}
-              <path d="${areaPath}" fill="url(#ppd-area)" stroke="none"/>
-              <path d="${path}" fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
-              ${dots}
-              ${xAxis}
-            </svg>
-          </div>
-        `
-      } catch (e) {
-        body.innerHTML = '<div class="empty">Daten kommen bald: ' + (e?.message || 'unbekannt') + '</div>'
-      }
-    }
-
-    container.querySelector('.refresh-btn').addEventListener('click', refresh)
-    await refresh()
+          <div class="toolbar" id="toolbar"></div>
+        </div>
+        <div class="panel-body" id="body"></div>
+      </div>
+      <style>
+        .ppd-panel .panel-head{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap;margin-bottom:18px}
+        .ppd-panel .head-titles h2{margin:0;font-size:24px;font-weight:600;letter-spacing:-0.02em}
+        .ppd-panel .head-titles .subtle{margin:4px 0 0;color:var(--muted,#94a3b8);font-size:13px}
+        .ppd-panel .toolbar{display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+        .ppd-panel .tb-right{display:flex;gap:6px}
+        .ppd-panel .btn-ghost{display:inline-flex;align-items:center;gap:6px;padding:8px 12px;border-radius:10px;border:1px solid var(--border,#1f2937);background:transparent;color:var(--fg,#e2e8f0);cursor:pointer;font-size:13px;transition:.15s}
+        .ppd-panel .btn-ghost:hover{background:var(--hover,#1e293b);border-color:var(--border-strong,#334155)}
+        .ppd-layout{display:flex;flex-direction:column;gap:16px}
+        .ppd-layout .row2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+        @media(max-width:900px){.ppd-layout .row2{grid-template-columns:1fr}}
+        .glass-card{padding:18px;border-radius:16px}
+        .chart-card .card-head{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:8px}
+        .chart-card .card-hint{font-size:12px;color:var(--muted,#94a3b8)}
+        .card-head h3{margin:0 0 12px;font-size:15px;font-weight:600}
+        .legend-row{display:flex;gap:14px;flex-wrap:wrap;margin-top:10px;padding-top:10px;border-top:1px solid var(--border,#1f2937)}
+        .lg-item{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--muted,#94a3b8)}
+        .lg-dot{width:10px;height:10px;border-radius:3px}
+        .break-grid{display:grid;grid-template-columns:200px 1fr;gap:18px;align-items:center}
+        @media(max-width:700px){.break-grid{grid-template-columns:1fr}}
+        .break-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:10px}
+        .break-item{display:grid;grid-template-columns:10px 90px 1fr 110px;align-items:center;gap:10px;font-size:13px}
+        .break-dot{width:10px;height:10px;border-radius:3px}
+        .break-bar{height:6px;background:var(--bar-bg,#1e293b);border-radius:99px;overflow:hidden}
+        .break-bar-fill{display:block;height:100%;border-radius:99px;transition:width .6s ease}
+        .break-val{text-align:right;color:var(--muted,#94a3b8)}
+        .break-val b{color:var(--fg,#e2e8f0);margin-right:4px}
+        .break-val em{font-style:normal;opacity:.7}
+        .data-table.hover tbody tr{cursor:pointer;transition:.12s}
+        .data-table.hover tbody tr:hover{background:var(--hover,#1e293b)}
+        .ta-right{text-align:right}
+        .btn-mini{padding:4px 10px;border-radius:8px;border:1px solid var(--border,#1f2937);background:transparent;color:var(--fg,#e2e8f0);font-size:12px;cursor:pointer}
+        .btn-mini:hover{background:var(--hover,#1e293b)}
+        .empty-state{text-align:center;padding:40px 20px;color:var(--muted,#94a3b8)}
+        .empty-state h3{margin:8px 0 4px;color:var(--fg,#e2e8f0);font-size:15px}
+        .empty-state.subtle{padding:24px}
+        .empty-icon{font-size:28px;opacity:.5}
+        .error-state{text-align:center;padding:40px 20px}
+        .error-state h3{margin:10px 0 4px}
+        .btn-primary{margin-top:10px;padding:8px 16px;border-radius:10px;border:0;background:var(--accent,#6366f1);color:#fff;cursor:pointer;font-size:13px}
+        .day-summary{display:flex;justify-content:space-between;align-items:center;padding:14px 16px;margin-bottom:14px}
+        .day-summary-total .big{font-size:22px;font-weight:600;margin-right:6px}
+        .day-summary-pills{display:flex;gap:6px;flex-wrap:wrap}
+        .day-sum-pill{font-size:11px;padding:3px 8px;border-radius:99px;background:color-mix(in srgb,var(--c) 12%,transparent);color:var(--c);border:1px solid color-mix(in srgb,var(--c) 40%,transparent)}
+        .day-post-list{list-style:none;padding:0;margin:0;display:flex;flex-direction:column;gap:8px}
+        .day-post-item{display:grid;grid-template-columns:40px 1fr;gap:12px;padding:12px;border-radius:12px;border:1px solid var(--border,#1f2937);background:var(--card,#0f172a)}
+        .dp-avatar{width:40px;height:40px;border-radius:50%;object-fit:cover}
+        .dp-avatar-fallback{display:flex;align-items:center;justify-content:center;background:var(--accent,#6366f1);color:#fff;font-weight:600;font-size:14px}
+        .dp-row1{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted,#94a3b8)}
+        .dp-time{margin-left:auto}
+        .dp-title{margin-top:4px;font-size:13px;font-weight:500;line-height:1.4}
+        .dp-meta{margin-top:4px;font-size:11px;color:var(--muted,#94a3b8)}
+        .dp-user{background:none;border:0;padding:0;color:var(--accent,#818cf8);cursor:pointer;font-size:11px}
+        .dp-user:hover{text-decoration:underline}
+        .type-pill{font-size:10px;padding:2px 7px;border-radius:99px;font-weight:600;letter-spacing:.02em;text-transform:uppercase}
+        .grid-skeleton{display:flex;flex-direction:column;gap:14px}
+        .grid-skeleton .row2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+        @media(max-width:900px){.grid-skeleton .row2{grid-template-columns:1fr}}
+      </style>
+    `
+    buildToolbar(container)
+    await loadAndRender(container)
+    fadeIn(container.querySelector('.ppd-panel'), { duration: 250 })
   }
 }

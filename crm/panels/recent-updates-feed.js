@@ -1,82 +1,434 @@
 import { sb } from '/lib/supabase.js'
+import { toast, modal, confirmDialog, fmtNumber, fmtRelativeTime, fmtDateTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js'
+import { makeAreaChart, makeDonutChart, makeBarChart } from '/lib/charts.js'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+import { showUserDetailModal, deletePost } from '/lib/panel-actions.js'
+
+const REFRESH_MS = 20000
+
+const state = {
+  posts: [],
+  filtered: [],
+  search: '',
+  filter: 'all',
+  autoRefresh: false,
+  refreshHandle: null,
+  loading: false
+}
+
+function snippet(text, n = 180) {
+  if (!text) return ''
+  const t = String(text).replace(/\s+/g, ' ').trim()
+  return t.length > n ? t.slice(0, n) + '…' : t
+}
+
+function classifyPost(p) {
+  if (p.poll_id || p.type === 'poll' || p.kind === 'poll') return 'poll'
+  if ((p.content || '').length > 400 || p.type === 'longform') return 'longform'
+  if (p.image_url || p.media_url) return 'with-image'
+  return 'standard'
+}
+
+async function fetchData() {
+  const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
+  const { data: posts, error } = await sb
+    .from('posts')
+    .select('id, user_id, content, image_url, media_url, type, kind, poll_id, likes_count, comments_count, created_at, profiles:user_id(id, username, display_name, avatar_url, is_verified)')
+    .gte('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(200)
+  if (error) throw error
+  return posts || []
+}
+
+function applyFilters() {
+  const q = state.search.trim().toLowerCase()
+  state.filtered = state.posts.filter(p => {
+    const cat = classifyPost(p)
+    if (state.filter === 'longform' && cat !== 'longform') return false
+    if (state.filter === 'poll' && cat !== 'poll') return false
+    if (state.filter === 'with-image' && cat !== 'with-image') return false
+    if (!q) return true
+    const hay = (p.content || '') + ' ' + (p.profiles?.username || '') + ' ' + (p.profiles?.display_name || '')
+    return hay.toLowerCase().includes(q)
+  })
+}
+
+function renderHeros(root) {
+  const total = state.posts.length
+  const totalLikes = state.posts.reduce((s, p) => s + (p.likes_count || 0), 0)
+  const totalComments = state.posts.reduce((s, p) => s + (p.comments_count || 0), 0)
+  const withImg = state.posts.filter(p => p.image_url || p.media_url).length
+
+  const wrap = root.querySelector('#heros')
+  wrap.innerHTML = `
+    ${statHero({ label: 'Posts (7 Tage)', value: 0, dataValue: total, icon: '📝', accent: 'primary' })}
+    ${statHero({ label: 'Likes gesamt', value: 0, dataValue: totalLikes, icon: '❤️', accent: 'pink' })}
+    ${statHero({ label: 'Kommentare', value: 0, dataValue: totalComments, icon: '💬', accent: 'blue' })}
+    ${statHero({ label: 'Mit Bild', value: 0, dataValue: withImg, icon: '🖼️', accent: 'amber' })}
+  `
+  wrap.querySelectorAll('[data-value]').forEach(el => {
+    const v = parseInt(el.dataset.value, 10) || 0
+    countUp(el, v, { duration: 900 })
+  })
+}
+
+function renderCharts(root) {
+  const byDay = new Map()
+  for (const p of state.posts) {
+    const d = new Date(p.created_at)
+    const key = d.toISOString().slice(0, 10)
+    byDay.set(key, (byDay.get(key) || 0) + 1)
+  }
+  const days = [...byDay.entries()].sort((a, b) => a[0].localeCompare(b[0]))
+  const timeData = days.map(([k, v]) => ({ x: k, y: v }))
+
+  const catMap = { longform: 0, poll: 0, 'with-image': 0, standard: 0 }
+  for (const p of state.posts) catMap[classifyPost(p)]++
+  const catData = [
+    { label: 'Longform', value: catMap.longform },
+    { label: 'Umfrage', value: catMap.poll },
+    { label: 'Mit Bild', value: catMap['with-image'] },
+    { label: 'Standard', value: catMap.standard }
+  ]
+
+  const ts = root.querySelector('#chart-timeseries')
+  const dc = root.querySelector('#chart-donut')
+  if (ts) { ts.innerHTML = ''; makeAreaChart(ts, timeData, { height: 200, color: '#7c5cff', label: 'Posts/Tag' }) }
+  if (dc) { dc.innerHTML = ''; makeDonutChart(dc, catData, { height: 200 }) }
+}
+
+function postCardHtml(p) {
+  const u = p.profiles || {}
+  const avatar = u.avatar_url
+    ? `<img src="${htmlEscape(u.avatar_url)}" alt="" class="post-avatar" />`
+    : `<div class="post-avatar post-avatar--placeholder">${htmlEscape((u.display_name || u.username || '?').slice(0, 1).toUpperCase())}</div>`
+  const verified = u.is_verified ? `<span class="badge badge--verified" title="Verifiziert">✓</span>` : ''
+  const cat = classifyPost(p)
+  const catBadge = {
+    longform: '<span class="chip chip--violet">Longform</span>',
+    poll: '<span class="chip chip--amber">Umfrage</span>',
+    'with-image': '<span class="chip chip--blue">Bild</span>',
+    standard: ''
+  }[cat]
+  const image = (p.image_url || p.media_url)
+    ? `<div class="post-media"><img loading="lazy" src="${htmlEscape(p.image_url || p.media_url)}" alt="" /></div>`
+    : ''
+  return `
+    <article class="post-card glass-card" data-id="${htmlEscape(p.id)}">
+      <header class="post-card__head">
+        <button class="post-user" data-action="open-user" data-uid="${htmlEscape(u.id || p.user_id || '')}">
+          ${avatar}
+          <div class="post-user__meta">
+            <div class="post-user__name">${htmlEscape(u.display_name || u.username || 'Unbekannt')} ${verified}</div>
+            <div class="post-user__sub">@${htmlEscape(u.username || '—')} · ${fmtRelativeTime(p.created_at)}</div>
+          </div>
+        </button>
+        <div class="post-card__tags">${catBadge}</div>
+      </header>
+      <div class="post-card__body">
+        <p class="post-content">${htmlEscape(snippet(p.content, 280))}</p>
+        ${image}
+      </div>
+      <footer class="post-card__foot">
+        <div class="post-metrics">
+          <span title="Likes">❤️ ${fmtNumber(p.likes_count || 0)}</span>
+          <span title="Kommentare">💬 ${fmtNumber(p.comments_count || 0)}</span>
+        </div>
+        <div class="post-actions">
+          <button class="btn btn--ghost" data-action="view" title="Ansehen">${iconHtml('eye')} Ansehen</button>
+          <button class="btn btn--ghost" data-action="edit" title="Bearbeiten">${iconHtml('edit')} Bearbeiten</button>
+          <button class="btn btn--ghost btn--danger" data-action="delete" title="Löschen">${iconHtml('trash')} Löschen</button>
+        </div>
+      </footer>
+    </article>
+  `
+}
+
+function renderFeed(root) {
+  const grid = root.querySelector('#feed-grid')
+  const empty = root.querySelector('#feed-empty')
+  if (!state.filtered.length) {
+    grid.innerHTML = ''
+    empty.style.display = ''
+    empty.innerHTML = `
+      <div class="empty-state glass-card">
+        <div class="empty-state__icon">📭</div>
+        <div class="empty-state__title">Keine Posts gefunden</div>
+        <div class="empty-state__text">Versuche einen anderen Suchbegriff oder Filter.</div>
+        <button class="btn btn--primary" id="empty-reset">Filter zurücksetzen</button>
+      </div>`
+    empty.querySelector('#empty-reset')?.addEventListener('click', () => {
+      state.search = ''
+      state.filter = 'all'
+      const si = root.querySelector('#search')
+      if (si) si.value = ''
+      root.querySelectorAll('.filter-pill').forEach(el => el.classList.toggle('is-active', el.dataset.filter === 'all'))
+      applyFilters(); renderFeed(root)
+    })
+    return
+  }
+  empty.style.display = 'none'
+  grid.innerHTML = state.filtered.slice(0, 60).map(postCardHtml).join('')
+}
+
+function openUserDrawer(userId) {
+  if (!userId) return
+  if (typeof showUserDetailModal === 'function') {
+    try { showUserDetailModal(userId); return } catch (_) {}
+  }
+  const d = drawer({ title: 'Benutzer-Details', width: 480 })
+  d.body.innerHTML = `<div class="p-4">${spinnerHtml()}</div>`
+  sb.from('profiles').select('*').eq('id', userId).maybeSingle().then(({ data: u, error }) => {
+    if (error || !u) { d.body.innerHTML = `<div class="p-4 text-muted">Benutzer nicht gefunden.</div>`; return }
+    d.body.innerHTML = `
+      <div class="user-drawer">
+        <div class="user-drawer__head">
+          ${u.avatar_url ? `<img src="${htmlEscape(u.avatar_url)}" class="user-drawer__avatar" />` : `<div class="user-drawer__avatar user-drawer__avatar--ph">${htmlEscape((u.display_name||u.username||'?').slice(0,1).toUpperCase())}</div>`}
+          <div>
+            <div class="user-drawer__name">${htmlEscape(u.display_name || u.username || '—')} ${u.is_verified ? '<span class="badge badge--verified">✓</span>' : ''}</div>
+            <div class="user-drawer__handle">@${htmlEscape(u.username || '—')}</div>
+          </div>
+        </div>
+        <div class="user-drawer__bio">${htmlEscape(u.bio || '')}</div>
+        <dl class="user-drawer__meta">
+          <div><dt>Beigetreten</dt><dd>${fmtDateTime(u.created_at)}</dd></div>
+          <div><dt>Follower</dt><dd>${fmtNumber(u.followers_count || 0)}</dd></div>
+          <div><dt>Posts</dt><dd>${fmtNumber(u.posts_count || 0)}</dd></div>
+        </dl>
+      </div>`
+  })
+}
+
+function viewPost(post) {
+  const m = modal({ title: 'Post anzeigen', width: 640 })
+  const u = post.profiles || {}
+  m.body.innerHTML = `
+    <div class="post-view">
+      <div class="post-view__head">
+        <strong>${htmlEscape(u.display_name || u.username || '—')}</strong>
+        <span class="text-muted">· ${fmtDateTime(post.created_at)}</span>
+      </div>
+      <div class="post-view__content">${htmlEscape(post.content || '')}</div>
+      ${(post.image_url || post.media_url) ? `<img class="post-view__img" src="${htmlEscape(post.image_url || post.media_url)}" />` : ''}
+      <div class="post-view__metrics">❤️ ${fmtNumber(post.likes_count || 0)} · 💬 ${fmtNumber(post.comments_count || 0)}</div>
+    </div>`
+}
+
+function editPost(post) {
+  const m = modal({ title: 'Post bearbeiten', width: 560 })
+  m.body.innerHTML = `
+    <div class="form">
+      <label class="form__label">Inhalt</label>
+      <textarea id="edit-content" class="form__textarea" rows="6">${htmlEscape(post.content || '')}</textarea>
+      <div class="form__actions">
+        <button class="btn" id="edit-cancel">Abbrechen</button>
+        <button class="btn btn--primary" id="edit-save">Speichern</button>
+      </div>
+    </div>`
+  m.body.querySelector('#edit-cancel').addEventListener('click', () => m.close())
+  m.body.querySelector('#edit-save').addEventListener('click', async () => {
+    const next = m.body.querySelector('#edit-content').value
+    try {
+      const { error } = await sb.from('posts').update({ content: next }).eq('id', post.id)
+      if (error) throw error
+      toast({ kind: 'success', text: 'Post aktualisiert.' })
+      m.close()
+      await reload()
+    } catch (e) {
+      toast({ kind: 'error', text: 'Fehler: ' + (e?.message || e) })
+    }
+  })
+}
+
+async function deletePostFlow(post) {
+  const ok = await confirmDialog({
+    title: 'Post löschen?',
+    text: 'Diese Aktion kann nicht rückgängig gemacht werden.',
+    danger: true,
+    confirmText: 'Löschen'
+  })
+  if (!ok) return
+  try {
+    if (typeof deletePost === 'function') {
+      await deletePost(post.id)
+    } else {
+      const { error } = await sb.from('posts').delete().eq('id', post.id)
+      if (error) throw error
+    }
+    toast({ kind: 'success', text: 'Post gelöscht.' })
+    state.posts = state.posts.filter(p => p.id !== post.id)
+    applyFilters()
+    if (panelRoot) {
+      renderFeed(panelRoot)
+      renderHeros(panelRoot)
+      renderCharts(panelRoot)
+    }
+  } catch (e) {
+    toast({ kind: 'error', text: 'Löschen fehlgeschlagen: ' + (e?.message || e) })
+  }
+}
+
+let panelRoot = null
+
+async function reload() {
+  if (!panelRoot) return
+  const body = panelRoot.querySelector('#body')
+  try {
+    state.loading = true
+    state.posts = await fetchData()
+    applyFilters()
+    renderHeros(panelRoot)
+    renderCharts(panelRoot)
+    renderFeed(panelRoot)
+  } catch (e) {
+    body.innerHTML = `
+      <div class="error-state glass-card">
+        <div class="error-state__icon">⚠️</div>
+        <div class="error-state__title">Konnte Posts nicht laden</div>
+        <div class="error-state__text">${htmlEscape(e?.message || String(e))}</div>
+        <button class="btn btn--primary" id="retry">Erneut versuchen</button>
+      </div>`
+    body.querySelector('#retry')?.addEventListener('click', reload)
+  } finally {
+    state.loading = false
+  }
+}
+
+function wireToolbar(root) {
+  root.querySelector('#btn-refresh').addEventListener('click', () => reload())
+  root.querySelector('#btn-pdf').addEventListener('click', () => exportPanelAsPdf({ title: 'Aktuelle Posts', element: root }))
+  root.querySelector('#btn-csv').addEventListener('click', () => {
+    const rows = state.filtered.map(p => ({
+      id: p.id,
+      user: p.profiles?.username || '',
+      content: snippet(p.content, 240),
+      type: classifyPost(p),
+      likes: p.likes_count || 0,
+      comments: p.comments_count || 0,
+      created_at: p.created_at
+    }))
+    exportCsv('aktuelle-posts.csv', rows)
+  })
+  const autoBtn = root.querySelector('#btn-auto')
+  autoBtn.addEventListener('click', () => {
+    state.autoRefresh = !state.autoRefresh
+    autoBtn.classList.toggle('is-active', state.autoRefresh)
+    autoBtn.innerHTML = state.autoRefresh ? '⏸ Auto-Refresh AN' : '▶️ Auto-Refresh'
+    if (state.autoRefresh) {
+      state.refreshHandle = setInterval(reload, REFRESH_MS)
+    } else if (state.refreshHandle) {
+      clearInterval(state.refreshHandle); state.refreshHandle = null
+    }
+  })
+
+  const search = root.querySelector('#search')
+  search.addEventListener('input', debounce(() => {
+    state.search = search.value
+    applyFilters(); renderFeed(root)
+  }, 180))
+
+  root.querySelectorAll('.filter-pill').forEach(el => {
+    el.addEventListener('click', () => {
+      state.filter = el.dataset.filter
+      root.querySelectorAll('.filter-pill').forEach(x => x.classList.toggle('is-active', x === el))
+      applyFilters(); renderFeed(root)
+    })
+  })
+
+  root.querySelector('#feed-grid').addEventListener('click', (ev) => {
+    const userBtn = ev.target.closest('[data-action="open-user"]')
+    if (userBtn) {
+      ev.preventDefault()
+      openUserDrawer(userBtn.dataset.uid)
+      return
+    }
+    const card = ev.target.closest('.post-card')
+    if (!card) return
+    const id = card.dataset.id
+    const post = state.posts.find(p => String(p.id) === String(id))
+    if (!post) return
+    const actBtn = ev.target.closest('[data-action]')
+    if (!actBtn) return
+    const action = actBtn.dataset.action
+    if (action === 'view') viewPost(post)
+    else if (action === 'edit') editPost(post)
+    else if (action === 'delete') deletePostFlow(post)
+  })
+}
 
 export default {
   id: 'recent-updates-feed',
   title: 'Aktuelle Posts',
   category: 'content',
-  summary: "Letzte User-Updates im Feed-Stil.",
+
   async mount(container) {
-    container.innerHTML = `<div class="panel-shell">
-      <div class="panel-head"><h2>Aktuelle Posts</h2><button class="refresh-btn">Aktualisieren</button></div>
-      <div class="panel-body"><div class="loading">Lädt…</div></div>
-    </div>`
-    const body = container.querySelector('.panel-body')
+    panelRoot = container
+    container.id = 'panel-recent-updates'
+    container.innerHTML = `
+      <div class="panel-shell">
+        <div class="panel-head glass-card">
+          <div class="panel-head__left">
+            <h2 class="panel-title">Aktuelle Posts</h2>
+            <p class="panel-sub">Live-Feed der letzten 7 Tage · Suche, Filter und schnelle Aktionen</p>
+          </div>
+          <div class="toolbar">
+            <button class="btn" id="btn-auto" title="Automatisch alle 20s aktualisieren">▶️ Auto-Refresh</button>
+            <button class="btn" id="btn-refresh" title="Aktualisieren">🔄 Aktualisieren</button>
+            <button class="btn" id="btn-pdf" title="PDF exportieren">📄 PDF</button>
+            <button class="btn" id="btn-csv" title="CSV exportieren">💾 CSV</button>
+          </div>
+        </div>
 
-    const escapeHtml = (s) => String(s ?? '')
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
+        <div class="hero-grid" id="heros">
+          ${skeletonLoader({ count: 4, height: 96, layout: 'grid' })}
+        </div>
 
-    const formatDate = (iso) => {
-      if (!iso) return ''
-      try {
-        const d = new Date(iso)
-        const now = new Date()
-        const diffMs = now - d
-        const diffMin = Math.floor(diffMs / 60000)
-        if (diffMin < 1) return 'gerade eben'
-        if (diffMin < 60) return `vor ${diffMin} Min.`
-        const diffH = Math.floor(diffMin / 60)
-        if (diffH < 24) return `vor ${diffH} Std.`
-        const diffD = Math.floor(diffH / 24)
-        if (diffD < 7) return `vor ${diffD} T.`
-        return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' })
-      } catch {
-        return iso
-      }
+        <div class="chart-grid">
+          <div class="glass-card chart-card">
+            <div class="chart-card__head"><h3>Posts pro Tag</h3><span class="text-muted">letzte 7 Tage</span></div>
+            <div id="chart-timeseries" class="chart-card__body">${skeletonLoader({ height: 200 })}</div>
+          </div>
+          <div class="glass-card chart-card">
+            <div class="chart-card__head"><h3>Verteilung</h3><span class="text-muted">nach Typ</span></div>
+            <div id="chart-donut" class="chart-card__body">${skeletonLoader({ height: 200 })}</div>
+          </div>
+        </div>
+
+        <div class="filters glass-card">
+          <div class="filters__search">
+            <input id="search" type="search" placeholder="Suche nach Inhalt oder Nutzer…" class="input input--search" />
+          </div>
+          <div class="filters__pills">
+            <button class="filter-pill is-active" data-filter="all">Alle</button>
+            <button class="filter-pill" data-filter="longform">Longform</button>
+            <button class="filter-pill" data-filter="poll">Umfragen</button>
+            <button class="filter-pill" data-filter="with-image">Mit Bild</button>
+          </div>
+        </div>
+
+        <div class="panel-body" id="body">
+          <div id="feed-grid" class="feed-grid">
+            ${skeletonLoader({ count: 6, height: 180, layout: 'grid' })}
+          </div>
+          <div id="feed-empty" style="display:none"></div>
+        </div>
+      </div>
+    `
+
+    wireToolbar(container)
+    fadeIn(container, { duration: 280 })
+    await reload()
+  },
+
+  unmount() {
+    if (state.refreshHandle) {
+      clearInterval(state.refreshHandle)
+      state.refreshHandle = null
     }
-
-    const refresh = async () => {
-      body.innerHTML = '<div class="loading">Lädt…</div>'
-      try {
-        const { data, error } = await sb
-          .from('updates')
-          .select('id, content, created_at, user_id, users:user_id(username)')
-          .order('created_at', { ascending: false })
-          .limit(25)
-
-        if (error) throw error
-
-        const rows = Array.isArray(data) ? data : []
-
-        if (rows.length === 0) {
-          body.innerHTML = '<div class="empty">Keine Posts gefunden.</div>'
-          return
-        }
-
-        const cards = rows.map(r => {
-          const username = r.users?.username || 'unbekannt'
-          const content = r.content || ''
-          const when = formatDate(r.created_at)
-          return `
-            <div style="background:#1C1C24;border:1px solid #2A2A33;border-radius:12px;padding:14px 16px;margin-bottom:10px;">
-              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-                <div style="color:#8B5CF6;font-weight:600;font-size:14px;">@${escapeHtml(username)}</div>
-                <div style="color:#888;font-size:12px;">${escapeHtml(when)}</div>
-              </div>
-              <div style="color:#fff;font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word;">${escapeHtml(content)}</div>
-            </div>
-          `
-        }).join('')
-
-        body.innerHTML = `<div class="feed" style="display:flex;flex-direction:column;">${cards}</div>`
-      } catch (e) {
-        body.innerHTML = '<div class="empty">Daten kommen bald: ' + escapeHtml(e?.message || 'unbekannt') + '</div>'
-      }
-    }
-    container.querySelector('.refresh-btn').addEventListener('click', refresh)
-    await refresh()
+    state.autoRefresh = false
+    panelRoot = null
   }
 }

@@ -1,98 +1,400 @@
 import { sb } from '/lib/supabase.js'
+import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js'
+import { makeBarChart, makeDonutChart } from '/lib/charts.js'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { drawer, glassCard, statHero } from '/lib/layout-extras.js'
+import { showUserDetailModal, sendBroadcastPush } from '/lib/panel-actions.js'
+
+// ---------- Versionsvergleich (semver light) ----------
+function parseVersion(v) {
+  if (!v) return [0, 0, 0]
+  const m = String(v).trim().replace(/^v/i, '').split(/[.\-+]/).map(s => parseInt(s, 10))
+  return [m[0] || 0, m[1] || 0, m[2] || 0]
+}
+function cmpVersion(a, b) {
+  const pa = parseVersion(a), pb = parseVersion(b)
+  for (let i = 0; i < 3; i++) { if (pa[i] !== pb[i]) return pa[i] - pb[i] }
+  return 0
+}
+function versionRank(v, sortedDesc) {
+  const idx = sortedDesc.findIndex(x => cmpVersion(x, v) === 0)
+  return idx < 0 ? sortedDesc.length : idx
+}
+function colorFor(rank) {
+  if (rank === 0) return { fill: '#8b5cf6', label: 'Aktuell', tone: 'violet' }
+  if (rank === 1) return { fill: '#eab308', label: 'Eine Version alt', tone: 'amber' }
+  return { fill: '#ef4444', label: 'Mehrere Versionen alt', tone: 'red' }
+}
+
+// ---------- Daten laden ----------
+async function fetchVersionData() {
+  try {
+    const { data, error } = await sb.rpc('crm_app_versions_in_field')
+    if (!error && Array.isArray(data) && data.length) return normalize(data)
+  } catch (_) {}
+
+  const { data, error } = await sb
+    .from('user_devices')
+    .select('app_version, user_id, platform, last_seen_at')
+    .not('app_version', 'is', null)
+  if (error) throw error
+
+  const grouped = new Map()
+  for (const r of data || []) {
+    const v = (r.app_version || '').trim()
+    if (!v) continue
+    if (!grouped.has(v)) grouped.set(v, { version: v, user_ids: new Set(), platforms: new Map(), last_seen: null })
+    const g = grouped.get(v)
+    g.user_ids.add(r.user_id)
+    g.platforms.set(r.platform || 'unknown', (g.platforms.get(r.platform || 'unknown') || 0) + 1)
+    if (!g.last_seen || (r.last_seen_at && r.last_seen_at > g.last_seen)) g.last_seen = r.last_seen_at
+  }
+  return normalize([...grouped.values()].map(g => ({
+    version: g.version,
+    user_count: g.user_ids.size,
+    platforms: Object.fromEntries(g.platforms),
+    last_seen: g.last_seen
+  })))
+}
+
+function normalize(rows) {
+  const arr = rows.map(r => ({
+    version: r.version,
+    user_count: Number(r.user_count || r.users || 0),
+    platforms: r.platforms || {},
+    last_seen: r.last_seen || r.last_seen_at || null
+  })).filter(r => r.version && r.user_count > 0)
+  const versions = [...new Set(arr.map(r => r.version))].sort((a, b) => cmpVersion(b, a))
+  return arr.map(r => ({ ...r, rank: versionRank(r.version, versions) }))
+    .sort((a, b) => cmpVersion(b.version, a.version))
+}
+
+async function fetchUsersOnVersion(version) {
+  try {
+    const { data, error } = await sb.rpc('crm_users_on_app_version', { p_version: version })
+    if (!error && Array.isArray(data)) return data
+  } catch (_) {}
+  const { data, error } = await sb
+    .from('user_devices')
+    .select('user_id, platform, last_seen_at, profiles!inner(id, username, display_name, avatar_url, email)')
+    .eq('app_version', version)
+    .order('last_seen_at', { ascending: false })
+    .limit(500)
+  if (error) throw error
+  const seen = new Set()
+  const out = []
+  for (const r of data || []) {
+    if (seen.has(r.user_id)) continue
+    seen.add(r.user_id)
+    out.push({
+      id: r.user_id,
+      username: r.profiles?.username || '',
+      display_name: r.profiles?.display_name || r.profiles?.username || '—',
+      avatar_url: r.profiles?.avatar_url || '',
+      email: r.profiles?.email || '',
+      platform: r.platform,
+      last_seen_at: r.last_seen_at
+    })
+  }
+  return out
+}
 
 export default {
   id: 'client-build-versions',
   title: 'App-Versionen im Feld',
   category: 'users',
-  summary: 'Verteilung der client_build_version unter aktiven Usern.',
+
   async mount(container) {
-    container.innerHTML = `<div class="panel-shell">
-      <div class="panel-head"><h2>App-Versionen im Feld</h2><button class="refresh-btn">Aktualisieren</button></div>
-      <div class="panel-body"><div class="loading">Lädt…</div></div>
-    </div>`
-    const body = container.querySelector('.panel-body')
+    container.innerHTML = `
+      <div class="panel-shell">
+        <div class="panel-head">
+          <div>
+            <h2>App-Versionen im Feld</h2>
+            <p class="panel-sub">Verteilung aktiver Builds, Update-Druck und Force-Push pro Version.</p>
+          </div>
+          <div class="toolbar" id="cbv-toolbar">
+            <button class="btn btn-ghost" data-act="refresh">${iconHtml('refresh')} Aktualisieren</button>
+            <button class="btn btn-ghost" data-act="pdf">${iconHtml('file-text')} PDF</button>
+            <button class="btn btn-ghost" data-act="csv">${iconHtml('download')} CSV</button>
+          </div>
+        </div>
+        <div class="panel-body" id="cbv-body"></div>
+      </div>
+    `
 
-    const refresh = async () => {
-      body.innerHTML = '<div class="loading">Lädt…</div>'
+    const body = container.querySelector('#cbv-body')
+    body.innerHTML = skeletonLoader({ rows: 6, height: 64 })
+    fadeIn(container)
+
+    const state = { rows: [], latest: null }
+
+    const renderAll = async () => {
+      body.innerHTML = skeletonLoader({ rows: 6, height: 64 })
       try {
-        const since = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString()
-        const { data, error } = await sb
-          .from('users')
-          .select('client_build_version, last_seen_at')
-          .gt('last_seen_at', since)
-          .is('deleted_at', null)
-          .limit(50000)
-        if (error) throw error
-
-        const counts = new Map()
-        for (const row of (data || [])) {
-          const v = row.client_build_version || 'unbekannt'
-          counts.set(v, (counts.get(v) || 0) + 1)
-        }
-        const entries = [...counts.entries()].sort((a, b) => b[1] - a[1])
-
-        if (entries.length === 0) {
-          body.innerHTML = '<div class="empty">Keine aktiven User in den letzten 14 Tagen.</div>'
-          return
-        }
-
-        const total = entries.reduce((s, [, n]) => s + n, 0)
-        const max = entries[0][1]
-        const top = entries.slice(0, 12)
-
-        const W = 720, H = 280, PAD_L = 40, PAD_B = 60, PAD_T = 16, PAD_R = 16
-        const innerW = W - PAD_L - PAD_R
-        const innerH = H - PAD_T - PAD_B
-        const barW = Math.max(8, innerW / top.length - 10)
-
-        const bars = top.map(([v, n], i) => {
-          const x = PAD_L + i * (innerW / top.length) + 5
-          const h = max > 0 ? (n / max) * innerH : 0
-          const y = PAD_T + innerH - h
-          const label = String(v).length > 10 ? String(v).slice(0, 10) + '…' : String(v)
-          return `
-            <g>
-              <rect x="${x}" y="${y}" width="${barW}" height="${h}" rx="6" fill="#8B5CF6"></rect>
-              <text x="${x + barW / 2}" y="${y - 6}" text-anchor="middle" fill="#fff" font-size="11" font-family="system-ui">${n}</text>
-              <text x="${x + barW / 2}" y="${PAD_T + innerH + 16}" text-anchor="middle" fill="#bbb" font-size="11" font-family="system-ui">${label}</text>
-            </g>`
-        }).join('')
-
-        const rows = entries.map(([v, n], i) => `
-          <tr>
-            <td>${i + 1}</td>
-            <td>${escapeHtml(String(v))}</td>
-            <td>${n}</td>
-            <td>${((n / total) * 100).toFixed(1)} %</td>
-          </tr>`).join('')
-
-        body.innerHTML = `
-          <div class="kpi-grid">
-            <div class="kpi-tile"><div class="label">Aktive User (14d)</div><div class="value">${total}</div><div class="hint">last_seen_at &gt; now()-14d</div></div>
-            <div class="kpi-tile"><div class="label">Distinct Versionen</div><div class="value">${entries.length}</div><div class="hint">inkl. unbekannt</div></div>
-            <div class="kpi-tile"><div class="label">Top-Version</div><div class="value">${escapeHtml(String(entries[0][0]))}</div><div class="hint">${entries[0][1]} User · ${((entries[0][1] / total) * 100).toFixed(1)} %</div></div>
-          </div>
-          <div style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:12px;margin-top:12px;">
-            <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" style="display:block;">
-              <line x1="${PAD_L}" y1="${PAD_T + innerH}" x2="${W - PAD_R}" y2="${PAD_T + innerH}" stroke="#2A2A33" stroke-width="1"></line>
-              ${bars}
-            </svg>
-          </div>
-          <table class="data-table" style="margin-top:12px;">
-            <thead><tr><th>#</th><th>Build-Version</th><th>User</th><th>Anteil</th></tr></thead>
-            <tbody>${rows}</tbody>
-          </table>
-        `
-      } catch (e) {
-        body.innerHTML = '<div class="empty">Daten kommen bald: ' + (e?.message || 'unbekannt') + '</div>'
+        const rows = await fetchVersionData()
+        state.rows = rows
+        state.latest = rows.length ? rows.map(r => r.version).sort((a, b) => cmpVersion(b, a))[0] : null
+        renderContent(body, state, renderAll)
+      } catch (err) {
+        console.error(err)
+        body.innerHTML = renderError(err)
+        body.querySelector('[data-act="retry"]')?.addEventListener('click', renderAll)
       }
     }
 
-    container.querySelector('.refresh-btn').addEventListener('click', refresh)
-    await refresh()
+    container.querySelector('[data-act="refresh"]').addEventListener('click', () => {
+      toast('Aktualisiere…')
+      renderAll()
+    })
+    container.querySelector('[data-act="pdf"]').addEventListener('click', () => {
+      exportPanelAsPdf({ container, title: 'App-Versionen im Feld' })
+    })
+    container.querySelector('[data-act="csv"]').addEventListener('click', () => {
+      if (!state.rows.length) return toast('Keine Daten')
+      exportCsv({
+        filename: `app-versions-${new Date().toISOString().slice(0, 10)}.csv`,
+        rows: state.rows.map(r => ({
+          Version: r.version,
+          Nutzer: r.user_count,
+          Status: colorFor(r.rank).label,
+          Plattformen: Object.entries(r.platforms).map(([k, v]) => `${k}:${v}`).join('|'),
+          'Zuletzt aktiv': r.last_seen ? fmtDateTime(r.last_seen) : ''
+        }))
+      })
+    })
+
+    await renderAll()
   }
 }
 
-function escapeHtml(s) {
-  return s.replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]))
+function renderError(err) {
+  return `
+    <div class="empty-state error">
+      ${iconHtml('alert-triangle')}
+      <h3>Konnte App-Versionen nicht laden</h3>
+      <p>${htmlEscape(err?.message || 'Unbekannter Fehler')}</p>
+      <button class="btn btn-primary" data-act="retry">${iconHtml('refresh')} Erneut versuchen</button>
+    </div>
+  `
+}
+
+function renderEmpty(body) {
+  body.innerHTML = `
+    <div class="empty-state">
+      ${iconHtml('smartphone')}
+      <h3>Noch keine App-Versionen erfasst</h3>
+      <p>Sobald Clients Heartbeats senden, erscheinen sie hier mit Verteilung und Update-Druck.</p>
+    </div>
+  `
+}
+
+function renderContent(body, state, refresh) {
+  const rows = state.rows
+  if (!rows.length) return renderEmpty(body)
+
+  const totalUsers = rows.reduce((a, r) => a + r.user_count, 0)
+  const latestUsers = rows.filter(r => r.rank === 0).reduce((a, r) => a + r.user_count, 0)
+  const oneOld = rows.filter(r => r.rank === 1).reduce((a, r) => a + r.user_count, 0)
+  const stale = rows.filter(r => r.rank >= 2).reduce((a, r) => a + r.user_count, 0)
+  const adoption = totalUsers ? Math.round((latestUsers / totalUsers) * 100) : 0
+
+  body.innerHTML = `
+    <div class="cbv-grid">
+      <div class="cbv-heros">
+        ${statHero({ label: 'Nutzer gesamt', value: '<span data-cu="' + totalUsers + '">0</span>', icon: 'users', tone: 'neutral' })}
+        ${statHero({ label: 'Auf aktueller Version', value: '<span data-cu="' + latestUsers + '">0</span>', sub: adoption + '% Adoption', icon: 'check-circle', tone: 'violet' })}
+        ${statHero({ label: 'Eine Version alt', value: '<span data-cu="' + oneOld + '">0</span>', icon: 'clock', tone: 'amber' })}
+        ${statHero({ label: 'Mehrere Versionen zurück', value: '<span data-cu="' + stale + '">0</span>', icon: 'alert-triangle', tone: 'red' })}
+      </div>
+
+      <div class="cbv-row">
+        ${glassCard({
+          title: 'Verteilung nach Version',
+          subtitle: 'Klick auf Balken öffnet Nutzerliste & Force-Update',
+          bodyHtml: '<div id="cbv-bar" style="height:' + Math.max(rows.length * 44 + 40, 220) + 'px"></div>'
+        })}
+        ${glassCard({
+          title: 'Update-Druck',
+          subtitle: 'Aktuell vs. veraltet',
+          bodyHtml: '<div id="cbv-donut" style="height:260px"></div>'
+        })}
+      </div>
+
+      <div class="glass-card">
+        <div class="card-head">
+          <div>
+            <h3>Alle Versionen</h3>
+            <p class="muted">Sortiert nach Version (neueste zuerst).</p>
+          </div>
+        </div>
+        <div class="card-body">
+          <table class="data-table data-table-hover">
+            <thead>
+              <tr>
+                <th>Version</th>
+                <th>Status</th>
+                <th class="num">Nutzer</th>
+                <th>Plattformen</th>
+                <th>Zuletzt aktiv</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${rows.map(r => {
+                const c = colorFor(r.rank)
+                const platforms = Object.entries(r.platforms || {}).map(([k, v]) => `<span class="chip chip-xs">${htmlEscape(k)} · ${fmtNumber(v)}</span>`).join(' ')
+                return `
+                  <tr data-version="${htmlEscape(r.version)}" class="row-clickable">
+                    <td><strong>${htmlEscape(r.version)}</strong></td>
+                    <td><span class="badge badge-${c.tone}">${c.label}</span></td>
+                    <td class="num">${fmtNumber(r.user_count)}</td>
+                    <td>${platforms || '<span class="muted">—</span>'}</td>
+                    <td>${r.last_seen ? fmtRelativeTime(r.last_seen) : '<span class="muted">—</span>'}</td>
+                    <td class="row-actions">
+                      <button class="btn btn-xs" data-act="users" data-version="${htmlEscape(r.version)}">${iconHtml('users')} Nutzer</button>
+                      ${r.rank > 0 ? `<button class="btn btn-xs btn-warn" data-act="force" data-version="${htmlEscape(r.version)}">${iconHtml('bell')} Force-Push</button>` : ''}
+                    </td>
+                  </tr>
+                `
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  `
+
+  body.querySelectorAll('[data-cu]').forEach(el => {
+    const target = parseInt(el.dataset.cu, 10) || 0
+    countUp(el, target, { duration: 900 })
+  })
+
+  const sortedAsc = [...rows].sort((a, b) => a.user_count - b.user_count)
+  makeBarChart(body.querySelector('#cbv-bar'), {
+    horizontal: true,
+    categories: sortedAsc.map(r => r.version),
+    series: [{
+      name: 'Nutzer',
+      data: sortedAsc.map(r => ({
+        x: r.version,
+        y: r.user_count,
+        fillColor: colorFor(r.rank).fill
+      }))
+    }],
+    onBarClick: (i) => {
+      const r = sortedAsc[i]
+      if (r) openVersionDrawer(r, state, refresh)
+    }
+  })
+
+  makeDonutChart(body.querySelector('#cbv-donut'), {
+    labels: ['Aktuell', 'Eine alt', 'Mehrere alt'],
+    series: [latestUsers, oneOld, stale],
+    colors: ['#8b5cf6', '#eab308', '#ef4444']
+  })
+
+  body.querySelectorAll('tr[data-version]').forEach(tr => {
+    tr.addEventListener('click', (ev) => {
+      if (ev.target.closest('button')) return
+      const v = tr.dataset.version
+      const r = rows.find(x => x.version === v)
+      if (r) openVersionDrawer(r, state, refresh)
+    })
+  })
+  body.querySelectorAll('button[data-act="users"]').forEach(b => {
+    b.addEventListener('click', (e) => {
+      e.stopPropagation()
+      const r = rows.find(x => x.version === b.dataset.version)
+      if (r) openVersionDrawer(r, state, refresh)
+    })
+  })
+  body.querySelectorAll('button[data-act="force"]').forEach(b => {
+    b.addEventListener('click', async (e) => {
+      e.stopPropagation()
+      const v = b.dataset.version
+      const r = rows.find(x => x.version === v)
+      if (r) await forceUpdatePush(r, refresh)
+    })
+  })
+}
+
+async function openVersionDrawer(versionRow, state, refresh) {
+  const c = colorFor(versionRow.rank)
+  const d = drawer({
+    title: `Version ${versionRow.version}`,
+    subtitle: `${fmtNumber(versionRow.user_count)} Nutzer · ${c.label}`,
+    width: 560,
+    bodyHtml: `
+      <div class="drawer-toolbar">
+        <span class="badge badge-${c.tone}">${c.label}</span>
+        ${versionRow.rank > 0
+          ? `<button class="btn btn-warn" data-act="force-bulk">${iconHtml('bell')} Force-Update an alle (${fmtNumber(versionRow.user_count)})</button>`
+          : `<span class="muted">Diese Version ist aktuell – kein Push nötig.</span>`}
+      </div>
+      <div id="cbv-userlist" class="user-list">${typeof spinnerHtml === 'function' ? spinnerHtml() : 'Lade Nutzer…'}</div>
+    `
+  })
+
+  const listEl = d.el.querySelector('#cbv-userlist')
+  try {
+    const users = await fetchUsersOnVersion(versionRow.version)
+    if (!users.length) {
+      listEl.innerHTML = `<div class="empty-state small">${iconHtml('users')}<p>Keine Nutzer-Details verfügbar.</p></div>`
+    } else {
+      listEl.innerHTML = users.map(u => `
+        <div class="user-row" data-uid="${htmlEscape(u.id)}">
+          <div class="avatar">${u.avatar_url ? `<img src="${htmlEscape(u.avatar_url)}" alt="">` : iconHtml('user')}</div>
+          <div class="user-meta">
+            <div class="user-name">${htmlEscape(u.display_name || u.username || '—')}</div>
+            <div class="user-sub muted">${htmlEscape(u.username ? '@' + u.username : (u.email || ''))} ${u.platform ? '· ' + htmlEscape(u.platform) : ''}</div>
+          </div>
+          <div class="user-last muted">${u.last_seen_at ? fmtRelativeTime(u.last_seen_at) : ''}</div>
+        </div>
+      `).join('')
+      listEl.querySelectorAll('.user-row').forEach(row => {
+        row.addEventListener('click', () => showUserDetailModal(row.dataset.uid))
+      })
+    }
+  } catch (err) {
+    console.error(err)
+    listEl.innerHTML = `<div class="empty-state error small">${iconHtml('alert-triangle')}<p>${htmlEscape(err.message || 'Fehler beim Laden')}</p></div>`
+  }
+
+  d.el.querySelector('[data-act="force-bulk"]')?.addEventListener('click', async () => {
+    await forceUpdatePush(versionRow, refresh, d)
+  })
+}
+
+async function forceUpdatePush(versionRow, refresh, drawerInstance) {
+  const ok = await confirmDialog({
+    title: 'Force-Update-Push senden?',
+    body: `Alle <strong>${fmtNumber(versionRow.user_count)}</strong> Nutzer auf Version <strong>${htmlEscape(versionRow.version)}</strong> erhalten eine Push-Nachricht mit der Aufforderung zu aktualisieren.`,
+    confirmLabel: 'Push senden',
+    danger: true
+  })
+  if (!ok) return
+
+  try {
+    let sent = 0
+    try {
+      const { data, error } = await sb.rpc('crm_force_update_push', { p_version: versionRow.version })
+      if (error) throw error
+      sent = Number(data?.sent ?? data ?? versionRow.user_count)
+    } catch (rpcErr) {
+      const res = await sendBroadcastPush({
+        title: 'Update verfügbar',
+        body: 'Bitte aktualisiere Podfluence auf die neueste Version für beste Stabilität.',
+        segment: { app_version: versionRow.version },
+        data: { type: 'force_update', target_version: versionRow.version }
+      })
+      sent = Number(res?.sent || versionRow.user_count)
+    }
+    toast(`Push an ${fmtNumber(sent)} Nutzer gesendet`, 'success')
+    drawerInstance?.close?.()
+    refresh?.()
+  } catch (err) {
+    console.error(err)
+    toast(`Fehler: ${err.message || 'Push fehlgeschlagen'}`, 'error')
+  }
 }

@@ -1,160 +1,421 @@
 import { sb } from '/lib/supabase.js'
+import { toast, modal, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
+import { makeAreaChart, makeBarChart, makeDonutChart, makeSparkline } from '/lib/charts.js'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { drawer, tabs, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
+import { showUserDetailModal } from '/lib/panel-actions.js'
+
+const RANGE_OPTIONS = [
+  { value: '7', label: '7T' },
+  { value: '30', label: '30T' },
+  { value: '90', label: '90T' }
+]
+
+const state = {
+  range: '30',
+  series: [],
+  loading: false,
+  error: null
+}
+
+function formatDateKey(d) {
+  const date = new Date(d)
+  const y = date.getFullYear()
+  const m = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  return `${y}-${m}-${day}`
+}
+
+function formatDateShort(key) {
+  const d = new Date(key)
+  return d.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })
+}
+
+async function fetchDau(days) {
+  const since = new Date()
+  since.setDate(since.getDate() - (Number(days) - 1))
+  since.setHours(0, 0, 0, 0)
+
+  try {
+    const { data, error } = await sb.rpc('get_daily_active_users', {
+      p_since: since.toISOString(),
+      p_days: Number(days)
+    })
+    if (!error && Array.isArray(data) && data.length) {
+      return data.map(r => ({
+        date: formatDateKey(r.day || r.date),
+        users: Number(r.users || r.dau || r.count || 0)
+      }))
+    }
+  } catch (_) { /* fallthrough */ }
+
+  // Fallback: aggregate from sessions
+  try {
+    const { data, error } = await sb
+      .from('user_sessions')
+      .select('user_id, created_at')
+      .gte('created_at', since.toISOString())
+    if (error) throw error
+    const buckets = new Map()
+    for (let i = 0; i < Number(days); i++) {
+      const d = new Date(since)
+      d.setDate(d.getDate() + i)
+      buckets.set(formatDateKey(d), new Set())
+    }
+    ;(data || []).forEach(row => {
+      const key = formatDateKey(row.created_at)
+      if (buckets.has(key)) buckets.get(key).add(row.user_id)
+    })
+    return Array.from(buckets.entries()).map(([date, set]) => ({
+      date,
+      users: set.size
+    }))
+  } catch (e) {
+    const { data } = await sb
+      .from('posts')
+      .select('user_id, created_at')
+      .gte('created_at', since.toISOString())
+    const buckets = new Map()
+    for (let i = 0; i < Number(days); i++) {
+      const d = new Date(since)
+      d.setDate(d.getDate() + i)
+      buckets.set(formatDateKey(d), new Set())
+    }
+    ;(data || []).forEach(row => {
+      const key = formatDateKey(row.created_at)
+      if (buckets.has(key)) buckets.get(key).add(row.user_id)
+    })
+    return Array.from(buckets.entries()).map(([date, set]) => ({
+      date,
+      users: set.size
+    }))
+  }
+}
+
+async function fetchUsersForDay(dateKey) {
+  const start = new Date(dateKey)
+  start.setHours(0, 0, 0, 0)
+  const end = new Date(start)
+  end.setDate(end.getDate() + 1)
+
+  try {
+    const { data, error } = await sb.rpc('get_active_users_for_day', {
+      p_day: start.toISOString()
+    })
+    if (!error && Array.isArray(data)) return data
+  } catch (_) { /* fall through */ }
+
+  const { data: posts } = await sb
+    .from('posts')
+    .select('user_id, created_at')
+    .gte('created_at', start.toISOString())
+    .lt('created_at', end.toISOString())
+
+  const ids = Array.from(new Set((posts || []).map(p => p.user_id))).filter(Boolean)
+  if (!ids.length) return []
+  const { data: users } = await sb
+    .from('users')
+    .select('id, username, display_name, avatar_url, is_verified, last_seen_at')
+    .in('id', ids)
+    .limit(500)
+  return users || []
+}
+
+function computeKpis(series) {
+  if (!series.length) return { avg: 0, peak: 0, min: 0, peakDay: '', trend: 0 }
+  const vals = series.map(p => p.users)
+  const avg = Math.round(vals.reduce((a, b) => a + b, 0) / vals.length)
+  const peak = Math.max(...vals)
+  const min = Math.min(...vals)
+  const peakIdx = vals.indexOf(peak)
+  const peakDay = series[peakIdx]?.date
+  const half = Math.floor(series.length / 2)
+  const firstHalf = vals.slice(0, half).reduce((a, b) => a + b, 0) / Math.max(half, 1)
+  const secondHalf = vals.slice(half).reduce((a, b) => a + b, 0) / Math.max(vals.length - half, 1)
+  const trend = firstHalf ? Math.round(((secondHalf - firstHalf) / firstHalf) * 100) : 0
+  return { avg, peak, min, peakDay, trend }
+}
+
+function renderSkeleton(host) {
+  host.innerHTML = `
+    <div class="dau-skeleton">
+      ${skeletonLoader({ height: '320px', width: '100%', radius: '20px' })}
+      <div class="dau-skeleton-grid">
+        ${skeletonLoader({ height: '110px', radius: '16px' })}
+        ${skeletonLoader({ height: '110px', radius: '16px' })}
+        ${skeletonLoader({ height: '110px', radius: '16px' })}
+        ${skeletonLoader({ height: '110px', radius: '16px' })}
+      </div>
+    </div>
+  `
+}
+
+function renderError(host, message, onRetry) {
+  host.innerHTML = `
+    <div class="empty-state error-state glass-card">
+      <div class="empty-icon">${iconHtml('alert-triangle')}</div>
+      <h3>Daten konnten nicht geladen werden</h3>
+      <p>${htmlEscape(message || 'Unbekannter Fehler')}</p>
+      <button class="btn btn-primary" id="dau-retry">${iconHtml('refresh-cw')} Erneut versuchen</button>
+    </div>
+  `
+  host.querySelector('#dau-retry')?.addEventListener('click', onRetry)
+}
+
+function renderEmpty(host) {
+  host.innerHTML = `
+    <div class="empty-state glass-card">
+      <div class="empty-icon">${iconHtml('activity')}</div>
+      <h3>Noch keine Aktivität</h3>
+      <p>Im gewählten Zeitraum wurden keine aktiven Nutzer erfasst.</p>
+    </div>
+  `
+}
+
+async function renderBody(host, onPointClick) {
+  if (state.loading) return renderSkeleton(host)
+  if (state.error) return renderError(host, state.error, () => loadAndRender(host, onPointClick))
+  if (!state.series.length) return renderEmpty(host)
+
+  const kpis = computeKpis(state.series)
+  const today = state.series[state.series.length - 1]?.users || 0
+  const yesterday = state.series[state.series.length - 2]?.users || 0
+  const delta = yesterday ? Math.round(((today - yesterday) / yesterday) * 100) : 0
+  const trendArrow = kpis.trend > 0 ? '↑' : kpis.trend < 0 ? '↓' : '→'
+  const trendClass = kpis.trend > 0 ? 'up' : kpis.trend < 0 ? 'down' : 'flat'
+
+  host.innerHTML = `
+    <div class="dau-hero glass-card">
+      <div class="dau-hero-meta">
+        <div class="dau-hero-label">Aktive Nutzer heute</div>
+        <div class="dau-hero-value" id="dau-hero-value">0</div>
+        <div class="dau-hero-sub">
+          <span class="dau-trend ${trendClass}">${trendArrow} ${Math.abs(kpis.trend)}% Trend</span>
+          <span class="dau-delta ${delta >= 0 ? 'up' : 'down'}">${delta >= 0 ? '+' : ''}${delta}% vs. Vortag</span>
+        </div>
+      </div>
+      <div class="dau-hero-chart" id="dau-chart"></div>
+    </div>
+
+    <div class="dau-kpi-grid">
+      <div class="kpi-card glass-card">
+        <div class="kpi-icon">${iconHtml('bar-chart-2')}</div>
+        <div class="kpi-label">Ø Tagesdurchschnitt</div>
+        <div class="kpi-value" data-count="${kpis.avg}">0</div>
+      </div>
+      <div class="kpi-card glass-card">
+        <div class="kpi-icon">${iconHtml('trending-up')}</div>
+        <div class="kpi-label">Peak</div>
+        <div class="kpi-value" data-count="${kpis.peak}">0</div>
+        <div class="kpi-sub">${kpis.peakDay ? formatDateShort(kpis.peakDay) : ''}</div>
+      </div>
+      <div class="kpi-card glass-card">
+        <div class="kpi-icon">${iconHtml('trending-down')}</div>
+        <div class="kpi-label">Minimum</div>
+        <div class="kpi-value" data-count="${kpis.min}">0</div>
+      </div>
+      <div class="kpi-card glass-card">
+        <div class="kpi-icon">${iconHtml('calendar')}</div>
+        <div class="kpi-label">Zeitraum</div>
+        <div class="kpi-value">${state.range}T</div>
+        <div class="kpi-sub">${state.series.length} Datenpunkte</div>
+      </div>
+    </div>
+
+    <div class="dau-secondary glass-card">
+      <div class="section-head">
+        <h3>${iconHtml('bar-chart')} Tagesverteilung</h3>
+        <span class="muted">Klick auf einen Tag öffnet die Nutzerliste</span>
+      </div>
+      <div id="dau-bars"></div>
+    </div>
+  `
+
+  const heroEl = host.querySelector('#dau-hero-value')
+  if (heroEl) countUp(heroEl, today, { duration: 900, format: fmtNumber })
+
+  host.querySelectorAll('.kpi-value[data-count]').forEach(el => {
+    const target = Number(el.dataset.count)
+    countUp(el, target, { duration: 800, format: fmtNumber })
+  })
+
+  const chartHost = host.querySelector('#dau-chart')
+  makeAreaChart(chartHost, {
+    data: state.series.map(p => ({ x: p.date, y: p.users })),
+    xLabel: d => formatDateShort(d),
+    yLabel: v => fmtNumber(v),
+    color: '#7c5cff',
+    fade: true,
+    height: 280,
+    onPointClick: (point) => onPointClick(point.x)
+  })
+
+  const barsHost = host.querySelector('#dau-bars')
+  makeBarChart(barsHost, {
+    data: state.series.map(p => ({ label: formatDateShort(p.date), value: p.users, key: p.date })),
+    color: '#7c5cff',
+    height: 200,
+    onBarClick: (bar) => onPointClick(bar.key)
+  })
+
+  fadeIn(host.querySelector('.dau-hero'))
+}
+
+async function openDayDrawer(dateKey) {
+  const dlg = drawer({
+    title: `Aktive Nutzer · ${formatDateShort(dateKey)}`,
+    width: '480px',
+    content: `<div class="drawer-loading">${skeletonLoader({ height: '64px', radius: '12px' })}${skeletonLoader({ height: '64px', radius: '12px' })}${skeletonLoader({ height: '64px', radius: '12px' })}</div>`
+  })
+
+  try {
+    const users = await fetchUsersForDay(dateKey)
+    if (!users.length) {
+      dlg.setContent(`
+        <div class="empty-state">
+          <div class="empty-icon">${iconHtml('users')}</div>
+          <h4>Keine aktiven Nutzer</h4>
+          <p>An diesem Tag wurde keine Aktivität erfasst.</p>
+        </div>
+      `)
+      return
+    }
+
+    const rows = users.map(u => `
+      <div class="user-row" data-uid="${htmlEscape(u.id)}">
+        <div class="avatar">
+          ${u.avatar_url
+            ? `<img src="${htmlEscape(u.avatar_url)}" alt="">`
+            : `<div class="avatar-fallback">${htmlEscape((u.display_name || u.username || '?').slice(0, 1).toUpperCase())}</div>`}
+        </div>
+        <div class="user-meta">
+          <div class="user-name">
+            ${htmlEscape(u.display_name || u.username || 'Unbekannt')}
+            ${u.is_verified ? `<span class="badge verified">${iconHtml('check')}</span>` : ''}
+          </div>
+          <div class="user-sub">@${htmlEscape(u.username || '—')}</div>
+        </div>
+        <button class="btn-icon" data-action="open" title="Details">${iconHtml('arrow-right')}</button>
+      </div>
+    `).join('')
+
+    dlg.setContent(`
+      <div class="drawer-stat-row">
+        <div><strong>${fmtNumber(users.length)}</strong> aktive Nutzer</div>
+        <button class="btn btn-ghost" id="day-export">${iconHtml('download')} CSV</button>
+      </div>
+      <div class="user-list">${rows}</div>
+    `)
+
+    dlg.root.querySelectorAll('.user-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const uid = row.dataset.uid
+        if (uid) showUserDetailModal(uid)
+      })
+    })
+
+    dlg.root.querySelector('#day-export')?.addEventListener('click', () => {
+      exportCsv(`dau-${dateKey}.csv`, users.map(u => ({
+        id: u.id,
+        username: u.username,
+        display_name: u.display_name,
+        verified: u.is_verified ? 'ja' : 'nein',
+        last_seen: u.last_seen_at || ''
+      })))
+      toast('CSV exportiert', 'success')
+    })
+  } catch (e) {
+    dlg.setContent(`
+      <div class="empty-state error-state">
+        <div class="empty-icon">${iconHtml('alert-triangle')}</div>
+        <h4>Fehler beim Laden</h4>
+        <p>${htmlEscape(e.message || 'Unbekannter Fehler')}</p>
+      </div>
+    `)
+  }
+}
+
+async function loadAndRender(host, onPointClick) {
+  state.loading = true
+  state.error = null
+  renderSkeleton(host)
+  try {
+    state.series = await fetchDau(state.range)
+  } catch (e) {
+    state.error = e.message || 'Ladevorgang fehlgeschlagen'
+  } finally {
+    state.loading = false
+    await renderBody(host, onPointClick)
+  }
+}
 
 export default {
   id: 'dau-trend',
-  title: 'Tägliche aktive Nutzer (30 Tage)',
+  title: 'Tägliche aktive Nutzer',
   category: 'overview',
-  summary: 'App-Opens / DAU als Zeitreihe der letzten 30 Tage.',
+
   async mount(container) {
-    container.innerHTML = `<div class="panel-shell">
-      <div class="panel-head"><h2>Tägliche aktive Nutzer (30 Tage)</h2><button class="refresh-btn">Aktualisieren</button></div>
-      <div class="panel-body"><div class="loading">Lädt…</div></div>
-    </div>`
-    const body = container.querySelector('.panel-body')
+    container.innerHTML = `
+      <div class="panel-shell dau-panel">
+        <div class="panel-head">
+          <div class="panel-head-left">
+            <h2>${iconHtml('activity')} Tägliche aktive Nutzer</h2>
+            <p class="panel-sub">DAU-Entwicklung im gewählten Zeitraum</p>
+          </div>
+          <div class="toolbar">
+            <div id="dau-range"></div>
+            <button class="btn btn-ghost" id="dau-refresh" title="Aktualisieren">${iconHtml('refresh-cw')} Aktualisieren</button>
+            <button class="btn btn-ghost" id="dau-pdf" title="PDF-Export">${iconHtml('file-text')} PDF</button>
+            <button class="btn btn-ghost" id="dau-csv" title="CSV-Export">${iconHtml('download')} CSV</button>
+          </div>
+        </div>
+        <div class="panel-body" id="dau-body"></div>
+      </div>
+    `
 
-    const fmtDate = (d) => {
-      const dt = (d instanceof Date) ? d : new Date(d)
-      const dd = String(dt.getDate()).padStart(2, '0')
-      const mm = String(dt.getMonth() + 1).padStart(2, '0')
-      return `${dd}.${mm}`
-    }
+    const body = container.querySelector('#dau-body')
+    const rangeHost = container.querySelector('#dau-range')
 
-    const fetchSeries = async () => {
-      // 1) Try RPC admin_app_opens_stats
+    segmentedControl(rangeHost, {
+      options: RANGE_OPTIONS,
+      value: state.range,
+      onChange: async (val) => {
+        state.range = val
+        await loadAndRender(body, openDayDrawer)
+      }
+    })
+
+    container.querySelector('#dau-refresh').addEventListener('click', async () => {
+      await loadAndRender(body, openDayDrawer)
+      toast('Aktualisiert', 'success')
+    })
+
+    container.querySelector('#dau-pdf').addEventListener('click', async () => {
       try {
-        const { data, error } = await sb.rpc('admin_app_opens_stats', { days: 30 })
-        if (!error && Array.isArray(data) && data.length) {
-          return data
-            .map((r) => ({
-              day: r.day || r.date || r.bucket || r.d,
-              count: Number(r.count ?? r.dau ?? r.opens ?? r.value ?? 0),
-            }))
-            .filter((r) => r.day)
-            .sort((a, b) => new Date(a.day) - new Date(b.day))
-        }
-      } catch (_) { /* fallthrough */ }
-
-      // 2) Fallback: aggregate from daily_activity client-side
-      const since = new Date()
-      since.setUTCHours(0, 0, 0, 0)
-      since.setUTCDate(since.getUTCDate() - 29)
-      const sinceIso = since.toISOString().slice(0, 10)
-      const { data, error } = await sb
-        .from('daily_activity')
-        .select('user_id, day')
-        .gte('day', sinceIso)
-      if (error) throw error
-      const counts = new Map()
-      for (let i = 0; i < 30; i++) {
-        const d = new Date(since)
-        d.setUTCDate(since.getUTCDate() + i)
-        counts.set(d.toISOString().slice(0, 10), 0)
+        await exportPanelAsPdf(container, {
+          filename: `dau-trend-${state.range}t.pdf`,
+          title: `DAU · ${state.range} Tage`
+        })
+        toast('PDF erstellt', 'success')
+      } catch (e) {
+        toast('PDF-Export fehlgeschlagen', 'error')
       }
-      for (const row of (data || [])) {
-        const key = String(row.day).slice(0, 10)
-        if (counts.has(key)) counts.set(key, counts.get(key) + 1)
-      }
-      return Array.from(counts.entries()).map(([day, count]) => ({ day, count }))
-    }
+    })
 
-    const render = (series) => {
-      if (!series.length) {
-        body.innerHTML = '<div class="empty">Keine DAU-Daten verfügbar.</div>'
+    container.querySelector('#dau-csv').addEventListener('click', () => {
+      if (!state.series.length) {
+        toast('Keine Daten zum Exportieren', 'warning')
         return
       }
-      const W = 760, H = 280, padL = 40, padR = 16, padT = 20, padB = 32
-      const innerW = W - padL - padR
-      const innerH = H - padT - padB
-      const values = series.map((s) => s.count)
-      const maxV = Math.max(1, ...values)
-      const minV = 0
-      const n = series.length
-      const xFor = (i) => padL + (n === 1 ? innerW / 2 : (innerW * i) / (n - 1))
-      const yFor = (v) => padT + innerH - ((v - minV) / (maxV - minV)) * innerH
+      exportCsv(`dau-trend-${state.range}t.csv`, state.series.map(p => ({
+        datum: p.date,
+        aktive_nutzer: p.users
+      })))
+      toast('CSV exportiert', 'success')
+    })
 
-      const points = series.map((s, i) => `${xFor(i).toFixed(1)},${yFor(s.count).toFixed(1)}`).join(' ')
-      const areaPath = `M ${xFor(0).toFixed(1)},${(padT + innerH).toFixed(1)} L ${points.split(' ').join(' L ')} L ${xFor(n - 1).toFixed(1)},${(padT + innerH).toFixed(1)} Z`
-
-      const gridLines = []
-      for (let g = 0; g <= 4; g++) {
-        const y = padT + (innerH * g) / 4
-        const val = Math.round(maxV - (maxV * g) / 4)
-        gridLines.push(`<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="#2A2A33" stroke-width="1"/>`)
-        gridLines.push(`<text x="${padL - 6}" y="${y + 4}" text-anchor="end" font-size="10" fill="#8a8a98">${val}</text>`)
-      }
-
-      const xLabels = []
-      const labelEvery = Math.max(1, Math.floor(n / 6))
-      series.forEach((s, i) => {
-        if (i % labelEvery === 0 || i === n - 1) {
-          xLabels.push(`<text x="${xFor(i)}" y="${H - 10}" text-anchor="middle" font-size="10" fill="#8a8a98">${fmtDate(s.day)}</text>`)
-        }
-      })
-
-      const dots = series.map((s, i) => `<circle cx="${xFor(i).toFixed(1)}" cy="${yFor(s.count).toFixed(1)}" r="3" fill="#8B5CF6"><title>${fmtDate(s.day)}: ${s.count}</title></circle>`).join('')
-
-      const total = values.reduce((a, b) => a + b, 0)
-      const avg = Math.round(total / n)
-      const peak = Math.max(...values)
-      const peakIdx = values.indexOf(peak)
-      const last7 = values.slice(-7)
-      const prev7 = values.slice(-14, -7)
-      const avg7 = last7.length ? Math.round(last7.reduce((a, b) => a + b, 0) / last7.length) : 0
-      const avgPrev7 = prev7.length ? Math.round(prev7.reduce((a, b) => a + b, 0) / prev7.length) : 0
-      const wow = avgPrev7 > 0 ? Math.round(((avg7 - avgPrev7) / avgPrev7) * 100) : 0
-      const wowStr = (wow >= 0 ? '+' : '') + wow + '%'
-
-      body.innerHTML = `
-        <div class="kpi-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:16px;">
-          <div class="kpi-tile" style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:12px;">
-            <div style="color:#8a8a98;font-size:11px;text-transform:uppercase;">Ø DAU (30T)</div>
-            <div style="color:#fff;font-size:22px;font-weight:600;margin-top:4px;">${avg}</div>
-            <div style="color:#8a8a98;font-size:11px;margin-top:2px;">Aktive Nutzer/Tag</div>
-          </div>
-          <div class="kpi-tile" style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:12px;">
-            <div style="color:#8a8a98;font-size:11px;text-transform:uppercase;">Peak</div>
-            <div style="color:#fff;font-size:22px;font-weight:600;margin-top:4px;">${peak}</div>
-            <div style="color:#8a8a98;font-size:11px;margin-top:2px;">${fmtDate(series[peakIdx].day)}</div>
-          </div>
-          <div class="kpi-tile" style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:12px;">
-            <div style="color:#8a8a98;font-size:11px;text-transform:uppercase;">Ø DAU (7T)</div>
-            <div style="color:#fff;font-size:22px;font-weight:600;margin-top:4px;">${avg7}</div>
-            <div style="color:${wow >= 0 ? '#8B5CF6' : '#ef4444'};font-size:11px;margin-top:2px;">${wowStr} vs. Vorwoche</div>
-          </div>
-          <div class="kpi-tile" style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:12px;">
-            <div style="color:#8a8a98;font-size:11px;text-transform:uppercase;">Heute</div>
-            <div style="color:#fff;font-size:22px;font-weight:600;margin-top:4px;">${values[values.length - 1]}</div>
-            <div style="color:#8a8a98;font-size:11px;margin-top:2px;">${fmtDate(series[series.length - 1].day)}</div>
-          </div>
-        </div>
-        <div style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:12px;">
-          <svg viewBox="0 0 ${W} ${H}" width="100%" height="${H}" preserveAspectRatio="xMidYMid meet" style="display:block;">
-            <defs>
-              <linearGradient id="dauGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="0%" stop-color="#8B5CF6" stop-opacity="0.4"/>
-                <stop offset="100%" stop-color="#8B5CF6" stop-opacity="0"/>
-              </linearGradient>
-            </defs>
-            ${gridLines.join('')}
-            <path d="${areaPath}" fill="url(#dauGrad)" stroke="none"/>
-            <polyline fill="none" stroke="#8B5CF6" stroke-width="2" stroke-linejoin="round" stroke-linecap="round" points="${points}"/>
-            ${dots}
-            ${xLabels.join('')}
-          </svg>
-        </div>
-      `
-    }
-
-    const refresh = async () => {
-      body.innerHTML = '<div class="loading">Lädt…</div>'
-      try {
-        const series = await fetchSeries()
-        render(series)
-      } catch (e) {
-        body.innerHTML = '<div class="empty">Daten kommen bald: ' + (e?.message || 'unbekannt') + '</div>'
-      }
-    }
-    container.querySelector('.refresh-btn').addEventListener('click', refresh)
-    await refresh()
+    fadeIn(container.querySelector('.panel-shell'))
+    await loadAndRender(body, openDayDrawer)
   }
 }

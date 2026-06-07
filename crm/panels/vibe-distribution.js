@@ -1,131 +1,454 @@
 import { sb } from '/lib/supabase.js'
+import { toast, modal, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js'
+import { makeDonutChart, makeBarChart } from '/lib/charts.js'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { drawer, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
+import { showUserDetailModal } from '/lib/panel-actions.js'
 
-const VIBE_META = {
-  fire:    { label: 'Fire',    emoji: '🔥', color: '#F97316' },
-  insight: { label: 'Insight', emoji: '💡', color: '#FACC15' },
-  funny:   { label: 'Funny',   emoji: '😂', color: '#22D3EE' },
-  deep:    { label: 'Deep',    emoji: '🌊', color: '#8B5CF6' },
-  warm:    { label: 'Warm',    emoji: '🤗', color: '#F472B6' },
-  slow:    { label: 'Slow',    emoji: '🐢', color: '#34D399' }
+const VIBES = [
+  { key: 'fire',   emoji: '🔥', label: 'Fire',       color: '#ff5b3a' },
+  { key: 'idea',   emoji: '💡', label: 'Idee',       color: '#ffc24d' },
+  { key: 'lol',    emoji: '🤣', label: 'Lustig',     color: '#5ed1ad' },
+  { key: 'mind',   emoji: '🧠', label: 'Deep',       color: '#7c8cff' },
+  { key: 'love',   emoji: '❤️', label: 'Love',       color: '#ff6aa6' },
+  { key: 'sleep',  emoji: '😴', label: 'Snooze',     color: '#8a93a6' },
+]
+
+const VIBE_BY_KEY = Object.fromEntries(VIBES.map(v => [v.key, v]))
+
+const state = {
+  range: '7d',
+  data: null,
 }
 
-const FALLBACK_COLORS = ['#8B5CF6', '#F97316', '#22D3EE', '#FACC15', '#F472B6', '#34D399', '#60A5FA', '#FB7185']
-
-function metaFor(vibe, idx) {
-  return VIBE_META[vibe] || { label: vibe || 'Unbekannt', emoji: '•', color: FALLBACK_COLORS[idx % FALLBACK_COLORS.length] }
+function rangeStartIso(range) {
+  const d = new Date()
+  d.setDate(d.getDate() - (range === '30d' ? 30 : 7))
+  return d.toISOString()
 }
 
-function showToast(container, msg) {
-  const toast = document.createElement('div')
-  toast.className = 'toast'
-  toast.textContent = msg
-  toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#2A2A33;color:#fff;padding:10px 16px;border-radius:12px;border:1px solid #8B5CF6;z-index:9999;'
-  container.appendChild(toast)
-  setTimeout(() => toast.remove(), 2200)
+async function fetchData(range) {
+  const since = rangeStartIso(range)
+
+  let reactionRows = []
+  try {
+    const { data, error } = await sb
+      .from('post_reactions')
+      .select('vibe, post_id, created_at, user_id')
+      .gte('created_at', since)
+      .limit(20000)
+    if (error) throw error
+    reactionRows = data || []
+  } catch (e) {
+    try {
+      const { data } = await sb
+        .from('posts')
+        .select('id, vibe, created_at, user_id, like_count, comment_count')
+        .gte('created_at', since)
+        .not('vibe', 'is', null)
+        .limit(20000)
+      reactionRows = (data || []).map(p => ({
+        vibe: p.vibe,
+        post_id: p.id,
+        created_at: p.created_at,
+        user_id: p.user_id,
+      }))
+    } catch (e2) {
+      throw e
+    }
+  }
+
+  const counts = Object.fromEntries(VIBES.map(v => [v.key, 0]))
+  const postScores = new Map()
+  for (const r of reactionRows) {
+    if (!r.vibe || !(r.vibe in counts)) continue
+    counts[r.vibe]++
+    const m = postScores.get(r.post_id) || {}
+    m[r.vibe] = (m[r.vibe] || 0) + 1
+    postScores.set(r.post_id, m)
+  }
+
+  const total = Object.values(counts).reduce((a, b) => a + b, 0)
+
+  const topPostsPerVibe = {}
+  for (const v of VIBES) {
+    const arr = []
+    for (const [postId, m] of postScores.entries()) {
+      if (m[v.key]) arr.push({ post_id: postId, count: m[v.key] })
+    }
+    arr.sort((a, b) => b.count - a.count)
+    topPostsPerVibe[v.key] = arr.slice(0, 10)
+  }
+
+  return { counts, total, topPostsPerVibe, sampleSize: reactionRows.length, range }
 }
 
-function renderDonut(slices, total) {
-  const size = 220
-  const cx = size / 2
-  const cy = size / 2
-  const r = 90
-  const inner = 58
-  let angle = -Math.PI / 2
-  let paths = ''
-  slices.forEach((s) => {
-    const frac = total > 0 ? s.count / total : 0
-    const a2 = angle + frac * Math.PI * 2
-    const large = frac > 0.5 ? 1 : 0
-    const x1 = cx + r * Math.cos(angle)
-    const y1 = cy + r * Math.sin(angle)
-    const x2 = cx + r * Math.cos(a2)
-    const y2 = cy + r * Math.sin(a2)
-    const x3 = cx + inner * Math.cos(a2)
-    const y3 = cy + inner * Math.sin(a2)
-    const x4 = cx + inner * Math.cos(angle)
-    const y4 = cy + inner * Math.sin(angle)
-    paths += `<path d="M ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} L ${x3} ${y3} A ${inner} ${inner} 0 ${large} 0 ${x4} ${y4} Z" fill="${s.color}" stroke="#16161D" stroke-width="2"></path>`
-    angle = a2
+async function fetchPostDetails(postIds) {
+  if (!postIds.length) return {}
+  try {
+    const { data } = await sb
+      .from('posts')
+      .select('id, body, created_at, user_id, like_count, comment_count, profiles:profiles(username, display_name, avatar_url)')
+      .in('id', postIds)
+    const map = {}
+    for (const p of (data || [])) map[p.id] = p
+    return map
+  } catch {
+    return {}
+  }
+}
+
+function dominantVibeKey(counts) {
+  let best = VIBES[0].key, bestN = -1
+  for (const v of VIBES) if ((counts[v.key] || 0) > bestN) { best = v.key; bestN = counts[v.key] || 0 }
+  return best
+}
+
+function renderEmpty(body) {
+  body.innerHTML = `
+    <div class="empty-state glass-card" style="text-align:center;padding:48px 24px;">
+      <div style="font-size:64px;line-height:1;margin-bottom:16px;">🎭</div>
+      <h3 style="margin:0 0 8px;">Noch keine Vibes erfasst</h3>
+      <p style="color:var(--muted);max-width:420px;margin:0 auto 20px;">
+        Sobald die Community Posts mit Emoji-Vibes markiert, erscheint die Verteilung hier in Echtzeit.
+      </p>
+      <button class="btn btn-primary" data-act="refresh">${iconHtml('refresh')} Neu laden</button>
+    </div>`
+}
+
+function renderError(body, err) {
+  body.innerHTML = `
+    <div class="empty-state glass-card" style="text-align:center;padding:48px 24px;border:1px solid rgba(255,90,90,0.25);">
+      <div style="font-size:48px;margin-bottom:12px;">⚠️</div>
+      <h3 style="margin:0 0 8px;">Konnte Vibes nicht laden</h3>
+      <p style="color:var(--muted);max-width:480px;margin:0 auto 20px;font-family:monospace;font-size:12px;">
+        ${htmlEscape(err?.message || String(err))}
+      </p>
+      <button class="btn btn-primary" data-act="refresh">${iconHtml('refresh')} Erneut versuchen</button>
+    </div>`
+}
+
+async function openVibeDrawer(vibeKey, data) {
+  const v = VIBE_BY_KEY[vibeKey]
+  if (!v) return
+  const top = data.topPostsPerVibe[vibeKey] || []
+  const postIds = top.map(t => t.post_id)
+  const details = await fetchPostDetails(postIds)
+
+  const rows = top.map((t, i) => {
+    const p = details[t.post_id] || {}
+    const prof = p.profiles || {}
+    const name = htmlEscape(prof.display_name || prof.username || 'Unbekannt')
+    const bodyText = htmlEscape((p.body || '').slice(0, 140)) + ((p.body || '').length > 140 ? '…' : '')
+    const when = p.created_at ? fmtRelativeTime(p.created_at) : ''
+    return `
+      <tr data-post-id="${htmlEscape(t.post_id)}" data-user-id="${htmlEscape(p.user_id || '')}" style="cursor:pointer;">
+        <td style="width:32px;color:var(--muted);font-variant-numeric:tabular-nums;">${i + 1}</td>
+        <td>
+          <div style="font-weight:600;">${name}</div>
+          <div style="color:var(--muted);font-size:12px;margin-top:2px;">${bodyText || '<em>kein Text</em>'}</div>
+        </td>
+        <td style="text-align:right;font-variant-numeric:tabular-nums;">
+          <span style="background:${v.color}22;color:${v.color};padding:3px 10px;border-radius:999px;font-weight:600;">
+            ${v.emoji} ${fmtNumber(t.count)}
+          </span>
+        </td>
+        <td style="text-align:right;color:var(--muted);font-size:12px;">${when}</td>
+      </tr>`
+  }).join('')
+
+  const content = `
+    <div style="display:flex;align-items:center;gap:16px;margin-bottom:20px;">
+      <div style="width:64px;height:64px;border-radius:18px;background:${v.color}22;display:flex;align-items:center;justify-content:center;font-size:36px;">
+        ${v.emoji}
+      </div>
+      <div>
+        <div style="font-size:13px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;">Top Posts · ${state.range === '7d' ? '7 Tage' : '30 Tage'}</div>
+        <h3 style="margin:2px 0 0;font-size:22px;">${v.label}</h3>
+      </div>
+      <div style="margin-left:auto;text-align:right;">
+        <div style="font-size:28px;font-weight:700;color:${v.color};">${fmtNumber(data.counts[vibeKey] || 0)}</div>
+        <div style="font-size:12px;color:var(--muted);">Reaktionen gesamt</div>
+      </div>
+    </div>
+    ${top.length === 0 ? `
+      <div class="empty-state" style="text-align:center;padding:32px;color:var(--muted);">
+        <div style="font-size:42px;margin-bottom:8px;">${v.emoji}</div>
+        Noch keine Posts mit diesem Vibe im Zeitraum.
+      </div>` : `
+      <table class="data-table hover-rows" style="width:100%;">
+        <thead>
+          <tr>
+            <th style="width:32px;">#</th>
+            <th>Post</th>
+            <th style="text-align:right;">Vibe-Score</th>
+            <th style="text-align:right;">Zeit</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>`}
+  `
+
+  const dr = drawer({
+    title: `${v.emoji} ${v.label}`,
+    width: 560,
+    content,
   })
-  return `<svg viewBox="0 0 ${size} ${size}" width="${size}" height="${size}" style="display:block;margin:0 auto;">
-    ${paths}
-    <text x="${cx}" y="${cy - 4}" text-anchor="middle" fill="#fff" font-size="22" font-weight="700">${total}</text>
-    <text x="${cx}" y="${cy + 16}" text-anchor="middle" fill="#9CA3AF" font-size="11">Reactions</text>
-  </svg>`
+
+  const el = dr?.el || dr
+  const tbody = el?.querySelector?.('tbody')
+  if (tbody) {
+    tbody.addEventListener('click', (e) => {
+      const tr = e.target.closest('tr[data-user-id]')
+      if (!tr) return
+      const uid = tr.getAttribute('data-user-id')
+      if (uid) showUserDetailModal(uid)
+    })
+  }
 }
 
-function renderLegend(slices, total) {
-  return `<div style="display:flex;flex-direction:column;gap:8px;min-width:200px;">
-    ${slices.map((s) => {
-      const pct = total > 0 ? ((s.count / total) * 100).toFixed(1) : '0.0'
-      return `<div style="display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 10px;background:#1F1F27;border:1px solid #2A2A33;border-radius:12px;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="width:12px;height:12px;border-radius:3px;background:${s.color};display:inline-block;"></span>
-          <span style="color:#fff;font-size:13px;">${s.emoji} ${s.label}</span>
+function renderBody(body, data) {
+  if (!data.total) { renderEmpty(body); return }
+
+  const dom = dominantVibeKey(data.counts)
+  const domV = VIBE_BY_KEY[dom]
+  const domPct = data.total ? Math.round((data.counts[dom] / data.total) * 100) : 0
+
+  body.innerHTML = `
+    <div class="vibe-grid" style="display:grid;grid-template-columns:1.4fr 1fr;gap:20px;align-items:stretch;">
+      <section class="glass-card" style="padding:24px;">
+        <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:8px;">
+          <h3 style="margin:0;font-size:16px;">Verteilung der Vibes</h3>
+          <div style="color:var(--muted);font-size:12px;">${fmtNumber(data.total)} Reaktionen</div>
         </div>
-        <div style="color:#9CA3AF;font-size:12px;"><span style="color:#fff;font-weight:600;">${s.count}</span> · ${pct}%</div>
+        <div id="donut-host" style="height:380px;position:relative;"></div>
+        <div id="vibe-legend" style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:14px;"></div>
+      </section>
+
+      <section style="display:flex;flex-direction:column;gap:16px;">
+        <div id="hero-host"></div>
+        <div class="glass-card" style="padding:20px;">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:10px;">
+            <h3 style="margin:0;font-size:15px;">Vibe-Ranking</h3>
+            <div style="color:var(--muted);font-size:12px;">click für Top-Posts</div>
+          </div>
+          <div id="bar-host" style="height:260px;"></div>
+        </div>
+      </section>
+    </div>
+
+    <div class="glass-card" style="padding:20px;margin-top:20px;">
+      <h3 style="margin:0 0 12px;font-size:15px;">Vibe-Übersicht</h3>
+      <table class="data-table hover-rows sortable" style="width:100%;">
+        <thead>
+          <tr>
+            <th>Vibe</th>
+            <th style="text-align:right;">Reaktionen</th>
+            <th style="text-align:right;">Anteil</th>
+            <th style="text-align:right;">Top-Posts</th>
+            <th style="text-align:right;"></th>
+          </tr>
+        </thead>
+        <tbody id="vibe-tbody">
+          ${VIBES.map(v => {
+            const n = data.counts[v.key] || 0
+            const pct = data.total ? (n / data.total) * 100 : 0
+            const topN = (data.topPostsPerVibe[v.key] || []).length
+            return `
+              <tr data-vibe="${v.key}" style="cursor:pointer;">
+                <td>
+                  <span style="display:inline-flex;align-items:center;gap:10px;">
+                    <span style="font-size:22px;line-height:1;">${v.emoji}</span>
+                    <span style="font-weight:600;">${v.label}</span>
+                  </span>
+                </td>
+                <td style="text-align:right;font-variant-numeric:tabular-nums;font-weight:600;">${fmtNumber(n)}</td>
+                <td style="text-align:right;">
+                  <div style="display:inline-flex;align-items:center;gap:8px;justify-content:flex-end;">
+                    <div style="width:80px;height:6px;background:rgba(255,255,255,0.06);border-radius:999px;overflow:hidden;">
+                      <div style="width:${pct.toFixed(1)}%;height:100%;background:${v.color};"></div>
+                    </div>
+                    <span style="font-variant-numeric:tabular-nums;color:var(--muted);min-width:42px;text-align:right;">${pct.toFixed(1)}%</span>
+                  </div>
+                </td>
+                <td style="text-align:right;color:var(--muted);font-variant-numeric:tabular-nums;">${topN}</td>
+                <td style="text-align:right;color:var(--muted);font-size:13px;">›</td>
+              </tr>`
+          }).join('')}
+        </tbody>
+      </table>
+    </div>
+  `
+
+  const heroHost = body.querySelector('#hero-host')
+  heroHost.innerHTML = ''
+  try {
+    const hero = statHero({
+      label: 'Dominanter Vibe',
+      value: `${domV.emoji} ${domV.label}`,
+      sublabel: `${domPct}% aller Reaktionen · ${fmtNumber(data.counts[dom])}`,
+      accent: domV.color,
+    })
+    const heroEl = hero?.el || hero
+    if (heroEl instanceof Node) heroHost.appendChild(heroEl)
+    else heroHost.innerHTML = `
+      <div class="glass-card" style="padding:20px;border-left:3px solid ${domV.color};">
+        <div style="font-size:12px;color:var(--muted);text-transform:uppercase;letter-spacing:0.08em;">Dominanter Vibe</div>
+        <div style="font-size:28px;font-weight:700;margin-top:4px;">${domV.emoji} ${domV.label}</div>
+        <div style="color:var(--muted);font-size:13px;margin-top:4px;">${domPct}% aller Reaktionen · ${fmtNumber(data.counts[dom])}</div>
       </div>`
-    }).join('')}
-  </div>`
+  } catch {}
+
+  const donutHost = body.querySelector('#donut-host')
+  const donutData = VIBES.map(v => ({
+    label: `${v.emoji} ${v.label}`,
+    value: data.counts[v.key] || 0,
+    color: v.color,
+    key: v.key,
+  })).filter(d => d.value > 0)
+  try {
+    makeDonutChart(donutHost, {
+      data: donutData,
+      centerLabel: `${fmtNumber(data.total)}`,
+      centerSublabel: 'Reaktionen',
+      onSliceClick: (d) => d?.key && openVibeDrawer(d.key, data),
+    })
+  } catch {}
+
+  const legend = body.querySelector('#vibe-legend')
+  legend.innerHTML = VIBES.map(v => {
+    const n = data.counts[v.key] || 0
+    const pct = data.total ? ((n / data.total) * 100).toFixed(1) : '0.0'
+    return `
+      <button data-vibe="${v.key}" class="vibe-legend-chip" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:10px;background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.06);cursor:pointer;text-align:left;">
+        <span style="width:10px;height:10px;border-radius:50%;background:${v.color};flex-shrink:0;"></span>
+        <span style="font-size:18px;line-height:1;">${v.emoji}</span>
+        <span style="flex:1;min-width:0;">
+          <div style="font-size:12px;font-weight:600;">${v.label}</div>
+          <div style="font-size:11px;color:var(--muted);">${fmtNumber(n)} · ${pct}%</div>
+        </span>
+      </button>`
+  }).join('')
+  legend.querySelectorAll('[data-vibe]').forEach(btn => {
+    btn.addEventListener('click', () => openVibeDrawer(btn.getAttribute('data-vibe'), data))
+  })
+
+  const barHost = body.querySelector('#bar-host')
+  const sorted = [...VIBES].sort((a, b) => (data.counts[b.key] || 0) - (data.counts[a.key] || 0))
+  try {
+    makeBarChart(barHost, {
+      data: sorted.map(v => ({ label: `${v.emoji}`, value: data.counts[v.key] || 0, color: v.color, key: v.key })),
+      horizontal: true,
+      onBarClick: (d) => d?.key && openVibeDrawer(d.key, data),
+    })
+  } catch {}
+
+  body.querySelectorAll('#vibe-tbody tr[data-vibe]').forEach(tr => {
+    tr.addEventListener('click', () => openVibeDrawer(tr.getAttribute('data-vibe'), data))
+  })
+
+  try { fadeIn(body) } catch {}
+}
+
+async function loadAndRender(body) {
+  let skel
+  try { skel = skeletonLoader(body, { rows: 4, layout: 'chart' }) } catch {}
+  try {
+    const data = await fetchData(state.range)
+    state.data = data
+    if (skel?.remove) skel.remove()
+    renderBody(body, data)
+  } catch (e) {
+    if (skel?.remove) skel.remove()
+    renderError(body, e)
+  }
+}
+
+function exportCurrentCsv() {
+  const d = state.data
+  if (!d) { toast('Noch keine Daten geladen'); return }
+  const rows = VIBES.map(v => ({
+    vibe: v.label,
+    emoji: v.emoji,
+    reaktionen: d.counts[v.key] || 0,
+    anteil_prozent: d.total ? ((d.counts[v.key] / d.total) * 100).toFixed(2) : '0.00',
+  }))
+  try {
+    exportCsv(`vibe-verteilung-${state.range}-${new Date().toISOString().slice(0,10)}.csv`, rows)
+    toast('CSV exportiert')
+  } catch {
+    toast('CSV-Export fehlgeschlagen')
+  }
+}
+
+async function exportPdf(container) {
+  try {
+    await exportPanelAsPdf(container, { title: `Vibe-Verteilung (${state.range === '7d' ? '7 Tage' : '30 Tage'})` })
+    toast('PDF erstellt')
+  } catch (e) {
+    toast('PDF-Export fehlgeschlagen')
+  }
 }
 
 export default {
   id: 'vibe-distribution',
   title: 'Vibe-Verteilung',
   category: 'listening',
-  summary: 'Globale Verteilung der Episode-Reactions.',
+
   async mount(container) {
-    container.innerHTML = `<div class="panel-shell" style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;padding:16px;color:#fff;">
-      <div class="panel-head" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-        <h2 style="margin:0;font-size:18px;color:#fff;">Vibe-Verteilung</h2>
-        <button class="refresh-btn" style="background:#8B5CF6;color:#fff;border:none;border-radius:12px;padding:8px 14px;cursor:pointer;font-size:13px;">Aktualisieren</button>
-      </div>
-      <div class="panel-body"><div class="loading">Lädt…</div></div>
-    </div>`
-    const body = container.querySelector('.panel-body')
-
-    const refresh = async () => {
-      body.innerHTML = '<div class="loading">Lädt…</div>'
-      try {
-        const { data, error } = await sb
-          .from('episode_vibes')
-          .select('vibe')
-          .limit(10000)
-        if (error) throw error
-
-        const counts = new Map()
-        for (const row of (data || [])) {
-          const k = row.vibe || 'unknown'
-          counts.set(k, (counts.get(k) || 0) + 1)
-        }
-
-        if (counts.size === 0) {
-          body.innerHTML = '<div class="empty" style="padding:24px;text-align:center;color:#9CA3AF;background:#1F1F27;border:1px solid #2A2A33;border-radius:12px;">Noch keine Vibes erfasst.</div>'
-          return
-        }
-
-        const slices = Array.from(counts.entries())
-          .map(([vibe, count], idx) => ({ vibe, count, ...metaFor(vibe, idx) }))
-          .sort((a, b) => b.count - a.count)
-        const total = slices.reduce((s, x) => s + x.count, 0)
-        const top = slices[0]
-
-        body.innerHTML = `
-          <div style="display:flex;flex-wrap:wrap;gap:20px;align-items:center;justify-content:center;">
-            <div>${renderDonut(slices, total)}</div>
-            ${renderLegend(slices, total)}
+    container.innerHTML = `
+      <div class="panel-shell">
+        <div class="panel-head" style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px;">
+          <div>
+            <h2 style="margin:0;font-size:22px;">Vibe-Verteilung</h2>
+            <div style="color:var(--muted);font-size:13px;margin-top:2px;">
+              Wie schwingen Posts? Emoji-Reaktionen auf einen Blick.
+            </div>
           </div>
-          <div style="margin-top:14px;padding:10px 12px;background:#1F1F27;border:1px solid #2A2A33;border-radius:12px;color:#9CA3AF;font-size:12px;">
-            Top-Vibe: <span style="color:#fff;font-weight:600;">${top.emoji} ${top.label}</span> mit ${top.count} Reactions
-            (${((top.count / total) * 100).toFixed(1)}%) · ${slices.length} unterschiedliche Vibes
+          <div id="range-host" style="margin-left:auto;"></div>
+          <div class="toolbar" style="display:flex;gap:8px;">
+            <button class="btn btn-ghost" data-act="refresh" title="Aktualisieren">${iconHtml('refresh')} Aktualisieren</button>
+            <button class="btn btn-ghost" data-act="pdf" title="Als PDF">${iconHtml('file')} PDF</button>
+            <button class="btn btn-ghost" data-act="csv" title="Als CSV">${iconHtml('download')} CSV</button>
           </div>
-        `
-      } catch (e) {
-        body.innerHTML = '<div class="empty" style="padding:24px;text-align:center;color:#9CA3AF;background:#1F1F27;border:1px solid #2A2A33;border-radius:12px;">Daten kommen bald: ' + (e?.message || 'unbekannt') + '</div>'
-      }
+        </div>
+        <div class="panel-body" id="body"></div>
+      </div>`
+
+    const body = container.querySelector('#body')
+    const rangeHost = container.querySelector('#range-host')
+
+    try {
+      const seg = segmentedControl({
+        options: [
+          { value: '7d', label: '7 Tage' },
+          { value: '30d', label: '30 Tage' },
+        ],
+        value: state.range,
+        onChange: (v) => { state.range = v; loadAndRender(body) },
+      })
+      const segEl = seg?.el || seg
+      if (segEl instanceof Node) rangeHost.appendChild(segEl)
+    } catch {
+      rangeHost.innerHTML = `
+        <div class="seg-fallback" style="display:inline-flex;gap:4px;background:rgba(255,255,255,0.04);padding:4px;border-radius:10px;">
+          <button class="btn btn-ghost" data-range="7d">7 Tage</button>
+          <button class="btn btn-ghost" data-range="30d">30 Tage</button>
+        </div>`
+      rangeHost.querySelectorAll('[data-range]').forEach(b =>
+        b.addEventListener('click', () => { state.range = b.getAttribute('data-range'); loadAndRender(body) }))
     }
 
-    container.querySelector('.refresh-btn').addEventListener('click', refresh)
-    await refresh()
-  }
+    container.addEventListener('click', (e) => {
+      const btn = e.target.closest('[data-act]')
+      if (!btn) return
+      const act = btn.getAttribute('data-act')
+      if (act === 'refresh') { loadAndRender(body); toast('Aktualisiert') }
+      else if (act === 'pdf') exportPdf(container)
+      else if (act === 'csv') exportCurrentCsv()
+    })
+
+    await loadAndRender(body)
+  },
 }

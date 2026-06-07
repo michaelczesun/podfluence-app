@@ -1,143 +1,505 @@
 import { sb } from '/lib/supabase.js'
+import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js'
+import { makeBarChart, makeDonutChart, makeRadialBar } from '/lib/charts.js'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { drawer, tabs, statHero, glassCard } from '/lib/layout-extras.js'
+
+const TOTAL_BYTES = 1024 * 1024 * 1024 // 1 GB Free-Tier
+const WARN_THRESHOLD = 0.7
+
+function fmtBytes(n) {
+  if (!n || n < 0) return '0 B'
+  const units = ['B', 'KB', 'MB', 'GB', 'TB']
+  let i = 0
+  let v = n
+  while (v >= 1024 && i < units.length - 1) { v /= 1024; i++ }
+  return `${v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : 2)} ${units[i]}`
+}
+
+function pct(used, total) {
+  if (!total) return 0
+  return Math.min(100, Math.round((used / total) * 1000) / 10)
+}
+
+async function fetchBuckets() {
+  try {
+    const { data, error } = await sb.storage.listBuckets()
+    if (error) throw error
+    return data || []
+  } catch (e) {
+    console.warn('[storage-ops] listBuckets failed', e)
+    return []
+  }
+}
+
+async function fetchBucketContents(bucketName, prefix = '', acc = [], depth = 0) {
+  if (depth > 4) return acc
+  try {
+    const { data, error } = await sb.storage.from(bucketName).list(prefix, {
+      limit: 1000,
+      sortBy: { column: 'name', order: 'asc' }
+    })
+    if (error) throw error
+    for (const item of (data || [])) {
+      const path = prefix ? `${prefix}/${item.name}` : item.name
+      if (item.id === null || (item.metadata == null && !item.name.includes('.'))) {
+        await fetchBucketContents(bucketName, path, acc, depth + 1)
+      } else {
+        acc.push({
+          name: item.name,
+          path,
+          size: item.metadata?.size || 0,
+          mime: item.metadata?.mimetype || '—',
+          updated: item.updated_at || item.created_at,
+          bucket: bucketName
+        })
+      }
+    }
+  } catch (e) {
+    console.warn('[storage-ops] list failed', bucketName, prefix, e)
+  }
+  return acc
+}
+
+async function fetchJobStatus() {
+  try {
+    const { data } = await sb
+      .from('storage_recompress_jobs')
+      .select('*')
+      .order('created_at', { ascending: false })
+      .limit(5)
+    return data || []
+  } catch {
+    return []
+  }
+}
+
+async function triggerRecompress(bucketName) {
+  try {
+    const { data, error } = await sb.functions.invoke('recompress-storage', {
+      body: { bucket: bucketName }
+    })
+    if (error) throw error
+    return { ok: true, data }
+  } catch (e) {
+    return { ok: false, error: e.message || String(e) }
+  }
+}
+
+async function deleteFile(bucket, path) {
+  const { error } = await sb.storage.from(bucket).remove([path])
+  if (error) throw error
+}
+
+function renderError(body, msg, retry) {
+  body.innerHTML = `
+    <div class="glass-card empty-state">
+      <div class="empty-icon">${iconHtml('alert-triangle')}</div>
+      <h3>Konnte Storage nicht laden</h3>
+      <p>${htmlEscape(msg || 'Unbekannter Fehler')}</p>
+      <button class="btn btn-primary" id="retryBtn">Erneut versuchen</button>
+    </div>`
+  body.querySelector('#retryBtn')?.addEventListener('click', retry)
+}
+
+function renderEmpty(body) {
+  body.innerHTML = `
+    <div class="glass-card empty-state">
+      <div class="empty-icon">${iconHtml('database')}</div>
+      <h3>Keine Buckets gefunden</h3>
+      <p>Es sind aktuell keine Storage-Buckets konfiguriert.</p>
+    </div>`
+}
+
+function renderTotalHero(body, totalUsed) {
+  const usedPct = pct(totalUsed, TOTAL_BYTES)
+  const warn = usedPct >= WARN_THRESHOLD * 100
+  const heroEl = document.createElement('div')
+  heroEl.className = 'glass-card hero-row'
+  heroEl.innerHTML = `
+    <div class="hero-grid">
+      <div class="hero-stat">
+        <div class="hero-label">Gesamt belegt</div>
+        <div class="hero-value" id="totalUsedVal">0 B</div>
+        <div class="hero-sub">${fmtBytes(TOTAL_BYTES)} Free-Tier</div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-label">Auslastung</div>
+        <div class="hero-value ${warn ? 'is-warn' : ''}" id="totalPctVal">0%</div>
+        <div class="progress-bar"><div class="progress-fill ${warn ? 'is-warn' : ''}" style="width:0%" id="totalProg"></div></div>
+      </div>
+      <div class="hero-stat">
+        <div class="hero-label">Status</div>
+        <div class="hero-badge ${warn ? 'badge-warn' : 'badge-ok'}">
+          ${warn ? iconHtml('alert-triangle') + ' Speicher knapp' : iconHtml('check') + ' OK'}
+        </div>
+        <div class="hero-sub">${warn ? 'Recompress empfohlen' : 'Innerhalb sicherer Zone'}</div>
+      </div>
+    </div>`
+  body.appendChild(heroEl)
+
+  try {
+    countUp(heroEl.querySelector('#totalUsedVal'), 0, totalUsed, 900, (v) => fmtBytes(v))
+    countUp(heroEl.querySelector('#totalPctVal'), 0, usedPct, 900, (v) => `${v.toFixed(1)}%`)
+  } catch {
+    heroEl.querySelector('#totalUsedVal').textContent = fmtBytes(totalUsed)
+    heroEl.querySelector('#totalPctVal').textContent = `${usedPct.toFixed(1)}%`
+  }
+  setTimeout(() => {
+    const p = heroEl.querySelector('#totalProg')
+    if (p) p.style.width = `${usedPct}%`
+  }, 50)
+
+  if (warn) {
+    const warnBox = document.createElement('div')
+    warnBox.className = 'warn-banner'
+    warnBox.innerHTML = `${iconHtml('alert-triangle')} <strong>Achtung:</strong> Über 70% des Free-Tier belegt (${usedPct.toFixed(1)}%). Recompress älterer Bilder einplanen.`
+    body.appendChild(warnBox)
+  }
+}
+
+function renderJobStatus(body, jobs) {
+  const wrap = document.createElement('div')
+  wrap.className = 'glass-card job-status-card'
+  wrap.innerHTML = `
+    <div class="card-head">
+      <h3>${iconHtml('activity')} Recompress-Jobs</h3>
+      <span class="muted small">letzte 5</span>
+    </div>
+    <div class="job-list">
+      ${(!jobs.length) ? `<div class="muted small" style="padding:12px">Keine Jobs in Historie.</div>` :
+        jobs.map(j => {
+          const st = (j.status || 'unknown').toLowerCase()
+          const cls = st === 'done' ? 'ok' : st === 'failed' ? 'err' : st === 'running' ? 'run' : 'idle'
+          return `
+            <div class="job-row">
+              <div class="job-meta">
+                <span class="badge badge-${cls}">${htmlEscape(st)}</span>
+                <span class="job-bucket">${htmlEscape(j.bucket || '—')}</span>
+              </div>
+              <div class="job-stats">
+                <span>${fmtNumber(j.processed || 0)} Files</span>
+                <span class="muted small">${fmtRelativeTime(j.created_at)}</span>
+              </div>
+            </div>`
+        }).join('')
+      }
+    </div>`
+  body.appendChild(wrap)
+}
+
+function renderAllFilesDrawer(files, bucketName, onAction) {
+  const wrap = document.createElement('div')
+  const sorted = [...files].sort((a, b) => b.size - a.size)
+  wrap.innerHTML = `
+    <div class="drawer-toolbar">
+      <input type="search" placeholder="Filter…" class="input" id="ftFilter" />
+      <span class="muted small">${sorted.length} Dateien</span>
+    </div>
+    <table class="data-table hover">
+      <thead><tr><th>Pfad</th><th class="num">Größe</th><th class="num">Aktualisiert</th><th></th></tr></thead>
+      <tbody id="ftBody">
+        ${sorted.map(f => `
+          <tr data-path="${htmlEscape(f.path)}" data-search="${htmlEscape(f.path.toLowerCase())}">
+            <td class="file-name" title="${htmlEscape(f.path)}">${htmlEscape(f.path)}</td>
+            <td class="num"><strong>${fmtBytes(f.size)}</strong></td>
+            <td class="num muted small">${f.updated ? fmtRelativeTime(f.updated) : '—'}</td>
+            <td class="row-actions">
+              <button class="btn btn-icon btn-ghost" data-act="del" title="Löschen">${iconHtml('trash')}</button>
+            </td>
+          </tr>`).join('')}
+      </tbody>
+    </table>`
+
+  wrap.querySelector('#ftFilter').addEventListener('input', (ev) => {
+    const q = ev.target.value.toLowerCase().trim()
+    wrap.querySelectorAll('#ftBody tr').forEach(tr => {
+      tr.style.display = (!q || tr.dataset.search.includes(q)) ? '' : 'none'
+    })
+  })
+
+  wrap.querySelectorAll('[data-act="del"]').forEach(btn => {
+    btn.addEventListener('click', async (ev) => {
+      const tr = ev.target.closest('tr')
+      const path = tr?.dataset.path
+      if (!path) return
+      const ok = await confirmDialog({
+        title: 'Datei löschen?',
+        message: path,
+        confirmLabel: 'Löschen',
+        destructive: true
+      })
+      if (!ok) return
+      try {
+        await deleteFile(bucketName, path)
+        toast('Gelöscht', 'success')
+        tr.remove()
+        onAction()
+      } catch (e) { toast(`Fehler: ${e.message}`, 'error') }
+    })
+  })
+
+  return wrap
+}
+
+function renderBucketCard(bucket, files, totalUsed, onAction) {
+  const used = files.reduce((a, b) => a + (b.size || 0), 0)
+  const fileCount = files.length
+  const localTotal = Math.max(used, totalUsed * 0.4, 50 * 1024 * 1024)
+  const usedPct = pct(used, localTotal)
+  const top = [...files].sort((a, b) => b.size - a.size).slice(0, 10)
+
+  const card = document.createElement('div')
+  card.className = 'glass-card bucket-card'
+  const radialId = `radial-${bucket.id || bucket.name}`.replace(/[^a-zA-Z0-9_-]/g, '-')
+  card.innerHTML = `
+    <div class="bucket-head">
+      <div>
+        <h3>${iconHtml('hard-drive')} ${htmlEscape(bucket.name)}</h3>
+        <div class="muted small">${fmtNumber(fileCount)} Dateien · ${bucket.public ? 'public' : 'private'}</div>
+      </div>
+      <div class="bucket-actions">
+        <button class="btn btn-secondary btn-sm" data-act="export">${iconHtml('download')} CSV</button>
+        <button class="btn btn-primary btn-sm" data-act="recompress">${iconHtml('zap')} Recompress</button>
+      </div>
+    </div>
+    <div class="bucket-body">
+      <div class="bucket-radial" id="${radialId}"></div>
+      <div class="bucket-info">
+        <div class="info-row"><span class="muted">Belegt</span><strong>${fmtBytes(used)}</strong></div>
+        <div class="info-row"><span class="muted">Dateien</span><strong>${fmtNumber(fileCount)}</strong></div>
+        <div class="info-row"><span class="muted">Ø Größe</span><strong>${fmtBytes(fileCount ? used / fileCount : 0)}</strong></div>
+      </div>
+    </div>
+    <div class="bucket-top">
+      <div class="card-head">
+        <h4>${iconHtml('list')} Größte Dateien</h4>
+        <button class="btn btn-ghost btn-sm" data-act="all">${iconHtml('arrow-right')} Alle ansehen</button>
+      </div>
+      ${top.length === 0 ? `
+        <div class="empty-mini">
+          <div class="empty-icon-sm">${iconHtml('inbox')}</div>
+          <p class="muted small">Bucket ist leer.</p>
+        </div>` : `
+        <table class="data-table compact hover">
+          <thead><tr><th>Datei</th><th>Typ</th><th class="num">Größe</th><th class="num">Aktualisiert</th><th></th></tr></thead>
+          <tbody>
+            ${top.map(f => `
+              <tr data-path="${htmlEscape(f.path)}">
+                <td class="file-name" title="${htmlEscape(f.path)}">${htmlEscape(f.name)}</td>
+                <td><span class="mime-chip">${htmlEscape((f.mime || '—').split('/').pop() || '—')}</span></td>
+                <td class="num"><strong>${fmtBytes(f.size)}</strong></td>
+                <td class="num muted small">${f.updated ? fmtRelativeTime(f.updated) : '—'}</td>
+                <td class="row-actions">
+                  <button class="btn btn-icon btn-ghost" data-row-act="delete" title="Löschen">${iconHtml('trash')}</button>
+                </td>
+              </tr>`).join('')}
+          </tbody>
+        </table>`}
+    </div>`
+
+  try {
+    makeRadialBar(card.querySelector(`#${radialId}`), {
+      value: usedPct,
+      label: `${usedPct.toFixed(1)}%`,
+      sublabel: fmtBytes(used),
+      color: usedPct > 70 ? '#ff5b5b' : usedPct > 40 ? '#ffb547' : '#5be3a4'
+    })
+  } catch (e) {
+    const el = card.querySelector(`#${radialId}`)
+    if (el) el.innerHTML = `<div class="muted">${usedPct.toFixed(1)}%</div>`
+  }
+
+  card.querySelector('[data-act="export"]').addEventListener('click', () => {
+    exportCsv(`storage-${bucket.name}.csv`, files.map(f => ({
+      path: f.path, name: f.name, size: f.size, mime: f.mime, updated: f.updated
+    })))
+    toast(`CSV exportiert (${fileCount} Dateien)`)
+  })
+
+  card.querySelector('[data-act="recompress"]').addEventListener('click', async () => {
+    const ok = await confirmDialog({
+      title: `Recompress: ${bucket.name}`,
+      message: `Alle Bilder im Bucket "${bucket.name}" neu komprimieren? Das kann je nach Anzahl mehrere Minuten dauern.`,
+      confirmLabel: 'Starten',
+      destructive: false
+    })
+    if (!ok) return
+    const btn = card.querySelector('[data-act="recompress"]')
+    btn.disabled = true
+    btn.innerHTML = `${spinnerHtml()} Läuft…`
+    const res = await triggerRecompress(bucket.name)
+    btn.disabled = false
+    btn.innerHTML = `${iconHtml('zap')} Recompress`
+    if (res.ok) {
+      toast(`Job für "${bucket.name}" gestartet`, 'success')
+      onAction()
+    } else {
+      toast(`Fehler: ${res.error}`, 'error')
+    }
+  })
+
+  card.querySelector('[data-act="all"]').addEventListener('click', () => {
+    drawer({
+      title: `Alle Dateien · ${bucket.name}`,
+      width: 720,
+      content: renderAllFilesDrawer(files, bucket.name, onAction)
+    })
+  })
+
+  card.querySelectorAll('[data-row-act="delete"]').forEach(btn => {
+    btn.addEventListener('click', async (ev) => {
+      const tr = ev.target.closest('tr')
+      const path = tr?.dataset.path
+      if (!path) return
+      const ok = await confirmDialog({
+        title: 'Datei löschen?',
+        message: `${path}\n\nDieser Vorgang ist endgültig.`,
+        confirmLabel: 'Löschen',
+        destructive: true
+      })
+      if (!ok) return
+      try {
+        await deleteFile(bucket.name, path)
+        toast('Datei gelöscht', 'success')
+        onAction()
+      } catch (e) {
+        toast(`Fehler: ${e.message}`, 'error')
+      }
+    })
+  })
+
+  return card
+}
+
+function renderDistribution(body, bucketSummaries) {
+  if (!bucketSummaries.length) return
+  const card = document.createElement('div')
+  card.className = 'glass-card chart-card'
+  card.innerHTML = `
+    <div class="card-head">
+      <h3>${iconHtml('pie-chart')} Verteilung nach Bucket</h3>
+      <span class="muted small">Belegung &amp; Dateianzahl</span>
+    </div>
+    <div class="chart-grid">
+      <div id="distDonut" class="chart-half"></div>
+      <div id="distBar" class="chart-half"></div>
+    </div>`
+  body.appendChild(card)
+  try {
+    makeDonutChart(card.querySelector('#distDonut'), {
+      labels: bucketSummaries.map(b => b.name),
+      values: bucketSummaries.map(b => b.used),
+      formatter: (v) => fmtBytes(v)
+    })
+  } catch {}
+  try {
+    makeBarChart(card.querySelector('#distBar'), {
+      labels: bucketSummaries.map(b => b.name),
+      values: bucketSummaries.map(b => b.count),
+      label: 'Dateien'
+    })
+  } catch {}
+}
 
 export default {
   id: 'storage-ops',
   title: 'Storage & Cleanup',
   category: 'admin_actions',
-  summary: 'Speichernutzung pro Bucket und Cleanup-Job auslösen.',
   async mount(container) {
-    container.innerHTML = `<div class="panel-shell" style="background:#16161D;border:1px solid #2A2A33;border-radius:12px;color:#fff;padding:16px;">
-      <div class="panel-head" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <div>
-          <h2 style="margin:0;font-size:18px;color:#fff;">Storage & Cleanup</h2>
-          <div style="font-size:12px;color:#9CA3AF;margin-top:4px;">Speichernutzung pro Bucket und Cleanup-Job auslösen.</div>
+    container.innerHTML = `
+      <div class="panel-shell storage-ops-panel">
+        <div class="panel-head">
+          <div>
+            <h2>${iconHtml('database')} Storage &amp; Cleanup</h2>
+            <p class="muted small">Bucket-Auslastung, größte Dateien &amp; Recompress-Steuerung</p>
+          </div>
+          <div class="toolbar">
+            <button class="btn btn-secondary" id="refreshBtn">${iconHtml('refresh-cw')} Aktualisieren</button>
+            <button class="btn btn-secondary" id="pdfBtn">${iconHtml('file-text')} PDF</button>
+            <button class="btn btn-secondary" id="csvBtn">${iconHtml('download')} CSV</button>
+          </div>
         </div>
-        <button class="refresh-btn" style="background:#8B5CF6;color:#fff;border:none;border-radius:8px;padding:8px 14px;cursor:pointer;font-size:13px;">Aktualisieren</button>
-      </div>
-      <div class="panel-body"><div class="loading">Lädt…</div></div>
-    </div>`
+        <div class="panel-body" id="body"></div>
+      </div>`
 
-    const body = container.querySelector('.panel-body')
+    const body = container.querySelector('#body')
 
-    const showToast = (msg) => {
-      const t = document.createElement('div')
-      t.className = 'toast'
-      t.textContent = msg
-      t.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#8B5CF6;color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.4);'
-      document.body.appendChild(t)
-      setTimeout(() => t.remove(), 2500)
-    }
-
-    const fmtBytes = (b) => {
-      if (b == null) return '–'
-      const n = Number(b)
-      if (!isFinite(n)) return String(b)
-      if (n < 1024) return n + ' B'
-      if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'
-      if (n < 1024 * 1024 * 1024) return (n / (1024 * 1024)).toFixed(1) + ' MB'
-      return (n / (1024 * 1024 * 1024)).toFixed(2) + ' GB'
-    }
-
-    const fmtNum = (n) => {
-      if (n == null) return '–'
-      return Number(n).toLocaleString('de-DE')
-    }
-
-    const refresh = async () => {
-      body.innerHTML = '<div class="loading" style="color:#9CA3AF;padding:24px;text-align:center;">Lädt…</div>'
+    const load = async () => {
+      body.innerHTML = ''
       try {
-        const [summaryRes, bucketRes] = await Promise.all([
-          sb.rpc('admin_storage_summary'),
-          sb.rpc('admin_storage_bucket_stats')
-        ])
+        const skelHtml = skeletonLoader({ rows: 4, type: 'card' })
+        const skel = document.createElement('div')
+        skel.innerHTML = typeof skelHtml === 'string' ? skelHtml : ''
+        body.appendChild(skel)
+      } catch {}
 
-        if (summaryRes.error) throw summaryRes.error
-        if (bucketRes.error) throw bucketRes.error
-
-        const summary = Array.isArray(summaryRes.data) ? (summaryRes.data[0] || {}) : (summaryRes.data || {})
-        const buckets = Array.isArray(bucketRes.data) ? bucketRes.data : []
-
-        const totalBytes = summary.total_bytes ?? summary.size_bytes ?? summary.total_size ?? buckets.reduce((s, b) => s + Number(b.size_bytes || b.bytes || 0), 0)
-        const totalFiles = summary.total_files ?? summary.file_count ?? buckets.reduce((s, b) => s + Number(b.file_count || b.files || 0), 0)
-        const bucketCount = summary.bucket_count ?? buckets.length
-        const quota = summary.quota_bytes ?? (1024 * 1024 * 1024)
-        const usagePct = quota ? Math.min(100, Math.round((Number(totalBytes) / Number(quota)) * 100)) : null
-
-        const maxBucketBytes = Math.max(1, ...buckets.map(b => Number(b.size_bytes || b.bytes || 0)))
-
-        const kpiHtml = `
-          <div class="kpi-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:20px;">
-            <div class="kpi-tile" style="background:#1E1E26;border:1px solid #2A2A33;border-radius:12px;padding:14px;">
-              <div style="font-size:11px;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.5px;">Gesamt</div>
-              <div style="font-size:22px;color:#fff;font-weight:600;margin-top:6px;">${fmtBytes(totalBytes)}</div>
-              <div style="font-size:11px;color:#8B5CF6;margin-top:4px;">${usagePct != null ? usagePct + '% von ' + fmtBytes(quota) : 'Speicher'}</div>
-            </div>
-            <div class="kpi-tile" style="background:#1E1E26;border:1px solid #2A2A33;border-radius:12px;padding:14px;">
-              <div style="font-size:11px;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.5px;">Dateien</div>
-              <div style="font-size:22px;color:#fff;font-weight:600;margin-top:6px;">${fmtNum(totalFiles)}</div>
-              <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">Objekte gesamt</div>
-            </div>
-            <div class="kpi-tile" style="background:#1E1E26;border:1px solid #2A2A33;border-radius:12px;padding:14px;">
-              <div style="font-size:11px;color:#9CA3AF;text-transform:uppercase;letter-spacing:0.5px;">Buckets</div>
-              <div style="font-size:22px;color:#fff;font-weight:600;margin-top:6px;">${fmtNum(bucketCount)}</div>
-              <div style="font-size:11px;color:#9CA3AF;margin-top:4px;">aktive Buckets</div>
-            </div>
-          </div>`
-
-        const rowsHtml = buckets.length ? buckets.map(b => {
-          const name = b.bucket_id || b.name || b.bucket || '–'
-          const bytes = Number(b.size_bytes || b.bytes || 0)
-          const files = b.file_count ?? b.files ?? '–'
-          const pct = Math.round((bytes / maxBucketBytes) * 100)
-          return `<tr style="border-top:1px solid #2A2A33;">
-            <td style="padding:10px;color:#fff;font-size:13px;">${name}</td>
-            <td style="padding:10px;color:#fff;font-size:13px;">${fmtBytes(bytes)}</td>
-            <td style="padding:10px;color:#9CA3AF;font-size:13px;">${fmtNum(files)}</td>
-            <td style="padding:10px;width:40%;">
-              <div style="background:#2A2A33;border-radius:6px;height:8px;overflow:hidden;">
-                <div style="background:#8B5CF6;height:100%;width:${pct}%;"></div>
-              </div>
-            </td>
-          </tr>`
-        }).join('') : '<tr><td colspan="4" style="padding:14px;color:#9CA3AF;text-align:center;">Keine Buckets gefunden</td></tr>'
-
-        const tableHtml = `
-          <div style="margin-bottom:20px;">
-            <div style="font-size:13px;color:#9CA3AF;margin-bottom:8px;">Buckets</div>
-            <table class="data-table" style="width:100%;border-collapse:collapse;background:#1E1E26;border:1px solid #2A2A33;border-radius:12px;overflow:hidden;">
-              <thead>
-                <tr style="background:#16161D;">
-                  <th style="padding:10px;text-align:left;font-size:11px;color:#9CA3AF;text-transform:uppercase;">Bucket</th>
-                  <th style="padding:10px;text-align:left;font-size:11px;color:#9CA3AF;text-transform:uppercase;">Größe</th>
-                  <th style="padding:10px;text-align:left;font-size:11px;color:#9CA3AF;text-transform:uppercase;">Dateien</th>
-                  <th style="padding:10px;text-align:left;font-size:11px;color:#9CA3AF;text-transform:uppercase;">Anteil</th>
-                </tr>
-              </thead>
-              <tbody>${rowsHtml}</tbody>
-            </table>
-          </div>`
-
-        const actionsHtml = `
-          <div style="background:#1E1E26;border:1px solid #2A2A33;border-radius:12px;padding:14px;">
-            <div style="font-size:13px;color:#fff;font-weight:600;margin-bottom:4px;">Aktionen</div>
-            <div style="font-size:12px;color:#9CA3AF;margin-bottom:12px;">Triggert die Edge-Function <code style="color:#8B5CF6;">cleanup-old-data</code>.</div>
-            <button class="action-btn" data-action="run_cleanup_old_data" style="background:#8B5CF6;color:#fff;border:none;border-radius:8px;padding:10px 16px;cursor:pointer;font-size:13px;font-weight:500;">Cleanup Old Data ausführen</button>
-          </div>`
-
-        body.innerHTML = kpiHtml + tableHtml + actionsHtml
-
-        body.querySelectorAll('.action-btn').forEach(btn => {
-          btn.addEventListener('click', () => {
-            const action = btn.getAttribute('data-action')
-            showToast('Aktion: ' + action)
-          })
-        })
+      let buckets = []
+      try {
+        buckets = await fetchBuckets()
       } catch (e) {
-        body.innerHTML = '<div class="empty" style="padding:24px;color:#9CA3AF;text-align:center;background:#1E1E26;border:1px solid #2A2A33;border-radius:12px;">Daten kommen bald: ' + (e?.message || 'unbekannt') + '</div>'
+        return renderError(body, e.message, load)
       }
+
+      if (!buckets.length) {
+        body.innerHTML = ''
+        return renderEmpty(body)
+      }
+
+      const contents = await Promise.all(buckets.map(b => fetchBucketContents(b.name)))
+      const jobs = await fetchJobStatus()
+
+      const bucketSummaries = buckets.map((b, i) => ({
+        ...b,
+        files: contents[i],
+        used: contents[i].reduce((a, f) => a + (f.size || 0), 0),
+        count: contents[i].length
+      }))
+      const totalUsed = bucketSummaries.reduce((a, s) => a + s.used, 0)
+      const allFiles = bucketSummaries.flatMap(s => s.files.map(f => ({ ...f, bucket: s.name })))
+
+      container._exportPayload = { bucketSummaries, totalUsed, allFiles, jobs }
+
+      body.innerHTML = ''
+
+      renderTotalHero(body, totalUsed)
+      renderDistribution(body, bucketSummaries)
+      renderJobStatus(body, jobs)
+
+      const grid = document.createElement('div')
+      grid.className = 'bucket-grid'
+      body.appendChild(grid)
+      for (const b of bucketSummaries) {
+        grid.appendChild(renderBucketCard(b, b.files, totalUsed, load))
+      }
+
+      try { fadeIn(body) } catch {}
     }
 
-    container.querySelector('.refresh-btn').addEventListener('click', refresh)
-    await refresh()
+    container.querySelector('#refreshBtn').addEventListener('click', () => {
+      toast('Wird aktualisiert…')
+      load()
+    })
+
+    container.querySelector('#csvBtn').addEventListener('click', () => {
+      const p = container._exportPayload
+      if (!p) return toast('Noch keine Daten', 'error')
+      exportCsv('storage-overview.csv', p.allFiles.map(f => ({
+        bucket: f.bucket, path: f.path, size: f.size, mime: f.mime, updated: f.updated
+      })))
+      toast(`${p.allFiles.length} Zeilen exportiert`, 'success')
+    })
+
+    container.querySelector('#pdfBtn').addEventListener('click', async () => {
+      try {
+        await exportPanelAsPdf(container, 'Storage & Cleanup')
+        toast('PDF erstellt', 'success')
+      } catch (e) {
+        toast(`PDF-Fehler: ${e.message}`, 'error')
+      }
+    })
+
+    await load()
   }
 }

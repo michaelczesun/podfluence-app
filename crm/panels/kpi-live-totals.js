@@ -1,85 +1,420 @@
 import { sb } from '/lib/supabase.js'
+import { toast, modal, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js'
+import { makeAreaChart, makeLineChart } from '/lib/charts.js'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
+import { countUp, fadeIn, skeletonLoader, pulse } from '/lib/animations.js'
+import { drawer, statHero, glassCard } from '/lib/layout-extras.js'
+
+const REFRESH_MS = 60_000
+
+const KPI_DEFS = [
+  { key: 'total_users',      label: 'Total Users',      icon: 'users',     color: '#7C5CFF', fmt: 'int' },
+  { key: 'active_24h',       label: 'Aktiv (24h)',      icon: 'activity',  color: '#22D3EE', fmt: 'int' },
+  { key: 'total_posts',      label: 'Total Posts',      icon: 'message',   color: '#F59E0B', fmt: 'int' },
+  { key: 'listening_hours',  label: 'Listening-Hours',  icon: 'headphones',color: '#10B981', fmt: 'hours' }
+]
+
+async function fetchTotals() {
+  try {
+    const { data, error } = await sb.rpc('crm_live_kpi_totals')
+    if (!error && data) return normalize(data)
+  } catch (_) {}
+
+  const today = new Date()
+  const yesterday = new Date(today.getTime() - 86_400_000)
+  const dayBefore = new Date(today.getTime() - 2 * 86_400_000)
+  const since24h = new Date(today.getTime() - 86_400_000).toISOString()
+  const since48h = dayBefore.toISOString()
+
+  const safe = (p) => p.then(r => r).catch(() => ({ count: 0, data: null }))
+
+  const [users, usersYday, active24, active48, posts, postsYday, listenSec, listenSecYday] = await Promise.all([
+    safe(sb.from('profiles').select('id', { count: 'exact', head: true })),
+    safe(sb.from('profiles').select('id', { count: 'exact', head: true }).lt('created_at', yesterday.toISOString())),
+    safe(sb.from('profiles').select('id', { count: 'exact', head: true }).gte('last_seen_at', since24h)),
+    safe(sb.from('profiles').select('id', { count: 'exact', head: true }).gte('last_seen_at', since48h).lt('last_seen_at', since24h)),
+    safe(sb.from('posts').select('id', { count: 'exact', head: true })),
+    safe(sb.from('posts').select('id', { count: 'exact', head: true }).lt('created_at', yesterday.toISOString())),
+    safe(sb.rpc('crm_total_listen_seconds')),
+    safe(sb.rpc('crm_total_listen_seconds_until', { until: yesterday.toISOString() }))
+  ])
+
+  const totalListenSec = Number(listenSec?.data ?? 0)
+  const ydayListenSec  = Number(listenSecYday?.data ?? 0)
+
+  return {
+    total_users:      { value: users.count ?? 0, prev: usersYday.count ?? 0 },
+    active_24h:       { value: active24.count ?? 0, prev: active48.count ?? 0 },
+    total_posts:      { value: posts.count ?? 0, prev: postsYday.count ?? 0 },
+    listening_hours:  { value: Math.round(totalListenSec / 3600), prev: Math.round(ydayListenSec / 3600) }
+  }
+}
+
+function normalize(raw) {
+  const out = {}
+  for (const def of KPI_DEFS) {
+    const v = raw[def.key]
+    if (v && typeof v === 'object' && 'value' in v) {
+      out[def.key] = { value: Number(v.value) || 0, prev: Number(v.prev) || 0 }
+    } else {
+      out[def.key] = {
+        value: Number(raw[def.key]) || 0,
+        prev: Number(raw[`${def.key}_prev`] ?? raw[`${def.key}_yday`]) || 0
+      }
+    }
+  }
+  return out
+}
+
+async function fetchTimeSeries(kpiKey, days = 30) {
+  try {
+    const { data, error } = await sb.rpc('crm_kpi_timeseries', { kpi: kpiKey, days })
+    if (!error && Array.isArray(data) && data.length) {
+      return data.map(r => ({ date: r.date || r.day, value: Number(r.value) || 0 }))
+    }
+  } catch (_) {}
+
+  const since = new Date(Date.now() - days * 86_400_000).toISOString()
+  let rows = []
+  try {
+    if (kpiKey === 'total_users') {
+      const { data } = await sb.from('profiles').select('created_at').gte('created_at', since)
+      rows = bucketByDay(data || [], 'created_at', days, true)
+    } else if (kpiKey === 'active_24h') {
+      const { data } = await sb.from('profiles').select('last_seen_at').gte('last_seen_at', since)
+      rows = bucketByDay(data || [], 'last_seen_at', days, false)
+    } else if (kpiKey === 'total_posts') {
+      const { data } = await sb.from('posts').select('created_at').gte('created_at', since)
+      rows = bucketByDay(data || [], 'created_at', days, true)
+    } else if (kpiKey === 'listening_hours') {
+      const { data } = await sb.from('listens').select('created_at,duration_sec').gte('created_at', since)
+      rows = bucketByDay(data || [], 'created_at', days, false, r => Number(r.duration_sec || 0) / 3600)
+    }
+  } catch (_) {}
+  return rows
+}
+
+function bucketByDay(rows, dateField, days, cumulative, valueFn) {
+  const buckets = new Map()
+  const today = new Date()
+  today.setHours(0, 0, 0, 0)
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today.getTime() - i * 86_400_000)
+    buckets.set(d.toISOString().slice(0, 10), 0)
+  }
+  for (const r of rows) {
+    const k = (r[dateField] || '').slice(0, 10)
+    if (!buckets.has(k)) continue
+    buckets.set(k, buckets.get(k) + (valueFn ? valueFn(r) : 1))
+  }
+  let acc = 0
+  return [...buckets.entries()].map(([date, value]) => {
+    if (cumulative) { acc += value; return { date, value: acc } }
+    return { date, value: Math.round(value) }
+  })
+}
+
+function pctChange(curr, prev) {
+  if (!prev || prev === 0) return curr > 0 ? 100 : 0
+  return ((curr - prev) / prev) * 100
+}
+
+function formatValue(val, fmt) {
+  if (fmt === 'hours') return fmtNumber(val) + ' h'
+  return fmtNumber(val)
+}
+
+function renderHeroGrid(totals) {
+  return `<div class="hero-grid" id="hero-grid">
+    ${KPI_DEFS.map(def => {
+      const t = totals[def.key] || { value: 0, prev: 0 }
+      const change = pctChange(t.value, t.prev)
+      const up = change >= 0
+      return `
+      <div class="stat-hero glass-card kpi-card" data-kpi="${def.key}" role="button" tabindex="0"
+           style="--accent:${def.color}">
+        <div class="kpi-card-head">
+          <span class="kpi-icon" style="background:${def.color}22;color:${def.color}">${iconHtml(def.icon)}</span>
+          <span class="kpi-label">${htmlEscape(def.label)}</span>
+        </div>
+        <div class="kpi-value" id="kpi-val-${def.key}" data-fmt="${def.fmt}">${formatValue(t.value, def.fmt)}</div>
+        <div class="kpi-change ${up ? 'up' : 'down'}">
+          ${iconHtml(up ? 'trending-up' : 'trending-down')}
+          <span>${up ? '+' : ''}${change.toFixed(1)}%</span>
+          <span class="kpi-change-sub">vs gestern</span>
+        </div>
+        <div class="kpi-card-foot">
+          <span class="kpi-hint">${iconHtml('bar-chart')} 30-Tage-Verlauf öffnen</span>
+        </div>
+      </div>`
+    }).join('')}
+  </div>`
+}
+
+function styles() {
+  return `<style>
+    .panel-shell { display:flex; flex-direction:column; gap:20px; padding:20px; }
+    .panel-head { display:flex; justify-content:space-between; align-items:center; gap:16px; flex-wrap:wrap; }
+    .panel-head h2 { font-size:22px; font-weight:700; margin:0; letter-spacing:-0.02em; }
+    .panel-head .sub { font-size:13px; color:var(--text-muted,#8b8b9a); margin-top:4px; }
+    .toolbar { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+    .toolbar button { display:inline-flex; align-items:center; gap:6px; padding:8px 14px;
+      border-radius:10px; background:rgba(255,255,255,0.04); border:1px solid rgba(255,255,255,0.08);
+      color:inherit; font-size:13px; font-weight:500; cursor:pointer; transition:all .15s; }
+    .toolbar button:hover { background:rgba(255,255,255,0.08); transform:translateY(-1px); }
+    .toolbar .live-dot { display:inline-flex; align-items:center; gap:6px; padding:6px 10px;
+      border-radius:999px; background:rgba(34,197,94,0.1); color:#22c55e; font-size:12px; font-weight:600; }
+    .toolbar .live-dot::before { content:''; width:7px; height:7px; border-radius:50%;
+      background:#22c55e; box-shadow:0 0 8px #22c55e; animation:livepulse 1.4s ease-in-out infinite; }
+    @keyframes livepulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+    .hero-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:18px; }
+    .kpi-card { padding:22px; border-radius:18px; cursor:pointer; position:relative;
+      overflow:hidden; transition:transform .2s ease, box-shadow .2s ease;
+      background:linear-gradient(140deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
+      border:1px solid rgba(255,255,255,0.06); }
+    .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--accent); opacity:0.85; }
+    .kpi-card:hover { transform:translateY(-3px); box-shadow:0 12px 40px rgba(0,0,0,0.35), 0 0 0 1px var(--accent); }
+    .kpi-card.pulsing { animation:kpipulse 1.2s ease-out; }
+    @keyframes kpipulse { 0%{box-shadow:0 0 0 0 var(--accent)} 50%{box-shadow:0 0 0 14px transparent} 100%{box-shadow:0 0 0 0 transparent} }
+    .kpi-card-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
+    .kpi-icon { display:inline-flex; width:36px; height:36px; border-radius:10px; align-items:center; justify-content:center; }
+    .kpi-label { font-size:13px; font-weight:500; color:var(--text-muted,#9ca3af); letter-spacing:0.01em; }
+    .kpi-value { font-size:38px; font-weight:700; letter-spacing:-0.03em; line-height:1.1; font-variant-numeric:tabular-nums; margin-bottom:10px; }
+    .kpi-change { display:inline-flex; align-items:center; gap:6px; font-size:13px; font-weight:600; }
+    .kpi-change.up { color:#22c55e; }
+    .kpi-change.down { color:#ef4444; }
+    .kpi-change-sub { color:var(--text-muted,#9ca3af); font-weight:400; margin-left:4px; }
+    .kpi-card-foot { margin-top:16px; padding-top:14px; border-top:1px solid rgba(255,255,255,0.05); font-size:12px; color:var(--text-muted,#9ca3af); }
+    .kpi-hint { display:inline-flex; align-items:center; gap:6px; }
+
+    .skeleton-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(250px, 1fr)); gap:18px; }
+    .skel-card { height:180px; border-radius:18px;
+      background:linear-gradient(90deg, rgba(255,255,255,0.04), rgba(255,255,255,0.08), rgba(255,255,255,0.04));
+      background-size:200% 100%; animation:shimmer 1.6s linear infinite; }
+    @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    .error-state, .empty-state { text-align:center; padding:60px 20px;
+      background:rgba(255,255,255,0.02); border-radius:18px; border:1px dashed rgba(255,255,255,0.08); }
+    .error-state .icon, .empty-state .icon { font-size:42px; opacity:0.5; margin-bottom:12px; }
+    .error-state h3, .empty-state h3 { font-size:18px; margin:0 0 6px; }
+    .error-state p, .empty-state p { color:var(--text-muted,#9ca3af); margin:0 0 16px; }
+    .retry-btn { padding:10px 20px; border-radius:10px; background:#7C5CFF; color:#fff; border:none; font-weight:600; cursor:pointer; }
+
+    .drawer-content { padding:24px; }
+    .drawer-content h3 { font-size:20px; margin:0 0 4px; }
+    .drawer-content .sub { color:var(--text-muted,#9ca3af); font-size:13px; margin-bottom:20px; }
+    .drawer-summary { display:grid; grid-template-columns:repeat(3,1fr); gap:12px; margin-bottom:20px; }
+    .drawer-summary .cell { padding:14px; border-radius:12px; background:rgba(255,255,255,0.04); }
+    .drawer-summary .cell .lbl { font-size:11px; color:var(--text-muted,#9ca3af); text-transform:uppercase; letter-spacing:0.06em; }
+    .drawer-summary .cell .val { font-size:20px; font-weight:700; margin-top:4px; font-variant-numeric:tabular-nums; }
+    .chart-wrap { background:rgba(255,255,255,0.02); border-radius:14px; padding:16px; border:1px solid rgba(255,255,255,0.05); min-height:320px; }
+  </style>`
+}
+
+function toolbarHtml() {
+  return `
+    <div class="toolbar">
+      <span class="live-dot" id="live-dot">Live</span>
+      <button id="btn-refresh" title="Aktualisieren">${iconHtml('refresh')} Aktualisieren</button>
+      <button id="btn-pdf" title="Als PDF exportieren">${iconHtml('file-text')} PDF</button>
+      <button id="btn-csv" title="Als CSV exportieren">${iconHtml('download')} CSV</button>
+    </div>`
+}
+
+async function renderDrilldown(def, totals) {
+  const body = document.createElement('div')
+  body.className = 'drawer-content'
+  body.innerHTML = `
+    <h3>${htmlEscape(def.label)} — 30 Tage</h3>
+    <div class="sub">Lade historische Daten …</div>
+    <div class="chart-wrap" id="drill-chart">${skeletonLoader ? '' : ''}<div class="skel-card" style="height:280px"></div></div>`
+
+  drawer({ title: def.label, content: body, width: 720 })
+
+  const series = await fetchTimeSeries(def.key, 30)
+  const valuesOnly = series.map(s => s.value)
+  const avg = valuesOnly.length ? Math.round(valuesOnly.reduce((a,b)=>a+b,0) / valuesOnly.length) : 0
+  const t = totals[def.key] || { value: 0, prev: 0 }
+  const change = pctChange(t.value, t.prev)
+
+  body.innerHTML = `
+    <h3>${htmlEscape(def.label)} — 30 Tage</h3>
+    <div class="sub">Historischer Verlauf · Stand ${fmtDateTime(new Date())}</div>
+    <div class="drawer-summary">
+      <div class="cell"><div class="lbl">Aktuell</div><div class="val">${formatValue(t.value, def.fmt)}</div></div>
+      <div class="cell"><div class="lbl">Schnitt 30T</div><div class="val">${formatValue(avg, def.fmt)}</div></div>
+      <div class="cell"><div class="lbl">vs gestern</div><div class="val" style="color:${change>=0?'#22c55e':'#ef4444'}">${change>=0?'+':''}${change.toFixed(1)}%</div></div>
+    </div>
+    <div class="chart-wrap" id="drill-chart"></div>
+    <div style="margin-top:20px; display:flex; gap:8px; justify-content:flex-end;">
+      <button class="retry-btn" style="background:rgba(255,255,255,0.06);" id="drill-csv">${iconHtml('download')} CSV exportieren</button>
+    </div>`
+
+  const el = body.querySelector('#drill-chart')
+  if (!series.length) {
+    el.innerHTML = `<div class="empty-state"><div class="icon">${iconHtml('bar-chart')}</div><h3>Keine Daten</h3><p>Für diesen Zeitraum liegen noch keine Werte vor.</p></div>`
+  } else {
+    try {
+      makeLineChart(el, {
+        labels: series.map(s => s.date.slice(5)),
+        series: [{ name: def.label, data: series.map(s => s.value), color: def.color }],
+        height: 320, smooth: true, area: true
+      })
+    } catch (_) {
+      try {
+        makeAreaChart(el, {
+          labels: series.map(s => s.date.slice(5)),
+          values: series.map(s => s.value),
+          color: def.color, height: 320
+        })
+      } catch (e) {
+        el.innerHTML = `<div class="empty-state"><div class="icon">${iconHtml('alert-triangle')}</div><h3>Chart nicht verfügbar</h3><p>${htmlEscape(e?.message||'')}</p></div>`
+      }
+    }
+  }
+  body.querySelector('#drill-csv')?.addEventListener('click', () => {
+    exportCsv(`${def.key}_30d.csv`, series.map(s => ({ date: s.date, value: s.value })))
+  })
+}
 
 export default {
   id: 'kpi-live-totals',
   title: 'Live-Kennzahlen',
   category: 'overview',
-  summary: "Gesamtzahlen User, Posts, Listens, Podcasts auf einen Blick.",
+
   async mount(container) {
-    container.innerHTML = `<div class="panel-shell">
-      <div class="panel-head"><h2>Live-Kennzahlen</h2><button class="refresh-btn">Aktualisieren</button></div>
-      <div class="panel-body"><div class="loading">Lädt…</div></div>
-    </div>`
-    const body = container.querySelector('.panel-body')
+    container.innerHTML = `${styles()}
+      <div class="panel-shell">
+        <div class="panel-head">
+          <div>
+            <h2>Live-Kennzahlen</h2>
+            <div class="sub" id="last-updated">Lädt aktuelle Werte …</div>
+          </div>
+          ${toolbarHtml()}
+        </div>
+        <div class="panel-body" id="body">
+          <div class="skeleton-grid">
+            ${[1,2,3,4].map(()=>`<div class="skel-card"></div>`).join('')}
+          </div>
+        </div>
+      </div>`
 
-    const fmt = (n) => {
-      if (n === null || n === undefined) return '–'
-      const num = Number(n)
-      if (Number.isNaN(num)) return String(n)
-      return num.toLocaleString('de-DE')
+    try { fadeIn(container) } catch (_) {}
+
+    let currentTotals = null
+    let refreshTimer = null
+
+    const body = container.querySelector('#body')
+    const lastUpd = container.querySelector('#last-updated')
+
+    const renderError = (err) => {
+      body.innerHTML = `
+        <div class="error-state">
+          <div class="icon">${iconHtml('alert-triangle')}</div>
+          <h3>Daten konnten nicht geladen werden</h3>
+          <p>${htmlEscape(err?.message || 'Unbekannter Fehler')}</p>
+          <button class="retry-btn" id="retry">${iconHtml('refresh')} Erneut versuchen</button>
+        </div>`
+      body.querySelector('#retry')?.addEventListener('click', () => load(true))
     }
 
-    const pick = (obj, keys) => {
-      if (!obj || typeof obj !== 'object') return null
-      for (const k of keys) {
-        if (obj[k] !== undefined && obj[k] !== null) return obj[k]
-      }
-      return null
-    }
-
-    const refresh = async () => {
-      body.innerHTML = '<div class="loading">Lädt…</div>'
+    const animateCard = (key, oldVal, newVal, fmt) => {
+      const el = container.querySelector(`#kpi-val-${key}`)
+      if (!el) return
       try {
-        const { data, error } = await sb.rpc('admin_db_live_stats')
-        if (error) throw error
+        countUp(el, { from: oldVal, to: newVal, duration: 1200,
+          format: (n) => formatValue(Math.round(n), fmt) })
+      } catch (_) {
+        el.textContent = formatValue(newVal, fmt)
+      }
+      if (oldVal !== newVal) {
+        const card = container.querySelector(`.kpi-card[data-kpi="${key}"]`)
+        if (card) {
+          card.classList.add('pulsing')
+          setTimeout(() => card.classList.remove('pulsing'), 1300)
+          try { pulse(card) } catch (_) {}
+        }
+      }
+    }
 
-        let row = Array.isArray(data) ? (data[0] || {}) : (data || {})
+    const wireCards = () => {
+      container.querySelectorAll('.kpi-card').forEach(card => {
+        const handler = () => {
+          const key = card.dataset.kpi
+          const def = KPI_DEFS.find(d => d.key === key)
+          if (def && currentTotals) renderDrilldown(def, currentTotals)
+        }
+        card.addEventListener('click', handler)
+        card.addEventListener('keydown', e => {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); handler() }
+        })
+      })
+    }
 
-        const users = pick(row, ['users', 'users_total', 'total_users', 'user_count', 'users_count'])
-        const posts = pick(row, ['posts', 'posts_total', 'total_posts', 'updates', 'updates_total', 'post_count'])
-        const listens = pick(row, ['listens', 'listens_total', 'total_listens', 'listening_activity', 'listen_count'])
-        const podcasts = pick(row, ['podcasts', 'podcasts_total', 'total_podcasts', 'podcast_count'])
+    const load = async (isInitial = false) => {
+      try {
+        const totals = await fetchTotals()
+        const prev = currentTotals
+        currentTotals = totals
 
-        const tiles = [
-          { label: 'User', value: fmt(users), hint: 'Registrierte Accounts' },
-          { label: 'Posts', value: fmt(posts), hint: 'Updates im Feed' },
-          { label: 'Listens', value: fmt(listens), hint: 'Episode-Plays gesamt' },
-          { label: 'Podcasts', value: fmt(podcasts), hint: 'Verknüpfte Shows' }
-        ]
-
-        const allEmpty = tiles.every(t => t.value === '–')
-        if (allEmpty) {
-          // Fallback: nimm rohe Felder als Tiles, sofern vorhanden
-          const keys = Object.keys(row || {})
-          if (keys.length === 0) {
-            body.innerHTML = '<div class="empty">Keine Live-Daten verfügbar.</div>'
-            return
+        if (isInitial || !prev || !container.querySelector('#hero-grid')) {
+          body.innerHTML = renderHeroGrid(totals)
+          wireCards()
+          for (const def of KPI_DEFS) {
+            animateCard(def.key, 0, totals[def.key].value, def.fmt)
           }
-          const dynTiles = keys.slice(0, 5).map(k => ({
-            label: k,
-            value: fmt(row[k]),
-            hint: ''
-          }))
-          body.innerHTML = `<div class="kpi-grid">${dynTiles.map(t => `
-            <div class="kpi-tile">
-              <div class="kpi-label">${t.label}</div>
-              <div class="kpi-value">${t.value}</div>
-              <div class="kpi-hint">${t.hint}</div>
-            </div>`).join('')}</div>`
-          return
+        } else {
+          for (const def of KPI_DEFS) {
+            const t = totals[def.key]
+            const p = prev[def.key] || { value: 0, prev: 0 }
+            animateCard(def.key, p.value, t.value, def.fmt)
+            const card = container.querySelector(`.kpi-card[data-kpi="${def.key}"]`)
+            if (card) {
+              const change = pctChange(t.value, t.prev)
+              const up = change >= 0
+              const chEl = card.querySelector('.kpi-change')
+              if (chEl) {
+                chEl.className = `kpi-change ${up ? 'up' : 'down'}`
+                chEl.innerHTML = `${iconHtml(up ? 'trending-up' : 'trending-down')}
+                  <span>${up?'+':''}${change.toFixed(1)}%</span>
+                  <span class="kpi-change-sub">vs gestern</span>`
+              }
+            }
+          }
         }
 
-        body.innerHTML = `<div class="kpi-grid">${tiles.map(t => `
-          <div class="kpi-tile">
-            <div class="kpi-label">${t.label}</div>
-            <div class="kpi-value">${t.value}</div>
-            <div class="kpi-hint">${t.hint}</div>
-          </div>`).join('')}</div>`
-      } catch (e) {
-        body.innerHTML = '<div class="empty">Daten kommen bald: ' + (e?.message || 'unbekannt') + '</div>'
+        lastUpd.textContent = `Zuletzt aktualisiert: ${fmtDateTime(new Date())} · Auto-Refresh 60s`
+      } catch (err) {
+        console.error('[kpi-live-totals]', err)
+        if (isInitial) renderError(err)
+        else toast({ type: 'error', message: 'Aktualisierung fehlgeschlagen' })
       }
     }
-    container.querySelector('.refresh-btn').addEventListener('click', refresh)
-    await refresh()
+
+    container.querySelector('#btn-refresh')?.addEventListener('click', async () => {
+      await load(false)
+      toast({ type: 'success', message: 'Kennzahlen aktualisiert' })
+    })
+    container.querySelector('#btn-pdf')?.addEventListener('click', () => {
+      try { exportPanelAsPdf(container, 'Live-Kennzahlen.pdf') }
+      catch (_) { toast({ type: 'error', message: 'PDF-Export nicht verfügbar' }) }
+    })
+    container.querySelector('#btn-csv')?.addEventListener('click', () => {
+      if (!currentTotals) { toast({ type: 'info', message: 'Keine Daten zum Exportieren' }); return }
+      const rows = KPI_DEFS.map(d => ({
+        kpi: d.label,
+        value: currentTotals[d.key].value,
+        previous: currentTotals[d.key].prev,
+        change_pct: pctChange(currentTotals[d.key].value, currentTotals[d.key].prev).toFixed(2)
+      }))
+      exportCsv('live-kennzahlen.csv', rows)
+    })
+
+    await load(true)
+
+    refreshTimer = setInterval(() => load(false), REFRESH_MS)
+
+    return () => { if (refreshTimer) clearInterval(refreshTimer) }
   }
 }

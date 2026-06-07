@@ -1,75 +1,541 @@
 import { sb } from '/lib/supabase.js'
+import { toast, modal, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js'
+import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
+import { drawer, tabs, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
+import { showUserDetailModal } from '/lib/panel-actions.js'
+
+const RANGES = {
+  '7d': { label: '7 Tage', days: 7 },
+  '30d': { label: '30 Tage', days: 30 },
+  '90d': { label: '90 Tage', days: 90 },
+  'all': { label: 'Gesamt', days: 365 }
+}
+
+let state = {
+  range: '30d',
+  funnel: null,
+  trend: [],
+  topReferrers: [],
+  recentSignups: []
+}
+
+async function loadData(range) {
+  const days = RANGES[range].days
+  const sinceIso = new Date(Date.now() - days * 86400000).toISOString()
+
+  const { data: codes, error: codesErr } = await sb
+    .from('referral_codes')
+    .select('id, code, owner_id, created_at, shared_at, times_used')
+    .gte('created_at', sinceIso)
+    .limit(5000)
+
+  if (codesErr) throw codesErr
+
+  const generated = codes?.length || 0
+  const shared = codes?.filter(c => c.shared_at).length || 0
+  const used = codes?.filter(c => (c.times_used || 0) > 0).length || 0
+
+  const { data: signups, error: signupsErr } = await sb
+    .from('referral_signups')
+    .select('id, referral_code_id, new_user_id, referrer_id, created_at')
+    .gte('created_at', sinceIso)
+    .order('created_at', { ascending: false })
+    .limit(2000)
+
+  if (signupsErr) throw signupsErr
+
+  const signedUp = signups?.length || 0
+
+  const trendMap = new Map()
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 86400000)
+    const key = d.toISOString().slice(0, 10)
+    trendMap.set(key, { date: key, generated: 0, signups: 0 })
+  }
+  codes?.forEach(c => {
+    const key = (c.created_at || '').slice(0, 10)
+    if (trendMap.has(key)) trendMap.get(key).generated++
+  })
+  signups?.forEach(s => {
+    const key = (s.created_at || '').slice(0, 10)
+    if (trendMap.has(key)) trendMap.get(key).signups++
+  })
+  const trend = Array.from(trendMap.values()).map(d => ({
+    date: d.date,
+    rate: d.generated > 0 ? (d.signups / d.generated) * 100 : 0,
+    generated: d.generated,
+    signups: d.signups
+  }))
+
+  const referrerCounts = new Map()
+  signups?.forEach(s => {
+    if (!s.referrer_id) return
+    referrerCounts.set(s.referrer_id, (referrerCounts.get(s.referrer_id) || 0) + 1)
+  })
+  const topIds = [...referrerCounts.entries()].sort((a, b) => b[1] - a[1]).slice(0, 10)
+  let topReferrers = []
+  if (topIds.length) {
+    const { data: profs } = await sb
+      .from('profiles')
+      .select('id, username, display_name, avatar_url')
+      .in('id', topIds.map(([id]) => id))
+    const profMap = new Map((profs || []).map(p => [p.id, p]))
+    topReferrers = topIds.map(([id, count]) => ({
+      id, count,
+      profile: profMap.get(id) || { id, username: 'unbekannt' }
+    }))
+  }
+
+  const recentSlice = (signups || []).slice(0, 25)
+  const allIds = new Set()
+  recentSlice.forEach(s => { if (s.new_user_id) allIds.add(s.new_user_id); if (s.referrer_id) allIds.add(s.referrer_id) })
+  let nameMap = new Map()
+  if (allIds.size) {
+    const { data: profs2 } = await sb
+      .from('profiles')
+      .select('id, username, display_name, avatar_url')
+      .in('id', [...allIds])
+    nameMap = new Map((profs2 || []).map(p => [p.id, p]))
+  }
+  const recentSignups = recentSlice.map(s => ({
+    ...s,
+    newUser: nameMap.get(s.new_user_id),
+    referrer: nameMap.get(s.referrer_id)
+  }))
+
+  return {
+    funnel: { generated, shared, used, signedUp },
+    trend,
+    topReferrers,
+    recentSignups
+  }
+}
+
+function pct(num, denom) {
+  if (!denom) return 0
+  return (num / denom) * 100
+}
+
+function renderFunnel(funnel) {
+  const steps = [
+    { key: 'generated', label: 'Code generiert', value: funnel.generated, icon: 'zap', color: '#6366f1' },
+    { key: 'shared', label: 'Code geteilt', value: funnel.shared, icon: 'share-2', color: '#8b5cf6' },
+    { key: 'used', label: 'Code verwendet', value: funnel.used, icon: 'mouse-pointer-click', color: '#ec4899' },
+    { key: 'signedUp', label: 'User registriert', value: funnel.signedUp, icon: 'user-check', color: '#10b981' }
+  ]
+  const max = Math.max(...steps.map(s => s.value), 1)
+  return steps.map((s, i) => {
+    const widthPct = (s.value / max) * 100
+    const prev = i > 0 ? steps[i - 1].value : null
+    const dropoff = prev !== null && prev > 0 ? ((prev - s.value) / prev) * 100 : null
+    const convFromPrev = prev !== null && prev > 0 ? (s.value / prev) * 100 : null
+    return `
+      <div class="funnel-step" data-step="${s.key}">
+        <div class="funnel-step-head">
+          <div class="funnel-step-label">
+            <span class="funnel-icon" style="background:${s.color}22;color:${s.color}">${iconHtml(s.icon)}</span>
+            <span>${s.label}</span>
+          </div>
+          <div class="funnel-step-value" data-count="${s.value}">${fmtNumber(s.value)}</div>
+        </div>
+        <div class="funnel-bar-wrap">
+          <div class="funnel-bar" style="width:${widthPct}%;background:linear-gradient(90deg,${s.color}cc,${s.color})"></div>
+        </div>
+        <div class="funnel-step-meta">
+          ${convFromPrev !== null ? `<span class="meta-pill meta-pill-good">${convFromPrev.toFixed(1)}% Conversion</span>` : '<span class="meta-pill meta-pill-base">Top of Funnel</span>'}
+          ${dropoff !== null && dropoff > 0 ? `<span class="meta-pill meta-pill-warn">−${dropoff.toFixed(1)}% Drop-off</span>` : ''}
+        </div>
+      </div>
+    `
+  }).join('')
+}
+
+function renderTopReferrers(list) {
+  if (!list.length) {
+    return `<div class="empty-state-mini">
+      <div class="empty-icon">${iconHtml('users')}</div>
+      <div>Noch keine Top-Referrer in diesem Zeitraum.</div>
+    </div>`
+  }
+  const max = list[0]?.count || 1
+  return `<div class="referrer-list">${list.map((r, i) => {
+    const name = r.profile?.display_name || r.profile?.username || 'Unbekannt'
+    const w = (r.count / max) * 100
+    return `
+      <div class="referrer-row" data-user="${htmlEscape(r.id)}">
+        <div class="referrer-rank">#${i + 1}</div>
+        <div class="referrer-avatar">${r.profile?.avatar_url ? `<img src="${htmlEscape(r.profile.avatar_url)}" alt="">` : iconHtml('user')}</div>
+        <div class="referrer-main">
+          <div class="referrer-name">${htmlEscape(name)}</div>
+          <div class="referrer-bar"><div class="referrer-bar-fill" style="width:${w}%"></div></div>
+        </div>
+        <div class="referrer-count"><strong>${fmtNumber(r.count)}</strong><span>Signups</span></div>
+      </div>
+    `
+  }).join('')}</div>`
+}
+
+function renderRecentTable(rows) {
+  if (!rows.length) {
+    return `<div class="empty-state-mini">
+      <div class="empty-icon">${iconHtml('inbox')}</div>
+      <div>Keine Referral-Signups in diesem Zeitraum.</div>
+    </div>`
+  }
+  return `
+    <table class="data-table hover sortable">
+      <thead>
+        <tr>
+          <th>Neuer User</th>
+          <th>Eingeladen von</th>
+          <th>Zeitpunkt</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(r => {
+          const newName = r.newUser?.display_name || r.newUser?.username || '—'
+          const refName = r.referrer?.display_name || r.referrer?.username || '—'
+          return `
+            <tr>
+              <td><strong>${htmlEscape(newName)}</strong></td>
+              <td>${htmlEscape(refName)}</td>
+              <td class="muted">${fmtDateTime(r.created_at)}</td>
+              <td class="row-actions">
+                ${r.new_user_id ? `<button class="btn-tiny" data-action="user" data-id="${htmlEscape(r.new_user_id)}">${iconHtml('eye')} Details</button>` : ''}
+              </td>
+            </tr>
+          `
+        }).join('')}
+      </tbody>
+    </table>
+  `
+}
+
+function panelStyles() {
+  return `
+    <style>
+      .ref-grid { display:grid; grid-template-columns: repeat(12, 1fr); gap:16px; }
+      .ref-grid .col-12{grid-column:span 12} .ref-grid .col-8{grid-column:span 8} .ref-grid .col-6{grid-column:span 6} .ref-grid .col-4{grid-column:span 4}
+      @media (max-width: 1100px){ .ref-grid .col-8,.ref-grid .col-6,.ref-grid .col-4{grid-column:span 12} }
+      .hero-row{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px}
+      @media (max-width: 900px){.hero-row{grid-template-columns:repeat(2,1fr)}}
+      .section-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+      .section-head h3{margin:0;font-size:15px;font-weight:600;letter-spacing:-0.01em}
+      .section-head .hint{font-size:12px;color:var(--text-muted,#94a3b8)}
+      .funnel-list{display:flex;flex-direction:column;gap:14px}
+      .funnel-step{padding:14px 16px;border-radius:14px;background:rgba(255,255,255,0.02);border:1px solid rgba(255,255,255,0.06);transition:all .2s}
+      .funnel-step:hover{background:rgba(255,255,255,0.04);transform:translateX(2px)}
+      .funnel-step-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:8px}
+      .funnel-step-label{display:flex;align-items:center;gap:10px;font-weight:500;font-size:14px}
+      .funnel-icon{width:32px;height:32px;border-radius:8px;display:inline-flex;align-items:center;justify-content:center}
+      .funnel-icon svg{width:16px;height:16px}
+      .funnel-step-value{font-size:20px;font-weight:600;font-variant-numeric:tabular-nums;letter-spacing:-0.02em}
+      .funnel-bar-wrap{height:8px;background:rgba(255,255,255,0.04);border-radius:6px;overflow:hidden;margin-bottom:8px}
+      .funnel-bar{height:100%;border-radius:6px;transition:width .6s cubic-bezier(.2,.8,.2,1)}
+      .funnel-step-meta{display:flex;gap:6px;flex-wrap:wrap}
+      .meta-pill{font-size:11px;padding:3px 8px;border-radius:6px;font-weight:500}
+      .meta-pill-good{background:rgba(16,185,129,0.12);color:#10b981}
+      .meta-pill-warn{background:rgba(245,158,11,0.12);color:#f59e0b}
+      .meta-pill-base{background:rgba(99,102,241,0.12);color:#6366f1}
+      .referrer-list{display:flex;flex-direction:column;gap:8px}
+      .referrer-row{display:grid;grid-template-columns:30px 36px 1fr auto;gap:12px;align-items:center;padding:10px;border-radius:10px;cursor:pointer;transition:background .15s}
+      .referrer-row:hover{background:rgba(255,255,255,0.04)}
+      .referrer-rank{font-size:12px;color:var(--text-muted,#94a3b8);font-weight:600;text-align:center}
+      .referrer-avatar{width:36px;height:36px;border-radius:50%;background:rgba(255,255,255,0.06);display:flex;align-items:center;justify-content:center;overflow:hidden}
+      .referrer-avatar img{width:100%;height:100%;object-fit:cover}
+      .referrer-avatar svg{width:16px;height:16px;opacity:.6}
+      .referrer-name{font-size:13px;font-weight:500;margin-bottom:4px}
+      .referrer-bar{height:4px;background:rgba(255,255,255,0.04);border-radius:3px;overflow:hidden}
+      .referrer-bar-fill{height:100%;background:linear-gradient(90deg,#6366f1,#8b5cf6);border-radius:3px}
+      .referrer-count{text-align:right;font-size:11px;color:var(--text-muted,#94a3b8)}
+      .referrer-count strong{display:block;font-size:15px;color:var(--text,#fff);font-variant-numeric:tabular-nums}
+      .empty-state-mini{padding:32px;text-align:center;color:var(--text-muted,#94a3b8);font-size:13px}
+      .empty-state-mini .empty-icon{width:48px;height:48px;margin:0 auto 12px;border-radius:12px;background:rgba(255,255,255,0.04);display:flex;align-items:center;justify-content:center}
+      .empty-state-mini .empty-icon svg{width:22px;height:22px;opacity:.5}
+      .empty-state-big{padding:60px 24px;text-align:center}
+      .empty-state-big .ic{width:72px;height:72px;margin:0 auto 18px;border-radius:18px;background:linear-gradient(135deg,rgba(99,102,241,0.15),rgba(139,92,246,0.15));display:flex;align-items:center;justify-content:center}
+      .empty-state-big .ic svg{width:32px;height:32px;color:#8b5cf6}
+      .empty-state-big h3{margin:0 0 6px;font-size:17px}
+      .empty-state-big p{margin:0;color:var(--text-muted,#94a3b8);font-size:13px;max-width:380px;margin-inline:auto}
+      .error-state{padding:48px 24px;text-align:center}
+      .error-state .ic{width:56px;height:56px;margin:0 auto 14px;border-radius:14px;background:rgba(239,68,68,0.12);display:flex;align-items:center;justify-content:center;color:#ef4444}
+      .btn-tiny{font-size:11px;padding:4px 8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);border-radius:6px;cursor:pointer;color:inherit;display:inline-flex;gap:4px;align-items:center}
+      .btn-tiny:hover{background:rgba(255,255,255,0.08)}
+      .btn-tiny svg{width:11px;height:11px}
+      .toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+      .toolbar .tb-btn{display:inline-flex;align-items:center;gap:6px;padding:7px 12px;font-size:12px;border-radius:8px;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.08);cursor:pointer;color:inherit;transition:all .15s}
+      .toolbar .tb-btn:hover{background:rgba(255,255,255,0.08);border-color:rgba(255,255,255,0.14)}
+      .toolbar .tb-btn svg{width:13px;height:13px}
+      .ref-summary-strip{display:flex;align-items:center;gap:14px;padding:10px 14px;border-radius:12px;background:linear-gradient(90deg,rgba(99,102,241,0.08),rgba(16,185,129,0.06));border:1px solid rgba(255,255,255,0.06);margin-bottom:18px;font-size:13px}
+      .ref-summary-strip strong{color:#10b981;font-variant-numeric:tabular-nums}
+    </style>
+  `
+}
+
+function buildToolbar() {
+  return `
+    <div class="toolbar">
+      <div id="range-picker"></div>
+      <button class="tb-btn" data-tb="refresh">${iconHtml('refresh-cw')} Aktualisieren</button>
+      <button class="tb-btn" data-tb="pdf">${iconHtml('file-text')} PDF</button>
+      <button class="tb-btn" data-tb="csv">${iconHtml('download')} CSV</button>
+    </div>
+  `
+}
+
+function renderBody(body, data) {
+  const overallConv = pct(data.funnel.signedUp, data.funnel.generated)
+  const avgConv = data.trend.length ? data.trend.reduce((s, t) => s + t.rate, 0) / data.trend.length : 0
+
+  body.innerHTML = `
+    ${panelStyles()}
+    <div class="ref-summary-strip">
+      ${iconHtml('trending-up')}
+      <div>Im gewählten Zeitraum wurden <strong>${fmtNumber(data.funnel.generated)}</strong> Codes generiert und <strong>${fmtNumber(data.funnel.signedUp)}</strong> neue User registriert — Gesamt-Conversion <strong>${overallConv.toFixed(1)}%</strong>.</div>
+    </div>
+
+    <div class="hero-row" id="hero-row"></div>
+
+    <div class="ref-grid">
+      <div class="col-6 glass-card" style="padding:20px">
+        <div class="section-head">
+          <h3>Conversion-Funnel</h3>
+          <span class="hint">Schrittweise Drop-off</span>
+        </div>
+        <div class="funnel-list">${renderFunnel(data.funnel)}</div>
+      </div>
+
+      <div class="col-6 glass-card" style="padding:20px">
+        <div class="section-head">
+          <h3>Funnel-Verteilung</h3>
+          <span class="hint">Anteil pro Stufe</span>
+        </div>
+        <div id="funnel-donut" style="height:280px"></div>
+      </div>
+
+      <div class="col-12 glass-card" style="padding:20px">
+        <div class="section-head">
+          <h3>Conversion-Rate Trend</h3>
+          <span class="hint">Ø ${avgConv.toFixed(1)}% • tägliche Rate (Signups / Codes)</span>
+        </div>
+        <div id="trend-chart" style="height:300px"></div>
+      </div>
+
+      <div class="col-6 glass-card" style="padding:20px">
+        <div class="section-head">
+          <h3>Top-Referrer</h3>
+          <span class="hint">Erfolgreichste Einlader</span>
+        </div>
+        <div id="top-referrers">${renderTopReferrers(data.topReferrers)}</div>
+      </div>
+
+      <div class="col-6 glass-card" style="padding:20px">
+        <div class="section-head">
+          <h3>Letzte Referral-Signups</h3>
+          <button class="btn-tiny" data-tb="view-all">${iconHtml('list')} Alle anzeigen</button>
+        </div>
+        <div id="recent-table">${renderRecentTable(data.recentSignups)}</div>
+      </div>
+    </div>
+  `
+
+  const hero = body.querySelector('#hero-row')
+  hero.appendChild(statHero({ label: 'Codes generiert', value: data.funnel.generated, icon: 'zap', accent: '#6366f1' }))
+  hero.appendChild(statHero({ label: 'Codes verwendet', value: data.funnel.used, icon: 'mouse-pointer-click', accent: '#ec4899' }))
+  hero.appendChild(statHero({ label: 'Neue User', value: data.funnel.signedUp, icon: 'user-check', accent: '#10b981' }))
+  hero.appendChild(statHero({ label: 'Conversion', value: overallConv, suffix: '%', icon: 'target', accent: '#f59e0b', decimals: 1 }))
+
+  body.querySelectorAll('.funnel-step-value').forEach(el => {
+    const target = parseInt(el.dataset.count || '0', 10)
+    countUp(el, 0, target, 900)
+  })
+
+  const trendEl = body.querySelector('#trend-chart')
+  if (data.trend.length) {
+    makeAreaChart(trendEl, {
+      data: data.trend,
+      x: 'date',
+      y: 'rate',
+      ySuffix: '%',
+      color: '#10b981',
+      gradient: true,
+      smooth: true,
+      tooltipLabel: 'Conversion-Rate'
+    })
+  } else {
+    trendEl.innerHTML = `<div class="empty-state-mini"><div class="empty-icon">${iconHtml('activity')}</div><div>Keine Trend-Daten verfügbar.</div></div>`
+  }
+
+  const donutEl = body.querySelector('#funnel-donut')
+  makeDonutChart(donutEl, {
+    data: [
+      { label: 'Generiert', value: Math.max(data.funnel.generated - data.funnel.shared, 0), color: '#6366f1' },
+      { label: 'Geteilt', value: Math.max(data.funnel.shared - data.funnel.used, 0), color: '#8b5cf6' },
+      { label: 'Verwendet', value: Math.max(data.funnel.used - data.funnel.signedUp, 0), color: '#ec4899' },
+      { label: 'Registriert', value: data.funnel.signedUp, color: '#10b981' }
+    ],
+    centerLabel: 'Funnel',
+    centerValue: fmtNumber(data.funnel.generated)
+  })
+}
+
+function renderEmpty(body) {
+  body.innerHTML = `
+    ${panelStyles()}
+    <div class="empty-state-big glass-card">
+      <div class="ic">${iconHtml('share-2')}</div>
+      <h3>Noch keine Referral-Daten</h3>
+      <p>Sobald User Einladungs-Codes generieren und teilen, erscheinen hier Funnel und Conversion-Trend.</p>
+    </div>
+  `
+}
+
+function renderError(body, err, retry) {
+  body.innerHTML = `
+    ${panelStyles()}
+    <div class="error-state glass-card">
+      <div class="ic">${iconHtml('alert-triangle')}</div>
+      <h3 style="margin:0 0 6px">Daten konnten nicht geladen werden</h3>
+      <p style="color:var(--text-muted,#94a3b8);font-size:13px;margin:0 0 14px">${htmlEscape(err?.message || 'Unbekannter Fehler')}</p>
+      <button class="tb-btn" id="retry-btn">${iconHtml('refresh-cw')} Erneut versuchen</button>
+    </div>
+  `
+  body.querySelector('#retry-btn')?.addEventListener('click', retry)
+}
 
 export default {
   id: 'referral-overview',
   title: 'Referral-Conversion',
   category: 'growth',
-  summary: "Invites, Signups, Conversion-Rate.",
+
   async mount(container) {
-    container.innerHTML = `<div class="panel-shell">
-      <div class="panel-head"><h2>Referral-Conversion</h2><button class="refresh-btn">Aktualisieren</button></div>
-      <div class="panel-body"><div class="loading">Lädt…</div></div>
-    </div>`
-    const body = container.querySelector('.panel-body')
+    container.innerHTML = `
+      <div class="panel-shell">
+        <div class="panel-head">
+          <div>
+            <h2 style="margin:0">Referral-Conversion</h2>
+            <div style="font-size:12px;color:var(--text-muted,#94a3b8);margin-top:2px">Funnel von Code-Generation bis Registrierung</div>
+          </div>
+          <div id="toolbar-slot">${buildToolbar()}</div>
+        </div>
+        <div class="panel-body" id="body"></div>
+      </div>
+    `
 
-    const fmtNum = (n) => {
-      if (n === null || n === undefined) return '–'
-      const num = Number(n)
-      if (!isFinite(num)) return '–'
-      return num.toLocaleString('de-DE')
-    }
-    const fmtPct = (n) => {
-      if (n === null || n === undefined) return '–'
-      const num = Number(n)
-      if (!isFinite(num)) return '–'
-      return num.toFixed(1).replace('.', ',') + ' %'
-    }
+    const body = container.querySelector('#body')
+    const rangeSlot = container.querySelector('#range-picker')
+    rangeSlot.appendChild(segmentedControl({
+      options: Object.entries(RANGES).map(([k, v]) => ({ value: k, label: v.label })),
+      value: state.range,
+      onChange: (val) => { state.range = val; refresh() }
+    }))
 
-    const pickNum = (obj, keys) => {
-      for (const k of keys) {
-        if (obj && obj[k] !== undefined && obj[k] !== null) return Number(obj[k])
-      }
-      return null
-    }
+    fadeIn(container, 250)
 
     const refresh = async () => {
-      body.innerHTML = '<div class="loading">Lädt…</div>'
+      body.innerHTML = ''
+      skeletonLoader(body, { rows: 6, height: 80 })
       try {
-        const { data, error } = await sb.rpc('referral_overview')
-        if (error) throw error
+        const data = await loadData(state.range)
+        state.funnel = data.funnel
+        state.trend = data.trend
+        state.topReferrers = data.topReferrers
+        state.recentSignups = data.recentSignups
 
-        let row = data
-        if (Array.isArray(data)) row = data[0] || {}
-        if (!row || typeof row !== 'object') row = {}
-
-        const totalInvites = pickNum(row, ['total_invites', 'invites_total', 'invites', 'total'])
-        const totalSignups = pickNum(row, ['total_signups', 'signups_total', 'signups', 'converted', 'total_conversions'])
-        const pendingInvites = pickNum(row, ['pending_invites', 'open_invites', 'unused_invites'])
-        let conversion = pickNum(row, ['conversion_rate', 'conversion', 'rate', 'conversion_pct'])
-        if (conversion !== null && conversion <= 1) conversion = conversion * 100
-        if (conversion === null && totalInvites && totalSignups !== null) {
-          conversion = totalInvites > 0 ? (totalSignups / totalInvites) * 100 : 0
+        if (data.funnel.generated === 0 && data.funnel.signedUp === 0) {
+          renderEmpty(body)
+          return
         }
-
-        const tiles = [
-          { label: 'Invites gesamt', value: fmtNum(totalInvites), hint: 'Versendete Einladungen' },
-          { label: 'Signups', value: fmtNum(totalSignups), hint: 'Registrierungen via Referral' },
-          { label: 'Conversion-Rate', value: fmtPct(conversion), hint: 'Signups / Invites' },
-          { label: 'Offen', value: fmtNum(pendingInvites !== null ? pendingInvites : (totalInvites !== null && totalSignups !== null ? Math.max(0, totalInvites - totalSignups) : null)), hint: 'Noch nicht eingelöst' }
-        ]
-
-        body.innerHTML = `<div class="kpi-grid">
-          ${tiles.map(t => `<div class="kpi-tile">
-            <div class="kpi-label">${t.label}</div>
-            <div class="kpi-value">${t.value}</div>
-            <div class="kpi-hint">${t.hint}</div>
-          </div>`).join('')}
-        </div>`
-      } catch (e) {
-        body.innerHTML = '<div class="empty">Daten kommen bald: ' + (e?.message || 'unbekannt') + '</div>'
+        renderBody(body, data)
+        wireBody(body)
+      } catch (err) {
+        console.error('[referral-overview] load failed', err)
+        renderError(body, err, refresh)
       }
     }
-    container.querySelector('.refresh-btn').addEventListener('click', refresh)
+
+    const wireBody = (root) => {
+      root.querySelectorAll('[data-action="user"]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const id = btn.dataset.id
+          if (id) showUserDetailModal(id)
+        })
+      })
+      root.querySelectorAll('.referrer-row').forEach(row => {
+        row.addEventListener('click', () => {
+          const uid = row.dataset.user
+          if (uid) openReferrerDrawer(uid)
+        })
+      })
+      root.querySelector('[data-tb="view-all"]')?.addEventListener('click', openAllSignupsDrawer)
+    }
+
+    const openReferrerDrawer = (userId) => {
+      const ref = state.topReferrers.find(r => r.id === userId)
+      const name = ref?.profile?.display_name || ref?.profile?.username || 'Referrer'
+      drawer({
+        title: name,
+        subtitle: `${fmtNumber(ref?.count || 0)} erfolgreiche Einladungen`,
+        width: 480,
+        html: `
+          <div style="padding:20px">
+            <div style="display:flex;gap:14px;align-items:center;margin-bottom:20px">
+              <div style="width:56px;height:56px;border-radius:50%;background:rgba(255,255,255,0.06);overflow:hidden;display:flex;align-items:center;justify-content:center">
+                ${ref?.profile?.avatar_url ? `<img src="${htmlEscape(ref.profile.avatar_url)}" style="width:100%;height:100%;object-fit:cover">` : iconHtml('user')}
+              </div>
+              <div>
+                <div style="font-size:16px;font-weight:600">${htmlEscape(name)}</div>
+                <div style="font-size:12px;color:var(--text-muted,#94a3b8)">@${htmlEscape(ref?.profile?.username || '—')}</div>
+              </div>
+            </div>
+            <button class="tb-btn" id="open-user-detail">${iconHtml('external-link')} Vollständiges Profil öffnen</button>
+          </div>
+        `,
+        onMount: (el) => {
+          el.querySelector('#open-user-detail')?.addEventListener('click', () => showUserDetailModal(userId))
+        }
+      })
+    }
+
+    const openAllSignupsDrawer = () => {
+      drawer({
+        title: 'Alle Referral-Signups',
+        subtitle: `${fmtNumber(state.recentSignups.length)} im Zeitraum`,
+        width: 720,
+        html: `<div style="padding:16px">${renderRecentTable(state.recentSignups)}</div>`,
+        onMount: (el) => {
+          el.querySelectorAll('[data-action="user"]').forEach(btn => {
+            btn.addEventListener('click', () => {
+              const id = btn.dataset.id
+              if (id) showUserDetailModal(id)
+            })
+          })
+        }
+      })
+    }
+
+    container.querySelector('[data-tb="refresh"]')?.addEventListener('click', () => {
+      refresh().then(() => toast('Daten aktualisiert', 'success'))
+    })
+    container.querySelector('[data-tb="pdf"]')?.addEventListener('click', () => {
+      exportPanelAsPdf(container, { filename: `referral-conversion-${state.range}.pdf`, title: 'Referral-Conversion' })
+    })
+    container.querySelector('[data-tb="csv"]')?.addEventListener('click', () => {
+      if (!state.trend.length) { toast('Keine Daten zum Exportieren', 'warning'); return }
+      exportCsv({
+        filename: `referral-trend-${state.range}.csv`,
+        rows: state.trend.map(t => ({
+          date: t.date,
+          codes_generated: t.generated,
+          signups: t.signups,
+          conversion_rate_pct: t.rate.toFixed(2)
+        }))
+      })
+    })
+
     await refresh()
   }
 }
