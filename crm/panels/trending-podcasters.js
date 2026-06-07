@@ -304,10 +304,11 @@ function renderTopChart(el, rows) {
   const top = sortRows(rows, 'velocity').slice(0, 10)
   try {
     makeBarChart(el, {
-      labels: top.map(r => r.display_name || '–'),
-      values: top.map(r => Number((r.velocity || 0).toFixed(1))),
-      title: 'Top 10 Velocity (%)',
+      categories: top.map(r => r.display_name || '–'),
+      series: [{ name: 'Velocity (%)', data: top.map(r => Number((r.velocity || 0).toFixed(1))) }],
+      colors: ['#ff8a55'],
       horizontal: true,
+      height: 220,
     })
   } catch {
     el.innerHTML = '<div style="opacity:.5;padding:12px">Chart nicht verfügbar</div>'

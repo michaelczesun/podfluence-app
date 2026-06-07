@@ -529,12 +529,12 @@ export default {
           toast('Titel und Nachricht sind Pflichtfelder', 'warn')
           return
         }
-        const ok = await confirmDialog(
-          'Broadcast versenden?',
-          `Push wird an ${fmtNumber(target)} User (Audience: „${audienceLabel(state.audience)}") zugestellt. Diese Aktion lässt sich nicht rückgängig machen.`,
-          'Jetzt senden',
-          false
-        )
+        const ok = await confirmDialog({
+          title: 'Broadcast versenden?',
+          body: `Push wird an ${fmtNumber(target)} User (Audience: „${audienceLabel(state.audience)}") zugestellt. Diese Aktion lässt sich nicht rückgängig machen.`,
+          confirmLabel: 'Jetzt senden',
+          danger: false
+        })
         if (!ok) return
 
         const origLabel = btnSend.innerHTML

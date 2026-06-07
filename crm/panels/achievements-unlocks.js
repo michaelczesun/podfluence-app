@@ -137,7 +137,7 @@ function openTypeDrawer(type, refreshAll) {
   grantBtn.addEventListener('click', async () => {
     const val = grantInput.value
     if (!val.trim()) { toast('Bitte User angeben', 'warn'); return }
-    const ok = await confirmDialog({ title: 'Achievement vergeben?', message: `"${meta.label}" an ${htmlEscape(val)} vergeben?`, confirmLabel: 'Vergeben' })
+    const ok = await confirmDialog('Achievement vergeben?', `"${meta.label}" an ${htmlEscape(val)} vergeben?`, 'Vergeben', false)
     if (!ok) return
     grantBtn.disabled = true
     grantBtn.textContent = '…'
@@ -213,7 +213,7 @@ function openTypeDrawer(type, refreshAll) {
           return {
             user_id: r.user_id,
             username: u.username || '',
-            display_name: u.display_name || '',
+            display_name: u.full_name || '',
             unlocked_at: r.unlocked_at
           }
         }), `achievement_${type}_users.csv`)
