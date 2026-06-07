@@ -332,7 +332,7 @@ async function openDayDrawer(dateKey) {
       </div>
     `).join('')
 
-    dlg?.setContent?.(`
+    setDrawerHtml(`
       <div class="drawer-stat-row">
         <div><strong>${fmtNumber(users.length)}</strong> aktive Nutzer</div>
         <button class="btn btn-ghost" id="day-export">${iconHtml('download')} CSV</button>

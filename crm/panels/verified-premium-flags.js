@@ -434,7 +434,7 @@ export default {
               ${statHero({
                 label: 'Läuft <30d ab',
                 value: 0,
-                icon: 'alert-triangle',
+                icon: iconHtml('alert-triangle'),
                 accent: (expiringSoonCount + expiredCount) > 0 ? 'red' : 'gold',
               })}
             </div>
