@@ -1,8 +1,8 @@
-import { sb } from '/lib/supabase.js?v=20260607b'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js?v=20260607b'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260607b'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260607b'
-import { drawer } from '/lib/layout-extras.js?v=20260607b'
+import { sb } from '/lib/supabase.js?v=20260608c'
+import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js?v=20260608c'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608c'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608c'
+import { drawer } from '/lib/layout-extras.js?v=20260608c'
 
 // ---------------------------------------------------------------------------
 // Data fetchers

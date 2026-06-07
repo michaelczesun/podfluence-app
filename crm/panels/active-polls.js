@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260607b'
-import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260607b'
-import { makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260607b'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260607b'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260607b'
-import { drawer, statHero } from '/lib/layout-extras.js?v=20260607b'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260607b'
+import { sb } from '/lib/supabase.js?v=20260608c'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608c'
+import { makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608c'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608c'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608c'
+import { drawer, statHero } from '/lib/layout-extras.js?v=20260608c'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608c'
 
 const PALETTE = ['#6366f1', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#06b6d4', '#ef4444', '#84cc16']
 

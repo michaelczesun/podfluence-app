@@ -1,8 +1,8 @@
-import { sb } from '/lib/supabase.js?v=20260607b'
-import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, confirmDialog } from '/lib/ui.js?v=20260607b'
-import { makeSparkline, makeAreaChart } from '/lib/charts.js?v=20260607b'
-import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260607b'
-import { glassCard } from '/lib/layout-extras.js?v=20260607b'
+import { sb } from '/lib/supabase.js?v=20260608c'
+import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, confirmDialog } from '/lib/ui.js?v=20260608c'
+import { makeSparkline, makeAreaChart } from '/lib/charts.js?v=20260608c'
+import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260608c'
+import { glassCard } from '/lib/layout-extras.js?v=20260608c'
 
 // Schema-Truth: siehe CLAUDE-Memory. Diese Datei nutzt NUR existierende Tabellen/Felder:
 //  - users(id,email,is_premium,is_verified,is_admin,created_at,display_name,avatar_url,is_banned)
