@@ -91,7 +91,7 @@
         "marketing": "rw"
       },
       "subtabs": {
-        "funnels": {
+        "funnel": {
           "owner": "rw",
           "admin": "rw",
           "manager": "rw",
@@ -99,7 +99,7 @@
           "mod": "deny",
           "marketing": "rw"
         },
-        "campaigns": {
+        "cohorts": {
           "owner": "rw",
           "admin": "rw",
           "manager": "rw",
@@ -108,6 +108,22 @@
           "marketing": "rw"
         },
         "retention": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "rw",
+          "support": "r",
+          "mod": "deny",
+          "marketing": "rw"
+        },
+        "forecast": {
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "rw",
+          "support": "r",
+          "mod": "deny",
+          "marketing": "rw"
+        },
+        "dau": {
           "owner": "rw",
           "admin": "rw",
           "manager": "rw",
