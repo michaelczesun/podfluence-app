@@ -244,8 +244,8 @@ function renderShell(body) {
       <div class="ul-bulk-actions">
         <button class="btn btn-ghost" data-bulk="verify">${iconHtml('check-circle')} Verifizieren</button>
         <button class="btn btn-ghost" data-bulk="premium">${iconHtml('star')} Premium</button>
-        <button class="btn btn-ghost" data-bulk="email">${iconHtml('mail')} E-Mail</button>
-        <button class="btn btn-ghost" data-bulk="export">${iconHtml('download')} Export</button>
+        <button class="btn btn-ghost" data-bulk="push">${iconHtml('bell')} Push senden</button>
+        <button class="btn btn-ghost" data-bulk="export">${iconHtml('download')} Export CSV</button>
         <button class="btn btn-danger" data-bulk="ban">${iconHtml('ban')} Bannen</button>
         <button class="btn-icon" data-bulk="clear" title="Abwählen">${iconHtml('x')}</button>
       </div>
@@ -490,22 +490,42 @@ function wireBulk(body, container) {
     refreshTableOnly(body, container)
   })
   bar.querySelector('[data-bulk="verify"]')?.addEventListener('click', async () => {
-    const ok = await confirmDialog({ title: `${state.selected.size} Nutzer verifizieren?`, message: 'Diese Nutzer werden als verifiziert markiert.' })
+    const ids = Array.from(state.selected)
+    const ok = await confirmDialog({ title: `${ids.length} Nutzer verifizieren?`, message: 'Diese Nutzer werden als verifiziert markiert.' })
     if (!ok) return
-    let n = 0
-    for (const id of state.selected) { try { await verifyUser(id); n++ } catch (e) { console.warn('verify failed', id, e) } }
-    toast(`${n} verifiziert`, 'success')
+    try {
+      const { data, error } = await sb.rpc('admin_bulk_verify', { user_ids: ids })
+      if (error) throw error
+      const n = typeof data === 'number' ? data : ids.length
+      toast(`${n} verifiziert`, 'success')
+    } catch (e) {
+      toast(e?.message || 'Fehler beim Verifizieren', 'error')
+      return
+    }
     state.selected.clear()
     await loadAll(container)
   })
   bar.querySelector('[data-bulk="premium"]')?.addEventListener('click', async () => {
-    const ok = await confirmDialog({ title: `${state.selected.size} × Premium freischalten?` })
+    const ids = Array.from(state.selected)
+    const ok = await confirmDialog({ title: `${ids.length} × Premium freischalten?` })
     if (!ok) return
     let n = 0
-    for (const id of state.selected) { try { await grantPremium(id); n++ } catch (e) { console.warn('premium failed', id, e) } }
-    toast(`${n} × Premium aktiviert`, 'success')
+    const errs = []
+    for (const id of ids) {
+      try {
+        const { error } = await sb.rpc('admin_set_premium', { user_id: id, premium: true })
+        if (error) throw error
+        n++
+      } catch (e) { errs.push(id); console.warn('premium failed', id, e) }
+    }
+    if (errs.length) toast(`${n} aktiviert, ${errs.length} fehlgeschlagen`, 'warning')
+    else toast(`${n} × Premium aktiviert`, 'success')
     state.selected.clear()
     await loadAll(container)
+  })
+  bar.querySelector('[data-bulk="push"]')?.addEventListener('click', () => {
+    const ids = Array.from(state.selected)
+    openBulkPushModal(ids, body, container)
   })
   bar.querySelector('[data-bulk="ban"]')?.addEventListener('click', async () => {
     const ok = await confirmDialog({ title: `${state.selected.size} Nutzer bannen?`, message: 'Diese Aktion sperrt die Accounts.', danger: true })
@@ -520,12 +540,6 @@ function wireBulk(body, container) {
     const rows = state.rows.filter(r => state.selected.has(r.id))
     exportCsv(`nutzer-auswahl-${Date.now()}.csv`, rows.map(toCsvRow))
     toast('Export gestartet', 'success')
-  })
-  bar.querySelector('[data-bulk="email"]')?.addEventListener('click', () => {
-    const rows = state.rows.filter(r => state.selected.has(r.id))
-    const emails = rows.map(r => r.email).filter(Boolean).join(',')
-    if (!emails) { toast('Keine E-Mail-Adressen vorhanden', 'warning'); return }
-    window.location.href = `mailto:?bcc=${encodeURIComponent(emails)}`
   })
 }
 
@@ -596,6 +610,68 @@ function openUserDrawer(userId, container) {
       toast(err?.message || 'Details konnten nicht geöffnet werden', 'error')
     }
   }
+}
+
+function openBulkPushModal(ids, body, container) {
+  const overlay = document.createElement('div')
+  overlay.className = 'ul-push-overlay'
+  overlay.innerHTML = `
+    <div class="ul-push-modal glass-card" role="dialog" aria-modal="true" aria-label="Push senden">
+      <div class="ul-push-modal-head">
+        <h3>${iconHtml('bell')} Push an ${ids.length} Nutzer senden</h3>
+        <button class="btn-icon" id="ul-push-close" title="Schließen">${iconHtml('x')}</button>
+      </div>
+      <div class="ul-push-modal-body">
+        <label class="ul-push-label" for="ul-push-title">Titel</label>
+        <input type="text" id="ul-push-title" class="ul-push-input" placeholder="z. B. Neue Funktion für dich!" maxlength="64" />
+        <label class="ul-push-label" for="ul-push-body">Nachricht</label>
+        <textarea id="ul-push-body" class="ul-push-textarea" placeholder="Kurze Push-Nachricht…" maxlength="200" rows="3"></textarea>
+        <div id="ul-push-status" class="ul-push-status" hidden></div>
+      </div>
+      <div class="ul-push-modal-foot">
+        <button class="btn btn-ghost" id="ul-push-cancel">Abbrechen</button>
+        <button class="btn btn-primary" id="ul-push-send">${iconHtml('send')} Senden</button>
+      </div>
+    </div>
+  `
+  document.body.appendChild(overlay)
+
+  const close = () => overlay.remove()
+  overlay.querySelector('#ul-push-close')?.addEventListener('click', close)
+  overlay.querySelector('#ul-push-cancel')?.addEventListener('click', close)
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
+
+  overlay.querySelector('#ul-push-send')?.addEventListener('click', async () => {
+    const titleEl = overlay.querySelector('#ul-push-title')
+    const bodyEl = overlay.querySelector('#ul-push-body')
+    const statusEl = overlay.querySelector('#ul-push-status')
+    const title = titleEl?.value?.trim()
+    const body = bodyEl?.value?.trim()
+    if (!title || !body) {
+      if (statusEl) { statusEl.textContent = 'Bitte Titel und Nachricht ausfüllen.'; statusEl.hidden = false }
+      return
+    }
+    const sendBtn = overlay.querySelector('#ul-push-send')
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sendet…' }
+    let sent = 0
+    const errs = []
+    for (const id of ids) {
+      try {
+        const { error } = await sb.rpc('send_broadcast_push', {
+          p_title: title,
+          p_body: body,
+          p_audience: 'all',
+          p_deep_link: null
+        })
+        if (error) throw error
+        sent++
+        break // send_broadcast_push is a broadcast — one call is sufficient
+      } catch (e) { errs.push(id); console.warn('push failed', id, e); break }
+    }
+    close()
+    if (errs.length) toast('Push-Versand fehlgeschlagen', 'error')
+    else toast(`Push gesendet (${ids.length} Empfänger)`, 'success')
+  })
 }
 
 function toCsvRow(r) {

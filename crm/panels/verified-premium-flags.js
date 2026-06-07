@@ -6,15 +6,6 @@ import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
 import { drawer, statHero } from '/lib/layout-extras.js'
 import { showUserDetailModal } from '/lib/panel-actions.js'
 
-const DURATIONS = [
-  { label: '7 Tage',     days: 7 },
-  { label: '30 Tage',    days: 30 },
-  { label: '90 Tage',    days: 90 },
-  { label: '6 Monate',   days: 180 },
-  { label: '1 Jahr',     days: 365 },
-  { label: 'Lifetime',   days: null },
-]
-
 async function fetchUsers() {
   const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' })
   if (error) throw error
@@ -112,21 +103,21 @@ async function revokePremium(userId) {
     danger: true,
   })
   if (!ok) return false
-  const { error } = await sb.rpc('admin_revoke_premium', { target_user_id: userId })
+  const { error } = await sb.rpc('admin_set_premium', { user_id: userId, premium: false })
   if (error) { toast(`Fehler: ${error.message}`, 'error'); return false }
   toast('Premium entzogen', 'success')
   return true
 }
 
 async function searchUsersForPicker(q) {
-  const { data, error } = await sb.rpc('search_users_with_covers', { search_term: q && q.trim() ? q.trim() : '' })
+  const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: 30, p_offset: 0, p_search: (q || '').trim() })
   if (error) return []
-  return (data || []).slice(0, 20)
+  return (data || []).slice(0, 30)
 }
 
 function openBulkGrantModal(onDone) {
   const selected = new Map()
-  let durationDays = 30
+  const MAX_SELECT = 50
 
   const renderSelected = () => Array.from(selected.values()).map(u => `
     <span class="chip" data-id="${u.id}">
@@ -135,26 +126,16 @@ function openBulkGrantModal(onDone) {
     </span>
   `).join('')
 
-  const renderDurations = () => DURATIONS.map(d => `
-    <button class="duration-btn ${d.days === durationDays ? 'is-active' : ''}" data-days="${d.days === null ? 'null' : d.days}">
-      ${htmlEscape(d.label)}
-    </button>
-  `).join('')
-
   const body = document.createElement('div')
   body.className = 'bulk-grant-body'
   body.innerHTML = `
     <div class="form-section">
-      <label class="form-label">Nutzer auswählen</label>
+      <label class="form-label">Nutzer auswählen <span class="muted">(max. ${MAX_SELECT})</span></label>
       <div class="picker-search">
         <input type="text" id="bg-search" placeholder="Nach Nutzername oder Name suchen…" class="input" autocomplete="off" />
       </div>
       <div id="bg-results" class="picker-results"></div>
       <div id="bg-selected" class="picker-chips">${renderSelected()}</div>
-    </div>
-    <div class="form-section">
-      <label class="form-label">Dauer</label>
-      <div id="bg-durations" class="duration-grid">${renderDurations()}</div>
     </div>
     <div class="form-section bulk-grant-summary">
       <span id="bg-summary"></span>
@@ -163,9 +144,8 @@ function openBulkGrantModal(onDone) {
 
   const updateSummary = () => {
     const n = selected.size
-    const dLabel = DURATIONS.find(d => d.days === durationDays)?.label || '—'
     body.querySelector('#bg-summary').textContent =
-      n === 0 ? 'Noch keine Nutzer ausgewählt.' : `${n} Nutzer erhalten Premium für ${dLabel}.`
+      n === 0 ? 'Noch keine Nutzer ausgewählt.' : `${n} Nutzer erhalten Premium.`
   }
 
   const refreshResults = async (q) => {
@@ -193,12 +173,8 @@ function openBulkGrantModal(onDone) {
     onConfirm: async () => {
       if (selected.size === 0) { toast('Bitte mindestens einen Nutzer wählen', 'warn'); return false }
       const userIds = Array.from(selected.keys())
-      const until = durationDays === null
-        ? null
-        : new Date(Date.now() + durationDays * 86400_000).toISOString()
-      // grant premium per user via RPC
       const results = await Promise.all(
-        userIds.map(uid => sb.rpc('admin_grant_premium', { target_user_id: uid, is_premium: until }))
+        userIds.map(uid => sb.rpc('admin_set_premium', { user_id: uid, premium: true }))
       )
       const failed = results.filter(r => r.error)
       if (failed.length > 0) { toast(`Fehler bei ${failed.length} Nutzer(n)`, 'error'); return false }
@@ -219,6 +195,7 @@ function openBulkGrantModal(onDone) {
     if (selected.has(id)) {
       selected.delete(id)
     } else {
+      if (selected.size >= MAX_SELECT) { toast(`Maximal ${MAX_SELECT} Nutzer auswählbar`, 'warn'); return }
       const list = await searchUsersForPicker(searchEl.value)
       const u = list.find(x => x.id === id)
       if (u) selected.set(id, u)
@@ -234,14 +211,6 @@ function openBulkGrantModal(onDone) {
     selected.delete(x.dataset.id)
     body.querySelector('#bg-selected').innerHTML = renderSelected()
     refreshResults(searchEl.value)
-    updateSummary()
-  })
-
-  body.querySelector('#bg-durations').addEventListener('click', (e) => {
-    const b = e.target.closest('.duration-btn')
-    if (!b) return
-    durationDays = b.dataset.days === 'null' ? null : Number(b.dataset.days)
-    body.querySelector('#bg-durations').innerHTML = renderDurations()
     updateSummary()
   })
 

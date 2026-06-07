@@ -4,7 +4,6 @@ import { makeDonutChart, makeBarChart, makeAreaChart } from '/lib/charts.js'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js'
 import { drawer, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js'
-import { forceVerifyPodcast } from '/lib/panel-actions.js'
 
 const STATUS_LABELS = {
   pending: 'Ausstehend',
@@ -22,7 +21,7 @@ const STATUS_COLORS = {
 async function fetchPodcasts(filter) {
   let q = sb
     .from('podcasts')
-    .select('id, title, rss_url, cover_url, verification_status, owner_email, reject_reason, verify_token_sent_at, created_at')
+    .select('id, title, rss_url, cover_url, verification_status, owner_email, rejection_reason, verify_token_sent_at, created_at')
     .order('created_at', { ascending: false })
     .limit(200)
   if (filter && filter !== 'all') q = q.eq('verification_status', filter)
@@ -50,7 +49,7 @@ function statusBadge(status) {
 function cardHtml(p) {
   const created = p.created_at ? fmtRelativeTime(p.created_at) : '—'
   const sentAt = p.verify_token_sent_at ? fmtRelativeTime(p.verify_token_sent_at) : 'Noch nicht gesendet'
-  const reject = p.reject_reason ? `<div class="reject-reason" style="margin-top:10px;padding:8px 10px;background:#ef44441a;border-left:3px solid #ef4444;border-radius:6px;font-size:12px;color:#fca5a5;">${iconHtml('alert-circle')} ${htmlEscape(p.reject_reason)}</div>` : ''
+  const reject = p.rejection_reason ? `<div class="reject-reason" style="margin-top:10px;padding:8px 10px;background:#ef44441a;border-left:3px solid #ef4444;border-radius:6px;font-size:12px;color:#fca5a5;">${iconHtml('alert-circle')} ${htmlEscape(p.rejection_reason)}</div>` : ''
   const cover = p.cover_url
     ? `<img src="${htmlEscape(p.cover_url)}" alt="" style="width:56px;height:56px;border-radius:10px;object-fit:cover;flex-shrink:0;background:#1a1a1a;">`
     : `<div style="width:56px;height:56px;border-radius:10px;background:linear-gradient(135deg,#2a2a2a,#1a1a1a);display:flex;align-items:center;justify-content:center;flex-shrink:0;">${iconHtml('mic')}</div>`
@@ -351,7 +350,7 @@ export default {
         })
         if (!ok) return
         try {
-          const { error } = await sb.functions.invoke('send-podcast-verify-mail', { body: { podcast_id: id } })
+          const { error } = await sb.functions.invoke('send-podcast-verification', { body: { p_id: id } })
           if (error) throw error
           toast('Verify-Mail gesendet', { type: 'success' })
           loadAll()
@@ -371,7 +370,8 @@ export default {
         })
         if (!ok) return
         try {
-          await forceVerifyPodcast(id)
+          const { error } = await sb.rpc('admin_force_verify_podcast', { id })
+          if (error) throw error
           toast('Podcast verifiziert', { type: 'success' })
           loadAll()
         } catch (e) {
@@ -405,11 +405,11 @@ export default {
             try {
               const { error } = await sb.from('podcasts').update({
                 verification_status: 'rejected',
-                reject_reason: reason || null
+                rejection_reason: reason || null
               }).eq('id', id)
               if (error) throw error
               try {
-                await sb.functions.invoke('send-podcast-verify-mail', { body: { podcast_id: id, action: 'reject', reason } })
+                await sb.functions.invoke('send-podcast-verification', { body: { p_id: id, action: 'reject', reason } })
               } catch (_) {}
               toast('Podcast abgelehnt', { type: 'success' })
               m.close()
@@ -453,10 +453,10 @@ export default {
                   <span style="color:#888;font-size:12px;">Verify-Mail zuletzt</span>
                   <span style="color:#fff;font-size:12px;">${p.verify_token_sent_at ? fmtDateTime(p.verify_token_sent_at) : 'Nie'}</span>
                 </div>
-                ${p.reject_reason ? `
+                ${p.rejection_reason ? `
                 <div style="padding:12px;background:#ef44441a;border-left:3px solid #ef4444;border-radius:6px;">
                   <div style="color:#fca5a5;font-size:11px;text-transform:uppercase;margin-bottom:4px;">Ablehnungsgrund</div>
-                  <div style="color:#fff;font-size:13px;">${htmlEscape(p.reject_reason)}</div>
+                  <div style="color:#fff;font-size:13px;">${htmlEscape(p.rejection_reason)}</div>
                 </div>` : ''}
               </div>
               <div style="display:flex;gap:8px;margin-top:8px;">
@@ -483,7 +483,7 @@ export default {
             owner_email: p.owner_email,
             status: p.verification_status,
             created_at: p.created_at,
-            reject_reason: p.reject_reason || ''
+            rejection_reason: p.rejection_reason || ''
           })), `podcast-verifizierung-${currentFilter}-${new Date().toISOString().slice(0,10)}.csv`)
         } catch (e) { toast('CSV-Export fehlgeschlagen', { type: 'error' }) }
       }

@@ -183,6 +183,31 @@ function styles() {
     @keyframes skelmove{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
     .btn-pulse{animation:btnPulse .6s ease;}
     @keyframes btnPulse{0%{transform:scale(1);}50%{transform:scale(.94);}100%{transform:scale(1);}}
+    .tab-bar{display:flex;gap:4px;background:rgba(255,255,255,.04);border-radius:14px;padding:4px;margin-bottom:20px;}
+    .tab-btn{flex:1;padding:9px 16px;border:none;background:transparent;color:#888;font-size:13.5px;font-weight:500;border-radius:10px;cursor:pointer;transition:all .2s;white-space:nowrap;}
+    .tab-btn.active{background:rgba(139,92,246,.22);color:#C4B5FD;font-weight:600;}
+    .tab-btn:hover:not(.active){background:rgba(255,255,255,.06);color:#e0e0e8;}
+    .tab-pane{display:none;}
+    .tab-pane.active{display:block;}
+    .insights-modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:9000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px);}
+    .insights-modal{background:linear-gradient(180deg,rgba(28,28,36,.98),rgba(18,18,24,.98));border:1px solid rgba(139,92,246,.25);border-radius:22px;padding:26px;width:min(440px,90vw);box-shadow:0 24px 64px rgba(0,0,0,.6);}
+    .insights-modal h3{color:#fff;font-size:17px;font-weight:700;margin:0 0 18px 0;}
+    .insights-modal label{display:block;color:#9090a0;font-size:11px;font-weight:500;letter-spacing:.05em;text-transform:uppercase;margin-bottom:6px;margin-top:14px;}
+    .insights-modal input[type=number]{width:100%;background:rgba(11,11,15,.7);color:#fff;border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:10px 13px;font-family:inherit;font-size:15px;box-sizing:border-box;transition:border-color .2s;}
+    .insights-modal input[type=number]:focus{outline:none;border-color:rgba(139,92,246,.5);}
+    .insights-modal .modal-actions{display:flex;gap:10px;margin-top:22px;}
+    .insights-row{display:flex;align-items:center;gap:14px;padding:14px;border-radius:14px;background:rgba(255,255,255,.025);border:1px solid rgba(255,255,255,.05);margin-bottom:10px;transition:background .2s,border-color .2s;}
+    .insights-row:hover{background:rgba(255,255,255,.04);border-color:rgba(139,92,246,.2);}
+    .insights-row .h-thumb{width:52px;height:52px;border-radius:12px;background:linear-gradient(135deg,#8B5CF6,#EC4899);flex-shrink:0;display:flex;align-items:center;justify-content:center;color:#fff;font-size:18px;overflow:hidden;}
+    .insights-row .h-thumb img{width:100%;height:100%;object-fit:cover;}
+    .insights-row .h-main{flex:1;min-width:0;}
+    .insights-row .h-caption{color:#fff;font-size:13.5px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:4px;}
+    .insights-row .h-meta{color:#888;font-size:12px;display:flex;gap:10px;flex-wrap:wrap;}
+    .insights-row .h-stats{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;}
+    .insights-row .stat-chip{background:rgba(139,92,246,.1);color:#C4B5FD;border:1px solid rgba(139,92,246,.2);border-radius:999px;padding:3px 9px;font-size:12px;font-weight:500;}
+    .insights-row .stat-chip.empty{background:rgba(255,255,255,.04);color:#666;border-color:rgba(255,255,255,.06);}
+    .btn-insights-edit{background:rgba(139,92,246,.14);color:#C4B5FD;border:1px solid rgba(139,92,246,.25);border-radius:8px;padding:7px 12px;font-size:12px;font-weight:600;cursor:pointer;transition:all .2s;white-space:nowrap;flex-shrink:0;}
+    .btn-insights-edit:hover{background:rgba(139,92,246,.25);border-color:rgba(139,92,246,.45);}
   `
   document.head.appendChild(s)
 }
@@ -441,6 +466,107 @@ function renderHistoryRow(item) {
   return row
 }
 
+function openInsightsModal(item, onSaved) {
+  const existing = (() => {
+    if (!item.insights) return {}
+    try { return typeof item.insights === 'string' ? JSON.parse(item.insights) : item.insights } catch { return {} }
+  })()
+
+  const overlay = document.createElement('div')
+  overlay.className = 'insights-modal-overlay'
+  overlay.innerHTML = `
+    <div class="insights-modal">
+      <h3>📊 Insights bearbeiten</h3>
+      <div style="color:#888;font-size:13px;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${htmlEscape((item.caption || '').slice(0, 80))}</div>
+      <label>Reichweite (Reach)</label>
+      <input type="number" id="ins-reach" min="0" value="${Number(existing.reach || 0)}" placeholder="0" />
+      <label>Likes</label>
+      <input type="number" id="ins-likes" min="0" value="${Number(existing.likes || 0)}" placeholder="0" />
+      <label>Saves</label>
+      <input type="number" id="ins-saves" min="0" value="${Number(existing.saves || 0)}" placeholder="0" />
+      <label>Kommentare</label>
+      <input type="number" id="ins-comments" min="0" value="${Number(existing.comments || 0)}" placeholder="0" />
+      <div class="modal-actions">
+        <button class="btn-primary ins-save-btn" style="flex:1;">💾 Speichern</button>
+        <button class="btn-secondary ins-cancel-btn">Abbrechen</button>
+      </div>
+    </div>
+  `
+
+  const close = () => overlay.remove()
+
+  overlay.querySelector('.ins-cancel-btn').addEventListener('click', close)
+  overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
+
+  overlay.querySelector('.ins-save-btn').addEventListener('click', async () => {
+    const saveBtn = overlay.querySelector('.ins-save-btn')
+    saveBtn.disabled = true
+    saveBtn.innerHTML = '⏳ Speichert…'
+    const insights = {
+      reach: Number(overlay.querySelector('#ins-reach').value) || 0,
+      likes: Number(overlay.querySelector('#ins-likes').value) || 0,
+      saves: Number(overlay.querySelector('#ins-saves').value) || 0,
+      comments: Number(overlay.querySelector('#ins-comments').value) || 0,
+    }
+    const { error } = await sb.from('insta_posts_queue').update({ insights }).eq('id', item.id)
+    if (error) {
+      toast('Fehler: ' + error.message, 'error')
+      saveBtn.disabled = false
+      saveBtn.innerHTML = '💾 Speichern'
+      return
+    }
+    toast('Insights gespeichert ✓', 'success')
+    close()
+    if (onSaved) onSaved()
+  })
+
+  document.body.appendChild(overlay)
+  setTimeout(() => overlay.querySelector('#ins-reach').focus(), 80)
+}
+
+function renderInsightsRow(item, onEdit) {
+  const row = document.createElement('div')
+  row.className = 'insights-row'
+
+  let ins = null
+  if (item.insights) {
+    try { ins = typeof item.insights === 'string' ? JSON.parse(item.insights) : item.insights } catch {}
+  }
+
+  const thumbHtml = item.image_url
+    ? `<img src="${htmlEscape(item.image_url)}" alt="">`
+    : '📷'
+
+  const statsHtml = ins
+    ? [
+        ins.reach != null ? `<span class="stat-chip">👁 ${fmtNumber(ins.reach)}</span>` : '',
+        ins.likes != null ? `<span class="stat-chip">❤ ${fmtNumber(ins.likes)}</span>` : '',
+        ins.saves != null ? `<span class="stat-chip">🔖 ${fmtNumber(ins.saves)}</span>` : '',
+        ins.comments != null ? `<span class="stat-chip">💬 ${fmtNumber(ins.comments)}</span>` : '',
+      ].filter(Boolean).join('')
+    : '<span class="stat-chip empty">Keine Insights</span>'
+
+  row.innerHTML = `
+    <div class="h-thumb">${thumbHtml}</div>
+    <div class="h-main">
+      <div class="h-caption">${htmlEscape((item.caption || 'Ohne Caption').slice(0, 100))}</div>
+      <div class="h-meta">
+        <span>${htmlEscape(item.posted_at ? fmtDateTime(item.posted_at) : '—')}</span>
+        ${item.audience ? `<span>· ${htmlEscape(item.audience)}</span>` : ''}
+      </div>
+      <div class="h-stats">${statsHtml}</div>
+    </div>
+    <button class="btn-insights-edit">✏️ Insights bearbeiten</button>
+  `
+
+  row.querySelector('.btn-insights-edit').addEventListener('click', (e) => {
+    e.stopPropagation()
+    openInsightsModal(item, onEdit)
+  })
+
+  return row
+}
+
 export default {
   id: 'insta-approval-queue',
   title: 'Instagram-Posts Freigabe',
@@ -483,6 +609,13 @@ export default {
       renderSkeleton()
 
       let posted = []
+      let activeTab = 'queue'
+
+      const switchTab = (tab) => {
+        activeTab = tab
+        body.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.tab === tab))
+        body.querySelectorAll('.tab-pane').forEach(p => p.classList.toggle('active', p.dataset.pane === tab))
+      }
 
       const refresh = async () => {
         renderSkeleton()
@@ -521,7 +654,22 @@ export default {
 
           body.appendChild(chartsGrid)
 
-          // Queue section
+          // Tab bar
+          const tabBar = document.createElement('div')
+          tabBar.className = 'tab-bar'
+          tabBar.innerHTML = `
+            <button class="tab-btn${activeTab === 'queue' ? ' active' : ''}" data-tab="queue">📥 Warteschlange <span style="opacity:.7">(${queue.length})</span></button>
+            <button class="tab-btn${activeTab === 'insights' ? ' active' : ''}" data-tab="insights">📊 Insights <span style="opacity:.7">(${posted.length})</span></button>
+          `
+          tabBar.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => switchTab(btn.dataset.tab))
+          })
+          body.appendChild(tabBar)
+
+          // Queue pane
+          const queuePane = document.createElement('div')
+          queuePane.className = `tab-pane${activeTab === 'queue' ? ' active' : ''}`
+          queuePane.dataset.pane = 'queue'
           const queueSection = document.createElement('div')
           queueSection.className = 'glass-card'
           queueSection.style.marginBottom = '20px'
@@ -546,15 +694,19 @@ export default {
               queueSection.appendChild(renderQueueCard(item, refresh))
             }
           }
-          body.appendChild(queueSection)
+          queuePane.appendChild(queueSection)
+          body.appendChild(queuePane)
 
-          // History section
-          const histSection = document.createElement('div')
-          histSection.className = 'glass-card'
-          const histHead = document.createElement('h3')
-          histHead.className = 'insta-section-title'
-          histHead.innerHTML = `📚 Verlauf <span class="count-badge">${posted.length}</span>`
-          histSection.appendChild(histHead)
+          // Insights pane
+          const insightsPane = document.createElement('div')
+          insightsPane.className = `tab-pane${activeTab === 'insights' ? ' active' : ''}`
+          insightsPane.dataset.pane = 'insights'
+          const insSection = document.createElement('div')
+          insSection.className = 'glass-card'
+          const insHead = document.createElement('h3')
+          insHead.className = 'insta-section-title'
+          insHead.innerHTML = `📊 Performance der veröffentlichten Posts <span class="count-badge">${posted.length}</span>`
+          insSection.appendChild(insHead)
 
           if (posted.length === 0) {
             const empty = document.createElement('div')
@@ -562,15 +714,30 @@ export default {
             empty.innerHTML = `
               <div class="empty-icon">📭</div>
               <div class="empty-title">Noch keine Veröffentlichungen</div>
-              <div class="empty-sub">Sobald Posts live gehen, erscheinen sie hier mit Insights.</div>
+              <div class="empty-sub">Sobald Posts live gehen, erscheinen sie hier. Insights können nachgetragen werden.</div>
             `
-            histSection.appendChild(empty)
+            insSection.appendChild(empty)
           } else {
             const list = document.createElement('div')
-            posted.slice(0, 20).forEach(it => list.appendChild(renderHistoryRow(it)))
-            histSection.appendChild(list)
+            const renderInsightsList = () => {
+              list.innerHTML = ''
+              posted.forEach(it => {
+                list.appendChild(renderInsightsRow(it, async () => {
+                  // Refresh only the insights data without full skeleton reload
+                  const { data: fresh } = await sb.from('insta_posts_queue')
+                    .select('*').eq('status', 'posted').order('posted_at', { ascending: false }).limit(50)
+                  if (fresh) {
+                    posted = fresh
+                    renderInsightsList()
+                  }
+                }))
+              })
+            }
+            renderInsightsList()
+            insSection.appendChild(list)
           }
-          body.appendChild(histSection)
+          insightsPane.appendChild(insSection)
+          body.appendChild(insightsPane)
 
           try { fadeIn(body) } catch {}
         } catch (e) {

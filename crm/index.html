@@ -487,7 +487,8 @@ const PANELS = [
   {"id":"bug-reports-triage","title":"Bug-Reports Triage","category":"admin_actions"},
   {"id":"push-broadcast","title":"Push-Broadcast senden","category":"admin_actions"},
   {"id":"storage-ops","title":"Storage & Cleanup","category":"admin_actions"},
-  {"id":"podcast-verification-queue","title":"Podcast-Verifizierung","category":"admin_actions"}
+  {"id":"podcast-verification-queue","title":"Podcast-Verifizierung","category":"admin_actions"},
+  {"id":"settings","title":"Einstellungen","category":"admin_actions"}
 ]
 
 const CATEGORIES = [
@@ -568,9 +569,9 @@ sidebar.addEventListener('click', (e) => {
   }
 })
 
-// ---- Settings stub ----
+// ---- Settings button ----
 document.getElementById('settings-btn')?.addEventListener('click', () => {
-  window.toast?.('Einstellungen — coming soon')
+  location.hash = '#settings'
 })
 
 // ---- Quick-Search (Cmd+K) ----
