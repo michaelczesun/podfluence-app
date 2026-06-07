@@ -5,6 +5,7 @@
 import { sb } from '/lib/supabase.js?v=20260608f'
 import { toast, iconHtml } from '/lib/ui.js?v=20260608f'
 import { fadeIn } from '/lib/animations.js?v=20260608f'
+import { pullToRefresh } from '/lib/layout-extras.js?v=20260608f'
 
 const SUBTABS = [
   { key: 'users',    label: 'Users',    panel: 'users-list',      icon: 'users' },
@@ -151,5 +152,13 @@ export default {
     // Initial mount
     const initial = SUBTABS.find(t => t.key === active) || SUBTABS[0]
     await mountSubPanel(host, initial)
+
+    // Pull-to-Refresh: re-mountet aktives Sub-Panel
+    try {
+      pullToRefresh(container, async () => {
+        const sub = SUBTABS.find(t => t.key === active) || SUBTABS[0]
+        await mountSubPanel(host, sub)
+      })
+    } catch (_) {}
   }
 }

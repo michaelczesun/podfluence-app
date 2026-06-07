@@ -9,7 +9,7 @@
 import { sb } from '/lib/supabase.js?v=20260608f'
 import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608f'
 import { fadeIn, countUp } from '/lib/animations.js?v=20260608f'
-import { glassCard } from '/lib/layout-extras.js?v=20260608f'
+import { glassCard, pullToRefresh } from '/lib/layout-extras.js?v=20260608f'
 
 import adminHome from '/panels/admin-home.js?v=20260608f'
 import auditLog  from '/panels/audit-log.js?v=20260608f'
@@ -360,5 +360,12 @@ export default {
 
     // initial: Now
     await mountSubTab('now', body)
+
+    // Pull-to-Refresh: re-mountet aktuellen Sub-Tab
+    try {
+      pullToRefresh(container, async () => {
+        await mountSubTab(current, body)
+      })
+    } catch (_) {}
   }
 }
