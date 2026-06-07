@@ -531,7 +531,11 @@ export default {
             height: 220,
           })
         } else {
-          chartVerifiedEl.innerHTML = `<div class="muted chart-empty">Noch keine Verifizierungs-Daten.</div>`
+          chartVerifiedEl.innerHTML = `<div class="muted chart-empty" style="text-align:center;padding:32px 16px">
+            <div style="font-size:26px;opacity:.45;margin-bottom:6px">${iconHtml('shield-check')}</div>
+            <div style="font-weight:600;color:var(--text);margin-bottom:2px">Noch keine Verifizierungs-Daten</div>
+            <div style="font-size:12px;line-height:1.4">Sobald Podcasts verifiziert werden, erscheint hier die Wachstumskurve über den gewählten Zeitraum.</div>
+          </div>`
         }
         const donutData = Object.entries(premiumBuckets)
           .filter(([, v]) => v > 0)
@@ -544,7 +548,11 @@ export default {
             height: 220,
           })
         } else {
-          chartPremiumEl.innerHTML = `<div class="muted chart-empty">Noch keine Premium-Daten.</div>`
+          chartPremiumEl.innerHTML = `<div class="muted chart-empty" style="text-align:center;padding:32px 16px">
+            <div style="font-size:26px;opacity:.45;margin-bottom:6px">${iconHtml('crown')}</div>
+            <div style="font-weight:600;color:var(--text);margin-bottom:2px">Noch keine Premium-Daten</div>
+            <div style="font-size:12px;line-height:1.4">Sobald User Premium aktivieren oder geschenkt bekommen, erscheint hier die Verteilung der Laufzeiten.</div>
+          </div>`
         }
 
         wireListInteractions()
