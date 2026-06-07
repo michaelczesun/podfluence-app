@@ -48,7 +48,7 @@ async function fetchFunnel() {
   const listenMembers = all.filter(u => listenSet.has(u.id))
 
   // Active = logged in within last 7 days
-  const activeMembers = all.filter(u => u.last_login_at && u.last_login_at >= since7)
+  const activeMembers = all.filter(u => u.last_seen_at && u.last_seen_at >= since7)
 
   const members = {
     signup: signupMembers,
@@ -317,7 +317,7 @@ function openDropoffDrawer(data, stageKey) {
       const initial = (name[0] || '?').toUpperCase()
       const sub = u.email
         ? htmlEscape(u.email)
-        : (u.last_login_at ? `zuletzt ${fmtRelativeTime(u.last_login_at)}` : `seit ${fmtDateTime(u.created_at)}`)
+        : (u.last_seen_at ? `zuletzt ${fmtRelativeTime(u.last_seen_at)}` : `seit ${fmtDateTime(u.created_at)}`)
       const uid = htmlEscape(String(u.id || ''))
       return `
         <label class="of-drop-row" data-uid="${uid}">

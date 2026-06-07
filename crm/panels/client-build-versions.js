@@ -45,7 +45,7 @@ function normalize(rows) {
     version: r.version,
     user_count: Number(r.user_count || r.users || 0),
     platforms: r.platforms || {},
-    last_seen: r.last_seen || r.last_login_at || null
+    last_seen: r.last_seen || r.last_seen_at || null
   })).filter(r => r.version && r.user_count > 0)
   const versions = [...new Set(arr.map(r => r.version))].sort((a, b) => cmpVersion(b, a))
   return arr.map(r => ({ ...r, rank: versionRank(r.version, versions) }))
@@ -347,7 +347,7 @@ async function openVersionDrawer(versionRow, state, refresh) {
             <div class="user-name">${htmlEscape(u.display_name || u.username || '—')}</div>
             <div class="user-sub muted">${htmlEscape(u.username ? '@' + u.username : (u.email || ''))} ${u.platform ? '· ' + htmlEscape(u.platform) : ''}</div>
           </div>
-          <div class="user-last muted">${u.last_login_at ? fmtRelativeTime(u.last_login_at) : ''}</div>
+          <div class="user-last muted">${u.last_seen_at ? fmtRelativeTime(u.last_seen_at) : ''}</div>
         </div>
       `).join('')
       listEl.querySelectorAll('.user-row').forEach(row => {

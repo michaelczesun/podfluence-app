@@ -35,7 +35,7 @@ async function fetchTotals() {
     verified: _allRows.filter(r => r.is_verified).length,
     podcasters: _allRows.filter(r => r.type === 'podcaster' || r.type === 'both').length,
     admins: _allRows.filter(r => r.is_app_admin).length,
-    inactive: _allRows.filter(r => r.last_login_at && r.last_login_at < sevenDaysAgo).length
+    inactive: _allRows.filter(r => r.last_seen_at && r.last_seen_at < sevenDaysAgo).length
   }
 }
 
@@ -85,14 +85,14 @@ async function fetchPage() {
   if (state.filter === 'verified') rows = rows.filter(r => r.is_verified)
   else if (state.filter === 'podcaster') rows = rows.filter(r => r.type === 'podcaster' || r.type === 'both')
   else if (state.filter === 'admin') rows = rows.filter(r => r.is_app_admin)
-  else if (state.filter === 'inactive') rows = rows.filter(r => r.last_login_at && r.last_login_at < sevenDaysAgo)
+  else if (state.filter === 'inactive') rows = rows.filter(r => r.last_seen_at && r.last_seen_at < sevenDaysAgo)
 
   state.totals = {
     all: _allRows.length,
     verified: _allRows.filter(r => r.is_verified).length,
     podcasters: _allRows.filter(r => r.type === 'podcaster' || r.type === 'both').length,
     admins: _allRows.filter(r => r.is_app_admin).length,
-    inactive: _allRows.filter(r => r.last_login_at && r.last_login_at < sevenDaysAgo).length
+    inactive: _allRows.filter(r => r.last_seen_at && r.last_seen_at < sevenDaysAgo).length
   }
 
   const since = new Date(Date.now() - 30 * 86400000).toISOString()
@@ -289,7 +289,7 @@ function renderTable() {
     const badges = badgesFor(r)
     const checked = state.selected.has(r.id) ? 'checked' : ''
     const joined = r.created_at ? htmlEscape(fmtDateTime(r.created_at)) : '—'
-    const lastActive = r.last_login_at ? htmlEscape(fmtRelativeTime(r.last_login_at)) : '<span class="muted">nie</span>'
+    const lastActive = r.last_seen_at ? htmlEscape(fmtRelativeTime(r.last_seen_at)) : '<span class="muted">nie</span>'
     return `
       <tr data-id="${r.id}" class="${state.selected.has(r.id) ? 'is-selected' : ''}">
         <td class="col-check"><input type="checkbox" class="ul-row-check" ${checked} /></td>
@@ -610,7 +610,7 @@ function toCsvRow(r) {
     is_premium: r.is_premium ? 'ja' : 'nein',
     country: r.country || '',
     created_at: r.created_at || '',
-    last_login_at: r.last_login_at || '',
+    last_seen_at: r.last_seen_at || '',
     client_build_version: r.client_build_version || ''
   }
 }

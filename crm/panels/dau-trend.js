@@ -93,7 +93,7 @@ async function fetchUsersForDay(dateKey) {
     display_name: u.full_name || u.username,
     avatar_url: u.avatar_url || null,
     is_verified: u.is_verified,
-    last_login_at: u.last_login_at
+    last_seen_at: u.last_seen_at
   }))
 }
 
@@ -310,7 +310,7 @@ async function openDayDrawer(dateKey) {
           username: u.username,
           display_name: u.display_name,
           verified: u.is_verified ? 'ja' : 'nein',
-          last_seen: u.last_login_at || ''
+          last_seen: u.last_seen_at || ''
         })))
         toast('CSV exportiert', 'success')
       } catch (e) {

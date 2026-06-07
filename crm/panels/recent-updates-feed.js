@@ -27,7 +27,7 @@ function snippet(text, n = 180) {
 function classifyPost(p) {
   if (p.poll_id || p.type === 'poll' || p.kind === 'poll') return 'poll'
   if ((p.content || '').length > 400 || p.type === 'longform') return 'longform'
-  if (p.image_url || p.media_url) return 'with-image'
+  if (p.image_url ) return 'with-image'
   return 'standard'
 }
 
@@ -37,7 +37,7 @@ async function fetchData() {
   const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString()
   const { data: posts, error } = await sb
     .from('updates')
-    .select('id, user_id, content, image_url, media_url, type, kind, poll_id, likes_count, comments_count, created_at, users:user_id(id, username, full_name, is_verified)')
+    .select('id, user_id, content, image_url, type, kind, poll_id, likes_count, comments_count, created_at, users:user_id(id, username, full_name, is_verified)')
     .gte('created_at', since)
     .order('created_at', { ascending: false })
     .limit(200)
@@ -62,7 +62,7 @@ function renderHeros(root) {
   const total = state.posts.length
   const totalLikes = state.posts.reduce((s, p) => s + (p.likes_count || 0), 0)
   const totalComments = state.posts.reduce((s, p) => s + (p.comments_count || 0), 0)
-  const withImg = state.posts.filter(p => p.image_url || p.media_url).length
+  const withImg = state.posts.filter(p => p.image_url ).length
 
   const wrap = root.querySelector('#heros')
   if (!wrap) return
@@ -124,8 +124,8 @@ function postCardHtml(p) {
     'with-image': '<span class="chip chip--blue">Bild</span>',
     standard: ''
   }[cat]
-  const image = (p.image_url || p.media_url)
-    ? `<div class="post-media"><img loading="lazy" src="${htmlEscape(p.image_url || p.media_url)}" alt="" /></div>`
+  const image = (p.image_url )
+    ? `<div class="post-media"><img loading="lazy" src="${htmlEscape(p.image_url )}" alt="" /></div>`
     : ''
   return `
     <article class="post-card glass-card" data-id="${htmlEscape(p.id)}">
