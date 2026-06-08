@@ -571,50 +571,44 @@ export async function showUserDetailV2(userId) {
     })
   })
 
-  // Ban
-  const banBtn = modalEl.querySelector('[data-act="ban"]')
-  if (banBtn) {
-    banBtn.addEventListener('click', async () => {
-      const res = await showBanModal(u)
-      if (!res) return
-      await withLoading(banBtn, async () => {
-        // Hauptpfad: admin_ban_user (mit optional p_until — fallback ohne)
-        try {
-          await rpc('admin_ban_user', {
-            p_user_id: userId,
-            p_reason: res.reason,
-            p_until: res.until ? new Date(res.until + 'T23:59:59').toISOString() : null,
-          })
-        } catch (e) {
-          // RPC akzeptiert p_until evtl. nicht → ohne Datum erneut versuchen
-          if (String(e.message || '').match(/p_until|argument/i)) {
-            await rpc('admin_ban_user', { p_user_id: userId, p_reason: res.reason })
-          } else {
-            throw e
-          }
-        }
-        toast('User gebannt.', 'success')
-        u.is_banned = true
-        u.ban_reason = res.reason
-        // Section neu rendern
-        rerenderModerationSection()
-      })
+  // Ban / Unban — als re-bindbare Handler (Section wird nach Aktion neu gerendert)
+  async function handleBan(btn) {
+    const res = await showBanModal(u)
+    if (!res) return
+    await withLoading(btn, async () => {
+      try {
+        await rpc('admin_ban_user', {
+          p_user_id: userId,
+          p_reason: res.reason,
+          p_until: res.until ? new Date(res.until + 'T23:59:59').toISOString() : null,
+        })
+      } catch (e) {
+        if (String(e.message || '').match(/p_until|argument/i)) {
+          await rpc('admin_ban_user', { p_user_id: userId, p_reason: res.reason })
+        } else { throw e }
+      }
+      toast('User gebannt.', 'success')
+      u.is_banned = true
+      u.ban_reason = res.reason
+      rerenderModerationSection()
     })
   }
-
-  // Unban
-  const unbanBtn = modalEl.querySelector('[data-act="unban"]')
-  if (unbanBtn) {
-    unbanBtn.addEventListener('click', async () => {
-      await withLoading(unbanBtn, async () => {
-        await rpc('admin_unban_user', { p_user_id: userId })
-        toast('Bann aufgehoben.', 'success')
-        u.is_banned = false
-        u.ban_reason = null
-        rerenderModerationSection()
-      })
+  async function handleUnban(btn) {
+    await withLoading(btn, async () => {
+      await rpc('admin_unban_user', { p_user_id: userId })
+      toast('Bann aufgehoben.', 'success')
+      u.is_banned = false
+      u.ban_reason = null
+      rerenderModerationSection()
     })
   }
+  function bindModerationButtons() {
+    const b = modalEl.querySelector('[data-act="ban"]')
+    const ub = modalEl.querySelector('[data-act="unban"]')
+    if (b) b.addEventListener('click', (e) => handleBan(e.currentTarget))
+    if (ub) ub.addEventListener('click', (e) => handleUnban(e.currentTarget))
+  }
+  bindModerationButtons()
 
   // Reset-Mail
   modalEl.querySelector('[data-act="reset-password"]').addEventListener('click', async (ev) => {
@@ -638,7 +632,7 @@ export async function showUserDetailV2(userId) {
 
   function rerenderModerationSection() {
     const sections = modalEl.querySelectorAll('.udv2-section')
-    // 3. Section ist Moderation (Rolle, Status, Moderation, Reset)
+    // Index 2: Rolle, Status, Moderation, Reset
     const modSection = sections[2]
     if (!modSection) return
     modSection.innerHTML = `
@@ -651,28 +645,7 @@ export async function showUserDetailV2(userId) {
         }
       </div>
     `
-    // Re-bind
-    const nBan = modSection.querySelector('[data-act="ban"]')
-    const nUnban = modSection.querySelector('[data-act="unban"]')
-    if (nBan) nBan.addEventListener('click', () => banBtn ? banBtn.click() : modalEl.querySelector('[data-act="ban"]').click())
-    if (nUnban) nUnban.addEventListener('click', () => unbanBtn ? unbanBtn.click() : modalEl.querySelector('[data-act="unban"]').click())
-    // Da die alten Buttons ersetzt wurden, müssen wir die Handler direkt anhängen:
-    if (nBan && !banBtn) nBan.addEventListener('click', async () => {
-      const res = await showBanModal(u); if (!res) return
-      try {
-        await rpc('admin_ban_user', { p_user_id: userId, p_reason: res.reason, p_until: res.until ? new Date(res.until + 'T23:59:59').toISOString() : null })
-      } catch (e) {
-        if (String(e.message || '').match(/p_until|argument/i)) {
-          await rpc('admin_ban_user', { p_user_id: userId, p_reason: res.reason })
-        } else { toast(`Fehler: ${e.message}`, 'error'); return }
-      }
-      toast('User gebannt.', 'success'); u.is_banned = true; u.ban_reason = res.reason; rerenderModerationSection()
-    })
-    if (nUnban && !unbanBtn) nUnban.addEventListener('click', async () => {
-      try { await rpc('admin_unban_user', { p_user_id: userId }) }
-      catch (e) { toast(`Fehler: ${e.message}`, 'error'); return }
-      toast('Bann aufgehoben.', 'success'); u.is_banned = false; u.ban_reason = null; rerenderModerationSection()
-    })
+    bindModerationButtons()
   }
 }
 
