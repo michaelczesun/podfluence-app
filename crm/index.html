@@ -311,8 +311,9 @@
       position: fixed !important; left: 0; top: 52px;
       z-index: 60;
       height: calc(100vh - 52px);
+      transform: translateX(-100%);
     }
-    .shell:not(.sidebar-open) aside { transform: translateX(-100%); }
+    .shell.sidebar-open aside { transform: translateX(0) !important; }
     .shell.sidebar-open::before {
       content: '';
       position: fixed; inset: 52px 0 0 0;
@@ -606,6 +607,17 @@ function initSidebarState() {
   }
 }
 initSidebarState()
+
+// Resize: bei Übergang Desktop↔Mobile Sidebar-State korrigieren
+// (sonst bleibt Sidebar nach Resize fälschlicherweise offen/zu)
+let _wasMobile = window.innerWidth < 768
+window.addEventListener('resize', () => {
+  const isMobile = window.innerWidth < 768
+  if (isMobile !== _wasMobile) {
+    _wasMobile = isMobile
+    initSidebarState()
+  }
+})
 
 sidebarToggle?.addEventListener('click', (e) => {
   e.stopPropagation()
