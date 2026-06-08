@@ -119,6 +119,20 @@ function styles() {
     }
     .al-empty .big { font-size:32px; margin-bottom:8px; opacity:.7; }
 
+    /* Bug #14: Smart-Alert-Text darf nicht abgeschnitten werden
+       ("3 Meinungen · Abseits der Karte · Watchli...") — voller Umbruch statt Ellipsis. */
+    .smart-alert-text,
+    .alert-title,
+    .alert-sub,
+    .al-title,
+    .al-meta {
+      white-space: normal;
+      text-overflow: unset;
+      overflow: visible;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+
     /* Mobile: keep sub-tab bar scrollable + no overflow */
     @media (max-width: 767px) {
       .pulse-shell { max-width: 100%; overflow-x: hidden; }
@@ -232,15 +246,22 @@ async function fetchAnomalies() {
     if (!error && Array.isArray(data)) {
       return data
         .map(r => {
-          const z = Number(r.z_score ?? r.z ?? r.zscore ?? 0)
+          const rawZ  = Number(r.z_score ?? r.z ?? r.zscore ?? 0)
+          const value = Number(r.current_value ?? r.value ?? r.today ?? 0)
+          const mean  = Number(r.baseline_avg ?? r.mean ?? r.avg ?? 0)
+          // Direction-Wahrheit: value vs mean (RPC z-Vorzeichen ist nicht verlässlich;
+          // einige Quellen liefern abs(z) und separates direction-Feld — wir nehmen das Tatsächliche)
+          const direction = value >= mean ? 'up' : 'down'
+          // Signed z so arrow + sign + label übereinstimmen
+          const z = direction === 'down' ? -Math.abs(rawZ) : Math.abs(rawZ)
           return {
             metric: r.metric || r.key || 'unknown',
-            value:  Number(r.current_value ?? r.value ?? r.today ?? 0),
-            mean:   Number(r.baseline_avg ?? r.mean ?? r.avg ?? 0),
+            value,
+            mean,
             std:    Number(r.baseline_std ?? r.std ?? 0),
             z,
             severity: normalizeSeverity(r.severity, z),
-            direction: r.direction || (z > 0 ? 'up' : 'down'),
+            direction,
             note:   r.note || r.message || null
           }
         })
@@ -272,10 +293,11 @@ async function fetchAnomalies() {
       if (sd < 0.5) return
       const z = (today - mean) / sd
       if (Math.abs(z) >= 2) {
+        const direction = today >= mean ? 'up' : 'down'
         out.push({
           metric, value: today, mean: Math.round(mean), std: sd, z,
           severity: severityFor(z),
-          direction: z > 0 ? 'up' : 'down',
+          direction,
           note: null
         })
       }
@@ -315,7 +337,7 @@ async function mountAlerts(host) {
         <div class="al-title"><span class="al-badge sev-${sev}">${sevLabel}</span>${htmlEscape(a.metric)} ${arr} ${fmtNumber(a.value)}</div>
         <div class="al-meta">Ø ${fmtNumber(a.mean)} · ${a.direction === 'up' ? 'über' : 'unter'} dem Mittel${noteStr}</div>
       </div>
-      <div class="al-z">z = ${(Number(a.z) || 0).toFixed(1)}</div>
+      <div class="al-z" title="z-Score: Abweichung in Standardabweichungen — Vorzeichen folgt Richtung (▲ positiv, ▼ negativ)">z = ${((Number(a.z) || 0) >= 0 ? '+' : '')}${(Number(a.z) || 0).toFixed(1)}</div>
     </div>`
   }).join('')
 }

@@ -102,12 +102,26 @@ async function fetchSignupSeries() {
 }
 
 function fetchTypeBreakdown() {
+  // Single-bucket Klassifizierung — jeder User in GENAU eine Kategorie.
+  // Priorität: Admin > Inaktiv (>7d) > Podcaster > Verifiziert > Sonstige.
+  // Fix Bug #13: vorher wurden z.B. verifizierte Podcaster doppelt gezählt (72 statt 51).
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  const buckets = { admin: 0, inactive: 0, podcaster: 0, verified: 0, other: 0 }
+  const rows = _allRows || []
+  for (const r of rows) {
+    if (r.is_app_admin) buckets.admin++
+    else if (r.last_seen_at && r.last_seen_at < sevenDaysAgo) buckets.inactive++
+    else if (r.type === 'podcaster' || r.type === 'both') buckets.podcaster++
+    else if (r.is_verified) buckets.verified++
+    else buckets.other++
+  }
   state.typeBreakdown = [
-    { label: 'Verifiziert', value: state.totals.verified, color: '#34d399' },
-    { label: 'Podcaster', value: state.totals.podcasters, color: '#60a5fa' },
-    { label: 'Admins', value: state.totals.admins, color: '#f472b6' },
-    { label: 'Inaktiv (>7d)', value: state.totals.inactive, color: '#fbbf24' }
-  ]
+    { label: 'Admins', value: buckets.admin, color: '#f472b6' },
+    { label: 'Inaktiv (>7d)', value: buckets.inactive, color: '#fbbf24' },
+    { label: 'Podcaster', value: buckets.podcaster, color: '#60a5fa' },
+    { label: 'Verifiziert', value: buckets.verified, color: '#34d399' },
+    { label: 'Sonstige', value: buckets.other, color: '#94a3b8' }
+  ].filter(s => s.value > 0)
 }
 
 async function fetchPage() {
