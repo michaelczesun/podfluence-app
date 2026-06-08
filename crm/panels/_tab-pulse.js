@@ -7,7 +7,7 @@
 //   - activity-stream: reused → audit-log.js (Realtime Audit-Feed)
 
 import { sb } from '/lib/supabase.js?v=20260608j'
-import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608j'
+import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608k'
 import { fadeIn, countUp } from '/lib/animations.js?v=20260608j'
 import { glassCard, pullToRefresh } from '/lib/layout-extras.js?v=20260608j'
 

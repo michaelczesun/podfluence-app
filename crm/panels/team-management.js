@@ -1,5 +1,6 @@
 import { sb } from '/lib/supabase.js?v=20260608j'
-import { toast, modal, confirmDialog, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608j'
+import { toast, confirmDialog, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608k'
+import { openModal } from '/crm/lib/modal.js?v=20260608k'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608j'
 import { countUp, fadeIn } from '/lib/animations.js?v=20260608j'
 import { drawer, glassCard } from '/lib/layout-extras.js?v=20260608j'
@@ -418,19 +419,42 @@ export default {
           <div id="inv-pick" style="display:none; padding:10px; background:rgba(59,130,246,.1); border:1px solid #3b82f655; border-radius:10px; font-size:12px; color:#93c5fd;"></div>
         `
 
-        const footer = document.createElement('div')
-        footer.style.cssText = 'display:flex; gap:8px; justify-content:flex-end;'
-        const cancelBtn = document.createElement('button')
-        cancelBtn.textContent = 'Abbrechen'
-        cancelBtn.style.cssText = 'padding:8px 14px; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.1); color:#ccc; border-radius:8px; cursor:pointer; font-size:13px;'
-        const okBtn = document.createElement('button')
-        okBtn.textContent = 'Einladen'
-        okBtn.disabled = true
-        okBtn.style.cssText = 'padding:8px 14px; background:#3b82f6; border:none; color:#fff; border-radius:8px; cursor:pointer; font-size:13px; font-weight:600; opacity:.5;'
-        footer.appendChild(cancelBtn)
-        footer.appendChild(okBtn)
-
-        const { close } = modal({ title: 'Mitarbeiter einladen', content, footer, width: 560 })
+        // Footer-Buttons werden via footerActions in der zentralen Modal-Lib gebaut.
+        // OK-Button bleibt disabled bis ein User selektiert ist (Referenz nach openModal).
+        const modalApi = openModal({
+          title: 'Mitarbeiter einladen',
+          body: content,
+          width: 560,
+          footerActions: [
+            { label: 'Abbrechen', variant: 'ghost', closeOnClick: true },
+            {
+              label: 'Einladen',
+              variant: 'primary',
+              closeOnClick: false,
+              onClick: async (api) => {
+                if (!selectedUser || !selectedRole) return
+                const btn = api.footer?.querySelectorAll('.modal-footer-btn')[1]
+                if (btn) { btn.disabled = true; btn.textContent = 'Speichere …' }
+                try {
+                  const { error } = await sb.rpc('admin_team_set_role', {
+                    p_user_id: selectedUser.id,
+                    p_role: selectedRole
+                  })
+                  if (error) throw error
+                  toast(`${selectedUser.username} ist jetzt ${ROLES[selectedRole].label}`)
+                  api.close(true)
+                  load()
+                } catch (e) {
+                  toast('Fehler: ' + (e.message || 'unbekannt'), 'error')
+                  if (btn) { btn.disabled = false; btn.textContent = 'Einladen' }
+                }
+              }
+            }
+          ]
+        })
+        const close = () => modalApi.close(true)
+        const okBtn = modalApi.footer?.querySelectorAll('.modal-footer-btn')[1]
+        if (okBtn) okBtn.disabled = true
 
         const searchInput = content.querySelector('#inv-search')
         const resultsEl   = content.querySelector('#inv-results')

@@ -8,7 +8,7 @@
 import { sb } from '/lib/supabase.js?v=20260608j'
 import {
   toast, htmlEscape, fmtRelativeTime, fmtNumber, iconHtml, spinnerHtml
-} from '/lib/ui.js?v=20260608j'
+} from '/lib/ui.js?v=20260608k'
 import { fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608j'
 import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608j'
 

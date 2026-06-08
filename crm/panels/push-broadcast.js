@@ -1,5 +1,5 @@
 import { sb } from '/lib/supabase.js?v=20260608j'
-import { toast, confirmDialog, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608j'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608k'
 import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260608j'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608j'
 import { drawer, statHero, glassCard } from '/lib/layout-extras.js?v=20260608j'

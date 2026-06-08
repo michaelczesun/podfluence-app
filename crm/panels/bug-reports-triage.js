@@ -1,5 +1,5 @@
 import { sb } from '/lib/supabase.js?v=20260608j'
-import { toast, modal, fmtDateTime, htmlEscape } from '/lib/ui.js?v=20260608j'
+import { toast, modal, fmtDateTime, htmlEscape } from '/lib/ui.js?v=20260608k'
 import { drawer } from '/lib/layout-extras.js?v=20260608j'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608j'
 import { skeletonLoader } from '/lib/animations.js?v=20260608j'

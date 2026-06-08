@@ -10,7 +10,7 @@
 // Close: X-Button, Escape, Backdrop-Click.
 
 import { sb } from '/lib/supabase.js?v=20260608j'
-import { toast, htmlEscape } from '/lib/ui.js?v=20260608j'
+import { toast, htmlEscape } from '/lib/ui.js?v=20260608k'
 
 // ---------------------------------------------------------------------------
 // One-time style injection

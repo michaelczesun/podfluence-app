@@ -3,7 +3,7 @@
 // Sub-Tabs sind echte Panel-Module unter /panels/*.js (oder ein Inline-Placeholder für Phase 3).
 
 import { sb } from '/lib/supabase.js?v=20260608j'
-import { toast, iconHtml } from '/lib/ui.js?v=20260608j'
+import { toast, iconHtml } from '/lib/ui.js?v=20260608k'
 import { fadeIn } from '/lib/animations.js?v=20260608j'
 import { pullToRefresh } from '/lib/layout-extras.js?v=20260608j'
 import { sendTestPush } from '/lib/panel-actions.js?v=20260608j'

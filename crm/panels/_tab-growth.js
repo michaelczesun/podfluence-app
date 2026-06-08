@@ -17,7 +17,7 @@
 import { sb } from '/lib/supabase.js?v=20260608j'
 import {
   toast, htmlEscape, fmtNumber, fmtRelativeTime, iconHtml, spinnerHtml
-} from '/lib/ui.js?v=20260608j'
+} from '/lib/ui.js?v=20260608k'
 import * as Charts from '/lib/charts.js?v=20260608j'
 import { exportCsv, exportPanelAsPdf } from '/lib/export.js?v=20260608j'
 import { fadeIn, skeletonLoader, countUp } from '/lib/animations.js?v=20260608j'

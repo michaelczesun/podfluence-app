@@ -279,9 +279,7 @@
   .leaderboard .val { color: #A78BFA; font-weight: 600; }
   .chip { display: inline-block; background: rgba(139,92,246,0.15); color: #A78BFA; padding: 3px 10px; border-radius: 12px; font-size: 11px; margin-right: 4px; }
   .chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .toast { position: fixed; top: 20px; right: 20px; background: #16161D; border: 1px solid #2A2A33; padding: 12px 18px; border-radius: 10px; color: #fff; z-index: 9999; animation: fadeUp 0.3s; }
-  @keyframes fadeUp { from { transform: translateY(-8px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-
+  /* Toast-Stile werden von /crm/lib/toast.js Modul injiziert */
   /* Cmd-K Modal-Styles werden vom /crm/lib/cmdk.js Modul injiziert */
 
   /* Sidebar-toggle (mobile + cmd+/) */
@@ -441,6 +439,7 @@
 <script type="module">
 import { sb } from '/lib/supabase.js?v=20260608j'
 import { openCmdK, closeCmdK, toggleCmdK, isCmdKOpen, installCmdK } from '/crm/lib/cmdk.js?v=20260608-micfab'
+import '/crm/lib/toast.js?v=20260608-toast'
 
 // ---- Auth-Guard (Admin-Only) ----
 const mountEl = document.getElementById('panel-mount')
@@ -586,14 +585,7 @@ if (bottomTabs.length) {
   document.body.classList.add('has-bottom-bar')
 }
 
-// ---- Toast ----
-window.toast = function(msg) {
-  const el = document.createElement('div')
-  el.className = 'toast'
-  el.textContent = msg
-  document.body.appendChild(el)
-  setTimeout(() => el.remove(), 3000)
-}
+// ---- Toast ---- (Lib lädt window.toast via /crm/lib/toast.js)
 
 // ---- Sidebar Toggle (mobile + Cmd+/) ----
 const shellEl = document.getElementById('shell')
@@ -827,7 +819,12 @@ async function loadPanel() {
     const consoleBtn = document.getElementById('crm-err-console')
     if (consoleBtn) consoleBtn.addEventListener('click', () => {
       console.error('[crm] DEV-INFO — Panel:', id, '| Datei:', modulePath, '| Fehler:', e)
-      alert('Console öffnen: F12 (Windows/Linux) oder Cmd+Option+I (Mac).\n\nSuche dort nach "[crm] panel load error".')
+      window.toast?.({
+        type: 'info',
+        title: 'Console öffnen',
+        message: 'F12 (Windows/Linux) oder Cmd+Option+I (Mac). Suche dort nach "[crm] panel load error".',
+        duration: 7000
+      })
     })
   }
 }

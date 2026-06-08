@@ -1,5 +1,5 @@
 import { sb } from '/lib/supabase.js?v=20260608j'
-import { toast, confirmDialog, fmtNumber, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608j'
+import { toast, confirmDialog, fmtNumber, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608k'
 import { makeLineChart } from '/lib/charts.js?v=20260608j'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608j'
 import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608j'

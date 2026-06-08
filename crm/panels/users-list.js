@@ -1,5 +1,5 @@
 import { sb } from '/lib/supabase.js?v=20260608j'
-import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608j'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608k'
 import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260608j'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608j'
 import { countUp, fadeIn } from '/lib/animations.js?v=20260608j'
@@ -237,6 +237,57 @@ export default {
           .ul-table tbody tr[data-swipe-armed="1"][data-swipe-dir="right"]::before,
           .ul-table tbody tr[data-swipe-armed="1"][data-swipe-dir="left"]::after {
             filter:brightness(1.25);
+          }
+          /* MODAL FIX: close-X + backdrop + mobile fullscreen + body scroll + sticky-foot */
+          .ul-push-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+            backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+            display: flex; align-items: center; justify-content: center;
+            z-index: 10050; padding: 16px; box-sizing: border-box;
+          }
+          .ul-push-modal {
+            width: 480px; max-width: 100%;
+            max-height: calc(100vh - 32px);
+            display: flex; flex-direction: column; overflow: hidden;
+            background: #16161D; color: #E4E4E7;
+            border: 1px solid rgba(139,92,246,0.22); border-radius: 14px;
+            box-shadow: 0 24px 70px rgba(0,0,0,0.6);
+          }
+          .ul-push-modal-head {
+            display: flex; align-items: center; justify-content: space-between;
+            padding: 14px 18px; border-bottom: 1px solid rgba(255,255,255,0.06);
+            flex-shrink: 0; position: sticky; top: 0; background: #16161D; z-index: 2;
+          }
+          .ul-push-modal-head h3 { margin: 0; font-size: 15px; font-weight: 600; }
+          .ul-push-modal-body {
+            padding: 16px 18px;
+            overflow-y: auto; -webkit-overflow-scrolling: touch;
+            flex: 1 1 auto;
+            max-height: calc(100vh - 32px - 60px - 60px);
+          }
+          .ul-push-modal-foot {
+            display: flex; gap: 8px; justify-content: flex-end; flex-wrap: wrap;
+            padding: 12px 18px; border-top: 1px solid rgba(255,255,255,0.06);
+            background: rgba(11,11,15,0.6);
+            flex-shrink: 0; position: sticky; bottom: 0; z-index: 2;
+          }
+          .ul-push-notice { background: rgba(245,158,11,0.1); border:1px solid rgba(245,158,11,0.3); color:#FCD34D; padding:10px 12px; border-radius:8px; font-size:12px; margin-bottom:12px; display:flex; gap:8px; align-items:flex-start; }
+          .ul-push-label { display:block; margin-top:10px; margin-bottom:6px; font-size:12px; color:#A1A1AA; font-weight:500; }
+          .ul-push-input, .ul-push-textarea {
+            width:100%; box-sizing:border-box; background:#0F0F14; color:#E4E4E7;
+            border:1px solid #2A2A33; border-radius:8px; padding:8px 12px;
+            font-size:13px; font-family:inherit; outline:none;
+          }
+          .ul-push-input:focus, .ul-push-textarea:focus { border-color: #8B5CF6; }
+          .ul-push-textarea { resize: vertical; min-height: 72px; }
+          .ul-push-status { margin-top:10px; padding:8px 10px; background:rgba(248,113,113,0.1); border:1px solid rgba(248,113,113,0.3); color:#F87171; border-radius:8px; font-size:12px; }
+          @media (max-width: 560px) {
+            .ul-push-overlay { padding: 0; }
+            .ul-push-modal {
+              width: 100%; height: 100vh; max-height: 100vh;
+              border-radius: 0; border-left: none; border-right: none;
+            }
+            .ul-push-modal-body { max-height: none; }
           }
         </style>
         <div class="panel-shell users-list-panel">
@@ -937,7 +988,9 @@ function openBulkPushModal(ids, body, container) {
   `
   document.body.appendChild(overlay)
 
-  const close = () => overlay.remove()
+  const onKey = (e) => { if (e.key === 'Escape') close() }
+  const close = () => { document.removeEventListener('keydown', onKey); overlay.remove() }
+  document.addEventListener('keydown', onKey)
   overlay.querySelector('#ul-push-close')?.addEventListener('click', close)
   overlay.querySelector('#ul-push-cancel')?.addEventListener('click', close)
   overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
@@ -1158,7 +1211,9 @@ function promptNote(row) {
     document.body.appendChild(overlay)
     const ta = overlay.querySelector('#ul-note-text')
     setTimeout(() => ta?.focus(), 30)
-    const done = (val) => { overlay.remove(); resolve(val) }
+    const onKey = (e) => { if (e.key === 'Escape') done(null) }
+    const done = (val) => { document.removeEventListener('keydown', onKey); overlay.remove(); resolve(val) }
+    document.addEventListener('keydown', onKey)
     overlay.querySelector('[data-x="close"]').addEventListener('click', () => done(null))
     overlay.querySelector('[data-x="cancel"]').addEventListener('click', () => done(null))
     overlay.querySelector('[data-x="save"]').addEventListener('click', () => done(ta?.value || ''))

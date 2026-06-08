@@ -19,8 +19,10 @@
  * RPC / Edge nutzen den globalen `window.sb` Supabase-Client.
  */
 
+import { openConfirm } from '/crm/lib/confirm.js'
+
 const _go = (hash) => { location.hash = hash }
-const _confirm = (msg) => window.confirm(msg)
+const _confirm = (opts) => openConfirm(typeof opts === 'string' ? { title: opts } : opts)
 const _toast = (msg) => (window.toast ? window.toast(msg) : console.log('[cmdk]', msg))
 
 async function _rpc(name, args = {}) {
@@ -318,7 +320,7 @@ export const ACTIONS = [
     argSchema: { username: 'string' },
     run: async ({ username }) => {
       if (!username) throw new Error('username required')
-      if (!_confirm(`@${username} verifizieren?`)) return
+      if (!(await _confirm({ title: `@${username} verifizieren?`, message: 'Der User bekommt das Verified-Badge.', confirmLabel: 'Verifizieren' }))) return
       const data = await _rpc('crm_verify_user_by_username', { p_username: username })
       _toast(`@${username} verifiziert.`)
       return data
@@ -333,7 +335,7 @@ export const ACTIONS = [
     scope: ['owner', 'admin'],
     argSchema: { username: 'string' },
     run: async ({ username }) => {
-      if (!_confirm(`Verifizierung von @${username} entziehen?`)) return
+      if (!(await _confirm({ title: `Verifizierung entziehen?`, message: `Das Verified-Badge von @${username} wird entfernt.`, confirmLabel: 'Entziehen', danger: true }))) return
       await _rpc('crm_unverify_user_by_username', { p_username: username })
       _toast(`@${username} unverified.`)
     }
@@ -347,7 +349,7 @@ export const ACTIONS = [
     scope: ['owner', 'admin'],
     argSchema: { username: 'string', reason: 'string' },
     run: async ({ username, reason }) => {
-      if (!_confirm(`@${username} bannen?\n\nGrund: ${reason || '(keiner)'}`)) return
+      if (!(await _confirm({ title: `@${username} bannen?`, message: `Grund: ${reason || '(keiner)'}`, confirmLabel: 'Bannen', danger: true }))) return
       await _rpc('crm_ban_user_by_username', { p_username: username, p_reason: reason || null })
       _toast(`@${username} gebannt.`)
     }
@@ -361,7 +363,7 @@ export const ACTIONS = [
     scope: ['owner', 'admin'],
     argSchema: { username: 'string' },
     run: async ({ username }) => {
-      if (!_confirm(`@${username} entbannen?`)) return
+      if (!(await _confirm({ title: `@${username} entbannen?`, message: 'Der User kann sich wieder einloggen.', confirmLabel: 'Entbannen' }))) return
       await _rpc('crm_unban_user_by_username', { p_username: username })
       _toast(`@${username} entbannt.`)
     }
@@ -388,7 +390,7 @@ export const ACTIONS = [
     scope: ['owner', 'admin'],
     argSchema: { username: 'string' },
     run: async ({ username }) => {
-      if (!_confirm(`Premium von @${username} entziehen?`)) return
+      if (!(await _confirm({ title: `Premium entziehen?`, message: `@${username} verliert Premium-Features.`, confirmLabel: 'Entziehen', danger: true }))) return
       await _rpc('crm_set_premium_by_username', { p_username: username, p_value: false })
       _toast(`@${username} Premium entzogen.`)
     }
@@ -424,7 +426,7 @@ export const ACTIONS = [
     scope: ['owner', 'admin', 'support'],
     argSchema: { username: 'string' },
     run: async ({ username }) => {
-      if (!_confirm(`Reset-Mail an @${username} senden?`)) return
+      if (!(await _confirm({ title: 'Reset-Mail senden?', message: `An @${username} geht eine Passwort-Reset-Mail raus.`, confirmLabel: 'Senden' }))) return
       await _rpc('crm_send_password_reset_by_username', { p_username: username })
       _toast('Reset-Mail rausgeschickt.')
     }
