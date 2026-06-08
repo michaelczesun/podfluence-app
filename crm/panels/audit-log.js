@@ -2,6 +2,7 @@ import { sb } from '/lib/supabase.js?v=20260608j'
 import { toast, fmtNumber, fmtRelativeTime, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608k'
 import { exportCsv } from '/lib/export.js?v=20260608j'
 import { fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608j'
+import { emptyState } from '/crm/lib/empty.js?v=20260608a'
 
 const PAGE_SIZE = 100
 
@@ -40,11 +41,11 @@ async function fetchAudit() {
 
 function renderRows(rows) {
   if (!rows.length) {
-    return `<div class="audit-empty">
-      <div style="font-size:36px;opacity:0.4">📜</div>
-      <div style="font-weight:600;margin-top:8px">Noch keine Admin-Aktionen geloggt</div>
-      <div style="font-size:13px;color:var(--text-muted);margin-top:4px">Sobald du einen User verifizierst, bannst oder Premium vergibst, taucht's hier auf.</div>
-    </div>`
+    return emptyState({
+      icon: '🔇',
+      title: 'Noch keine Admin-Aktionen heute',
+      message: "Sobald du einen User verifizierst, bannst oder Premium vergibst, taucht's hier auf."
+    })
   }
   const filtered = state.q
     ? rows.filter(r => (r.admin_username || '').toLowerCase().includes(state.q) ||

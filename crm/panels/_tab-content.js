@@ -6,6 +6,7 @@
 // CACHE-BUST: ?v=20260608j
 
 import { sb } from '/lib/supabase.js?v=20260608j'
+import { emptyState } from '/crm/lib/empty.js?v=20260608a'
 import {
   toast, htmlEscape, fmtRelativeTime, fmtNumber, iconHtml, spinnerHtml
 } from '/lib/ui.js?v=20260608k'
@@ -161,7 +162,11 @@ async function renderCommentFeed(container) {
       ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at)).slice(0, 100)
 
       if (!all.length) {
-        body.innerHTML = `<div class="empty">Noch keine Kommentare.</div>`
+        body.innerHTML = emptyState({
+          icon: '💬',
+          title: 'Noch keine Kommentare',
+          message: 'Sobald jemand auf Beiträge oder Episoden antwortet, taucht das hier auf.'
+        })
         return
       }
 

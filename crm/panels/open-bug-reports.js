@@ -5,6 +5,7 @@ import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608j'
 import { countUp, fadeIn, skeletonLoader, slideInRight } from '/lib/animations.js?v=20260608j'
 import { drawer, glassCard, statHero } from '/lib/layout-extras.js?v=20260608j'
 import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608j'
+import { emptyState } from '/crm/lib/empty.js?v=20260608a'
 
 // priority/category are NOT in the DB schema — UI-only mapping based on description keywords
 const STATUS_COLORS = {
@@ -137,11 +138,11 @@ function descSnippet(r) {
 
 function renderTable(rows, userMap) {
   if (!rows.length) {
-    return `<div class="obr-empty">
-      <div class="obr-empty-icon">${iconHtml ? iconHtml('check') : '✓'}</div>
-      <div style="font-size:16px;font-weight:600;color:var(--text,#fff)">Alles sauber.</div>
-      <div>Keine offenen Bug-Reports — gute Arbeit.</div>
-    </div>`
+    return emptyState({
+      icon: '🐛',
+      title: 'Keine offenen Bug-Reports',
+      message: 'Alles sauber — gute Arbeit. Sobald ein User etwas meldet, siehst du es hier.'
+    })
   }
   return `
     <div class="obr-table-wrap">

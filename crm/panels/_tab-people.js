@@ -7,6 +7,7 @@ import { toast, iconHtml } from '/lib/ui.js?v=20260608k'
 import { fadeIn } from '/lib/animations.js?v=20260608j'
 import { pullToRefresh } from '/lib/layout-extras.js?v=20260608j'
 import { sendTestPush } from '/lib/panel-actions.js?v=20260608j'
+import { emptyState } from '/crm/lib/empty.js?v=20260608a'
 
 const SUBTABS = [
   { key: 'users',    label: 'Users',    panel: 'users-list',      icon: 'users' },
@@ -142,7 +143,11 @@ async function mountPowerUsers(rootEl) {
     if (error) throw error
     const rows = Array.isArray(data) ? data : []
     if (!rows.length) {
-      listEl.innerHTML = `<div class="pu-empty">Noch keine Engagement-Daten verfügbar.</div>`
+      listEl.innerHTML = emptyState({
+        icon: '⚡',
+        title: 'Noch keine Power-User',
+        message: 'Engagement-Scores brauchen ein paar Tage Aktivität. Schau morgen wieder vorbei.'
+      })
       return
     }
     listEl.innerHTML = rows.map(r => {
