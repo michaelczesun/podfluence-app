@@ -676,7 +676,14 @@ export default {
         })
       } catch (e) {
         const el = container.querySelector('#ah-alerts')
-        if (el) el.innerHTML = `<div class="empty-state"><div class="icon">${iconHtml('alert-triangle')}</div><h3>Alerts nicht ladbar</h3><p>${htmlEscape(e?.message||'')}</p></div>`
+        if (el) el.innerHTML = `<div class="empty-state">
+          <div class="icon">${iconHtml('alert-triangle')}</div>
+          <h3>Alerts konnten nicht geladen werden</h3>
+          <p>Die Smart-Alerts-Quellen sind aktuell nicht erreichbar. Versuch's nochmal — sonst sind RPC oder Tabellen-Permissions zu prüfen.</p>
+          <p style="font-size:11px;opacity:.6;margin-top:6px">${htmlEscape(e?.message||'')}</p>
+          <button class="alert-btn" data-action="retry-alerts" style="margin-top:10px">${iconHtml('refresh')} Erneut versuchen</button>
+        </div>`
+        el?.querySelector('[data-action="retry-alerts"]')?.addEventListener('click', () => renderAlerts())
       }
     }
 
@@ -697,7 +704,11 @@ export default {
         lastAuditIds = new Set(rows.map(r => r.id).filter(Boolean))
       } catch (e) {
         const el = container.querySelector('#ah-audit')
-        if (el) el.innerHTML = `<div class="audit-empty">Audit-Log nicht ladbar.</div>`
+        if (el) el.innerHTML = `<div class="audit-empty" style="text-align:center;padding:24px 16px;color:var(--text-muted)">
+          <div style="font-size:28px;opacity:.45;margin-bottom:6px">${iconHtml('alert-triangle')}</div>
+          <div style="font-weight:600;color:var(--text);margin-bottom:4px">Audit-Log nicht erreichbar</div>
+          <div style="font-size:12px;line-height:1.4">RPC <code>admin_audit_recent</code> hat nicht geantwortet. Permissions oder Service-Status prüfen.</div>
+        </div>`
       }
     }
 

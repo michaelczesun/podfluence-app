@@ -1,7 +1,7 @@
-import { sb } from '/lib/supabase.js?v=20260608h'
-import { toast, modal, htmlEscape, iconHtml, debounce, fmtDateTime } from '/lib/ui.js?v=20260608h'
-import { exportCsv } from '/lib/export.js?v=20260608h'
-import { fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608h'
+import { sb } from '/lib/supabase.js?v=20260608i'
+import { toast, modal, htmlEscape, iconHtml, debounce, fmtDateTime } from '/lib/ui.js?v=20260608i'
+import { exportCsv } from '/lib/export.js?v=20260608i'
+import { fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608i'
 
 const REFRESH_MS = 60000
 
@@ -262,7 +262,7 @@ function styles() {
     @media (max-width:1100px){ .lead-board{ grid-template-columns:repeat(2, 1fr); } }
     @media (max-width:640px){  .lead-board{ grid-template-columns:1fr; } }
 
-    .lead-col { background:linear-gradient(140deg, rgba(255,255,255,.04), rgba(255,255,255,.01)); border:1px solid rgba(255,255,255,.06); border-radius:18px; padding:14px; display:flex; flex-direction:column; gap:10px; min-height:300px; position:relative; }
+    .lead-col { background:var(--surface-elev, linear-gradient(140deg, rgba(255,255,255,.04), rgba(255,255,255,.01))); border:1px solid rgba(255,255,255,.06); border-radius:18px; padding:14px; display:flex; flex-direction:column; gap:10px; min-height:300px; position:relative; }
     .lead-col::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--col); border-radius:18px 18px 0 0; }
     .lead-col-head { display:flex; justify-content:space-between; align-items:center; padding-top:4px; }
     .lead-col-title { display:flex; gap:8px; align-items:center; font-weight:700; font-size:14px; }

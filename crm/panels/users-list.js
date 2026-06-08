@@ -229,11 +229,16 @@ export default {
       // FEATURE C: Realtime — neue/geänderte User live nachziehen.
       let rtCh = null
       try {
+        // FIX: realtime debounce auf 2500ms erhöht — User-Tabelle ändert sich oft (last_seen_at),
+        // jedes Event triggerte ein full RPC-Reload und machte das Panel träge.
         rtCh = sb.channel('users-list-live')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
-            // sanftes Re-Fetch (debounced via Timer-Trick)
+          .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'users' }, () => {
             clearTimeout(window.__ulRtTimer)
-            window.__ulRtTimer = setTimeout(() => { loadAll(container).catch(() => {}) }, 800)
+            window.__ulRtTimer = setTimeout(() => { loadAll(container).catch(() => {}) }, 2500)
+          })
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'users' }, () => {
+            clearTimeout(window.__ulRtTimer)
+            window.__ulRtTimer = setTimeout(() => { loadAll(container).catch(() => {}) }, 2500)
           })
           .subscribe()
       } catch (_) {}
