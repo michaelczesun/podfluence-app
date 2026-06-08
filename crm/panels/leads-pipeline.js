@@ -350,7 +350,13 @@ export default {
           subEl.textContent = `${total} Leads · ${counts} · zuletzt ${fmtDateTime(new Date())}`
           renderBoard(container)
         } catch (e) {
-          container.querySelector('#lead-board').innerHTML = `<div class="lp-empty"><strong>Fehler:</strong> ${htmlEscape(e.message || String(e))}</div>`
+          container.querySelector('#lead-board').innerHTML = `<div class="lp-empty">
+            <div style="font-size:38px;line-height:1;margin-bottom:10px">${iconHtml('alert-triangle')}</div>
+            <div style="font-weight:700;font-size:15px;margin-bottom:6px">Leads konnten nicht geladen werden</div>
+            <div style="font-size:13px;margin-bottom:14px">${htmlEscape(e.message || String(e))}</div>
+            <button class="btn-primary" id="lp-empty-retry" style="padding:9px 16px;border-radius:10px;border:none;background:linear-gradient(135deg,#7C5CFF,#22D3EE);color:#fff;font-weight:600;cursor:pointer">${iconHtml('refresh')} Erneut versuchen</button>
+          </div>`
+          container.querySelector('#lp-empty-retry')?.addEventListener('click', load)
         } finally { state.loading = false }
       }
 

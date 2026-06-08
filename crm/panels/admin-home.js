@@ -234,18 +234,12 @@ async function fetchGrowthSeries() {
 async function actionBulkVerify(container) {
   try {
     const since3d = new Date(Date.now() - 3 * 86_400_000).toISOString()
-    const { data, error } = await sb.from('podcasts')
+    const { count, error } = await sb.from('podcasts')
       .select('id', { count: 'exact', head: true })
       .eq('is_owner_verified', false)
       .lt('created_at', since3d)
     if (error) throw error
-    const n = data?.length ?? 0
-    // count via head
-    const { count } = await sb.from('podcasts')
-      .select('id', { count: 'exact', head: true })
-      .eq('is_owner_verified', false)
-      .lt('created_at', since3d)
-    const target = count ?? n
+    const target = count ?? 0
     const ok = await confirmDialog({
       title: 'Bulk-Verify wartende Podcasts',
       message: `${target} Podcasts (3+ Tage unverifiziert) werden auf is_owner_verified=true gesetzt.\n\nFortfahren?`,

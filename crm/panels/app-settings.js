@@ -235,7 +235,15 @@ function renderCategory(catKey, items) {
 
 function renderBody(body, settings) {
   if (!settings.length) {
-    body.innerHTML = `<div class="empty">Keine App-Settings gefunden. Lege Einträge in <code>public.app_settings</code> an.</div>`
+    body.innerHTML = `<div class="empty">
+      <div style="font-size:42px;margin-bottom:14px;opacity:.55">${iconHtml ? iconHtml('settings') : '⚙'}</div>
+      <div style="font-size:15px;color:#fff;font-weight:600;margin-bottom:6px">Noch keine App-Settings angelegt</div>
+      <div style="max-width:420px;margin:0 auto 16px;line-height:1.5">Die Tabelle <code>public.app_settings</code> ist leer. Sobald Einträge angelegt sind, erscheinen sie hier kategorisiert mit Live-Edit.</div>
+      <button class="btn-save" id="btn-empty-reload">${iconHtml ? iconHtml('refresh') : '↺'} Neu laden</button>
+    </div>`
+    body.querySelector('#btn-empty-reload')?.addEventListener('click', () => {
+      if (typeof body._reload === 'function') body._reload()
+    })
     return
   }
   const groups = groupByCategory(settings)
