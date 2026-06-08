@@ -1,216 +1,85 @@
 {
-  "$schema": "permissions-matrix-v2",
-  "version": 2,
-  "updated": "2026-06-07",
+  "$schema": "permissions-matrix-v3",
+  "version": 3,
+  "updated": "2026-06-08",
   "roles": ["owner", "admin", "manager", "support", "mod", "marketing"],
   "nullRoleAccess": false,
   "denyMessage": "CRM-Zugriff verweigert. Bitte mit Admin-Konto anmelden.",
   "tabs": {
     "pulse": {
       "label": "Pulse",
-      "access": {
-        "owner": "rw",
-        "admin": "rw",
-        "manager": "rw",
-        "support": "rw",
-        "mod": "rw",
-        "marketing": "rw"
-      },
+      "icon": "📊",
+      "access": { "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "rw", "marketing": "rw" },
       "subtabs": {
-        "overview": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "rw",
-          "support": "rw",
-          "mod": "rw",
-          "marketing": "rw"
-        },
-        "live": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "rw",
-          "support": "rw",
-          "mod": "rw",
-          "marketing": "rw"
-        },
-        "alerts": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "rw",
-          "support": "rw",
-          "mod": "rw",
-          "marketing": "rw"
-        }
+        "admin-home":         { "label": "Smart-Alerts",       "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "rw", "marketing": "rw" },
+        "kpi-live-totals":    { "label": "Live-Kennzahlen",    "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "rw", "marketing": "rw" },
+        "dau-trend":          { "label": "DAU-Verlauf",        "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "rw", "marketing": "rw" },
+        "new-signups-7d":     { "label": "Neue Anmeldungen",   "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "rw", "marketing": "rw" },
+        "crash-rate":         { "label": "Crash-Rate",         "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "deny", "marketing": "deny" }
       }
     },
     "people": {
       "label": "People",
-      "access": {
-        "owner": "rw",
-        "admin": "rw",
-        "manager": "rw",
-        "support": "rw",
-        "mod": "rw",
-        "marketing": "rw"
-      },
+      "icon": "👥",
+      "access": { "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "deny", "marketing": "rw" },
       "subtabs": {
-        "users": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "rw",
-          "support": "rw",
-          "mod": "deny",
-          "marketing": "rw"
-        },
-        "team": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "deny",
-          "support": "deny",
-          "mod": "deny",
-          "marketing": "deny"
-        },
-        "reports": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "rw",
-          "support": "rw",
-          "mod": "rw",
-          "marketing": "rw"
-        }
+        "users-list":              { "label": "Nutzer-Liste",        "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "deny", "marketing": "r" },
+        "user-type-split":         { "label": "Typen-Verteilung",    "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "verified-premium-flags":  { "label": "Verified & Premium",  "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "r" },
+        "onboarding-funnel":       { "label": "Onboarding-Funnel",   "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "client-build-versions":   { "label": "App-Versionen",       "owner": "rw", "admin": "rw", "manager": "r",  "support": "r",  "mod": "deny", "marketing": "deny" },
+        "top-listeners":           { "label": "Top-Listener",        "owner": "rw", "admin": "rw", "manager": "r",  "support": "r",  "mod": "deny", "marketing": "rw" },
+        "leads-pipeline":          { "label": "Lead-Pipeline",       "owner": "rw", "admin": "rw", "manager": "rw", "support": "deny", "mod": "deny", "marketing": "rw" },
+        "team-management":         { "label": "Team-Verwaltung",     "owner": "rw", "admin": "rw", "manager": "deny", "support": "deny", "mod": "deny", "marketing": "deny" }
       }
     },
     "growth": {
       "label": "Growth",
-      "access": {
-        "owner": "rw",
-        "admin": "rw",
-        "manager": "rw",
-        "support": "rw",
-        "mod": "deny",
-        "marketing": "rw"
-      },
+      "icon": "📈",
+      "access": { "owner": "rw", "admin": "rw", "manager": "rw", "support": "r", "mod": "deny", "marketing": "rw" },
       "subtabs": {
-        "funnel": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "rw",
-          "support": "r",
-          "mod": "deny",
-          "marketing": "rw"
-        },
-        "cohorts": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "rw",
-          "support": "r",
-          "mod": "deny",
-          "marketing": "rw"
-        },
-        "retention": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "rw",
-          "support": "r",
-          "mod": "deny",
-          "marketing": "rw"
-        },
-        "forecast": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "rw",
-          "support": "r",
-          "mod": "deny",
-          "marketing": "rw"
-        },
-        "dau": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "rw",
-          "support": "r",
-          "mod": "deny",
-          "marketing": "rw"
-        }
+        "posts-per-day":           { "label": "Posts/Tag",           "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "episodes-per-day":        { "label": "Episoden/Tag",        "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "trending-hashtags":       { "label": "Trending Hashtags",   "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "podcaster-engagement-7d": { "label": "Engagement (7T)",     "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "listens-per-day":         { "label": "Listens/Tag",         "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "top-listened-podcasts":   { "label": "Top Podcasts",        "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "vibe-distribution":       { "label": "Vibe-Verteilung",     "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "users-by-country":        { "label": "User-Map",            "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "referral-leaderboard":    { "label": "Referral-Leaderboard","owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "referral-overview":       { "label": "Referral-Übersicht",  "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "invite-codes-usage":      { "label": "Invite-Codes",        "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "trending-podcasters":     { "label": "Trending Podcaster",  "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" },
+        "achievements-unlocks":    { "label": "Achievements",        "owner": "rw", "admin": "rw", "manager": "rw", "support": "r",  "mod": "deny", "marketing": "rw" }
       }
     },
     "content": {
       "label": "Content",
-      "access": {
-        "owner": "rw",
-        "admin": "rw",
-        "manager": "rw",
-        "support": "rw",
-        "mod": "rw",
-        "marketing": "rw"
-      },
+      "icon": "💬",
+      "access": { "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "rw", "marketing": "rw" },
       "subtabs": {
-        "reports": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "rw",
-          "support": "rw",
-          "mod": "rw",
-          "marketing": "rw"
-        },
-        "bot": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "deny",
-          "support": "deny",
-          "mod": "deny",
-          "marketing": "rw"
-        },
-        "podcasts": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "rw",
-          "support": "r",
-          "mod": "rw",
-          "marketing": "r"
-        }
+        "recent-updates-feed":       { "label": "Aktuelle Posts",       "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "rw", "marketing": "r" },
+        "active-polls":              { "label": "Aktive Polls",         "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "rw", "marketing": "r" },
+        "open-bug-reports":          { "label": "Bug-Reports",          "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "rw", "marketing": "deny" },
+        "bug-reports-triage":        { "label": "Bug-Triage",           "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "rw", "marketing": "deny" },
+        "podcast-verification-queue":{ "label": "Podcast-Verify",       "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "rw", "marketing": "deny" },
+        "insta-approval-queue":      { "label": "IG-Approval-Queue",    "owner": "rw", "admin": "rw", "manager": "rw", "support": "deny", "mod": "deny", "marketing": "rw" },
+        "insta-post-type-scores":    { "label": "IG-Post-Scores",       "owner": "rw", "admin": "rw", "manager": "rw", "support": "deny", "mod": "deny", "marketing": "rw" },
+        "newsletter-audience-sync":  { "label": "Newsletter-Audience",  "owner": "rw", "admin": "rw", "manager": "rw", "support": "deny", "mod": "deny", "marketing": "rw" },
+        "push-broadcast":            { "label": "Push-Broadcast",       "owner": "rw", "admin": "rw", "manager": "rw", "support": "deny", "mod": "deny", "marketing": "rw" }
       }
     },
     "system": {
       "label": "System",
-      "access": {
-        "owner": "rw",
-        "admin": "rw",
-        "manager": "r",
-        "support": "r",
-        "mod": "r",
-        "marketing": "r"
-      },
+      "icon": "⚙️",
+      "access": { "owner": "rw", "admin": "rw", "manager": "r", "support": "r", "mod": "deny", "marketing": "deny" },
       "subtabs": {
-        "settings": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "deny",
-          "support": "deny",
-          "mod": "deny",
-          "marketing": "deny"
-        },
-        "audit": {
-          "owner": "rw",
-          "admin": "r",
-          "manager": "r",
-          "support": "r",
-          "mod": "r",
-          "marketing": "r"
-        },
-        "flags": {
-          "owner": "rw",
-          "admin": "rw",
-          "manager": "deny",
-          "support": "deny",
-          "mod": "deny",
-          "marketing": "deny"
-        }
+        "settings":      { "label": "Allgemeine Settings", "owner": "rw", "admin": "rw", "manager": "r",  "support": "deny", "mod": "deny", "marketing": "deny" },
+        "app-settings":  { "label": "App-Konfiguration",   "owner": "rw", "admin": "rw", "manager": "deny", "support": "deny", "mod": "deny", "marketing": "deny" },
+        "audit-log":     { "label": "Audit-Log",           "owner": "rw", "admin": "rw", "manager": "r",  "support": "r", "mod": "r", "marketing": "deny" },
+        "tasks-inbox":   { "label": "Aufgaben-Inbox",      "owner": "rw", "admin": "rw", "manager": "rw", "support": "rw", "mod": "rw", "marketing": "rw" },
+        "storage-ops":   { "label": "Storage & Ops",       "owner": "rw", "admin": "rw", "manager": "r",  "support": "deny", "mod": "deny", "marketing": "deny" }
       }
     }
-  },
-  "accessLevels": {
-    "rw": "Lesen + Schreiben",
-    "r": "Nur Lesen",
-    "deny": "Kein Zugriff (Tab ausgeblendet)"
   }
 }
