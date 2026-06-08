@@ -107,15 +107,17 @@ function pollCard(poll) {
           <div class="poll-sub">
             <span>${fmtNumber(total)} Stimmen</span>
             <span class="dot-sep">·</span>
-            <span>Endet ${htmlEscape(closesIn)}</span>
+            <span>${poll.closes_at ? `Endet ${htmlEscape(closesIn)}` : htmlEscape(closesIn)}</span>
           </div>
         </div>
       </div>
       <div class="poll-chart"></div>
       <div class="poll-leader">
-        <span class="leader-label">Führend</span>
-        <span class="leader-opt">${htmlEscape(top?.label || '—')}</span>
-        <span class="leader-pct">${topPct}%</span>
+        ${total === 0
+          ? `<span class="leader-label">Noch keine Stimmen</span>`
+          : `<span class="leader-label">Führend</span>
+             <span class="leader-opt">${htmlEscape(top?.label || '—')}</span>
+             <span class="leader-pct">${topPct}%</span>`}
       </div>
       <div class="poll-actions">
         <button class="btn btn-ghost" data-action="details">${iconHtml('eye')} Details</button>
