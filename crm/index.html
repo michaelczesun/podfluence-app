@@ -309,16 +309,18 @@
     aside {
       width: 80%; max-width: 280px;
       position: fixed !important; left: 0; top: 52px;
-      z-index: 60;
+      /* über bottom-bar (z:70) und backdrop (z:75) liegen, damit Drawer wirklich vorne ist */
+      z-index: 80;
       height: calc(100vh - 52px);
       transform: translateX(-100%);
+      will-change: transform;
     }
     .shell.sidebar-open aside { transform: translateX(0) !important; }
     .shell.sidebar-open::before {
       content: '';
       position: fixed; inset: 52px 0 0 0;
       background: rgba(0,0,0,0.5);
-      z-index: 55;
+      z-index: 75;
     }
     .shell { min-height: calc(100vh - 52px); }
     main { padding: 0 !important; width: 100%; }
@@ -639,7 +641,8 @@ shellEl.addEventListener('click', (e) => {
 
 // Mobile: Klick auf einen Sidebar-Link schließt die Sidebar danach
 sidebar.addEventListener('click', (e) => {
-  if (e.target.matches('a[data-pid]') && window.innerWidth < 768) {
+  // closest statt matches — fängt auch Klicks auf Icon/Span innerhalb des <a>
+  if (e.target.closest('a[data-pid]') && window.innerWidth < 768) {
     shellEl.classList.remove('sidebar-open')
   }
 })
