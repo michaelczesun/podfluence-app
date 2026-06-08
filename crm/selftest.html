@@ -40,6 +40,12 @@
       { id: 'user-detail.html', url: '/crm/user-detail.html?uid=selftest&_selftest=1' }
     ]
 
+    // Mobile-Width-Simulator-Targets: lädt Seite in 375px-Iframe, prüft
+    // ob #mobile-bottom-bar wirklich sichtbar ist (display !== none, height > 0).
+    const MOBILE_TARGETS = [
+      { id: 'index (mobile 375px)', url: '/crm/index.html?_selftest=1', selector: '#mobile-bottom-bar' }
+    ]
+
     const tbody = document.querySelector('#results tbody')
     const hidden = document.getElementById('hidden-area')
     const summary = document.getElementById('summary')
@@ -153,6 +159,101 @@
         const tr = document.createElement('tr')
         tr.innerHTML = `
           <td><strong>page: ${page.id}</strong></td>
+          <td class="${status === 'ok' ? 'ok' : status === 'warn' ? 'warn' : 'err'}">${status.toUpperCase()}</td>
+          <td><pre>${errStr || '—'}</pre></td>
+          <td><pre>${netStr || '—'}</pre></td>`
+        tbody.appendChild(tr)
+        if (status === 'ok') okCount++; else errCount++
+      }
+
+      // ---------- MOBILE-WIDTH-SIMULATOR ----------
+      // Lädt jede Target-URL in einem 375px-Iframe (echtes CSS-Layout greift!),
+      // injiziert zusätzlich einen matchMedia-Override (falls JS-seitig geprüft wird),
+      // wartet 2.5s und checkt ob das mobile-bottom-bar Element wirklich sichtbar ist.
+      for (const target of MOBILE_TARGETS) {
+        networkErrors.length = 0
+        let status = 'ok'
+        let errText = ''
+        const errors = []
+
+        try {
+          await new Promise((resolve) => {
+            const iframe = document.createElement('iframe')
+            iframe.style.width = '375px'
+            iframe.style.height = '700px'
+            iframe.style.border = '0'
+            // Wichtig: width attribute zusätzlich, damit Viewport-Berechnung passt
+            iframe.setAttribute('width', '375')
+            iframe.setAttribute('height', '700')
+
+            const timeout = setTimeout(() => { resolve() }, 5000)
+
+            iframe.addEventListener('load', () => {
+              try {
+                const w = iframe.contentWindow
+                const d = iframe.contentDocument
+                if (w && d) {
+                  // matchMedia-Override: erzwingt "mobile" für alle (max-width)-Queries
+                  const origMM = w.matchMedia
+                  w.matchMedia = (q) => {
+                    const r = origMM.call(w, q)
+                    if (/max-width:\s*(7\d\d|8\d\d|1\d{3})px/.test(q)) {
+                      return { matches: true, media: q, addListener(){}, removeListener(){}, addEventListener(){}, removeEventListener(){}, dispatchEvent(){ return false }, onchange: null }
+                    }
+                    return r
+                  }
+                  // innerWidth simulieren (best-effort, read-only auf manchen Browsern)
+                  try { Object.defineProperty(w, 'innerWidth', { value: 375, configurable: true }) } catch(_) {}
+                  try { Object.defineProperty(w, 'innerHeight', { value: 700, configurable: true }) } catch(_) {}
+
+                  const origErr = w.console.error
+                  w.console.error = (...args) => {
+                    errors.push(args.map(a => a && a.message || String(a)).join(' '))
+                    origErr.apply(w.console, args)
+                  }
+                  w.addEventListener('error', (e) => errors.push(String(e.message || e)))
+                  w.addEventListener('unhandledrejection', (e) => errors.push(String(e.reason && e.reason.message || e.reason)))
+                }
+              } catch (_) { /* cross-origin ignorieren */ }
+
+              setTimeout(() => {
+                try {
+                  const d = iframe.contentDocument
+                  const el = d && d.querySelector(target.selector)
+                  if (!el) {
+                    errors.push(`Mobile-Check: Element ${target.selector} nicht gefunden`)
+                  } else {
+                    const cs = iframe.contentWindow.getComputedStyle(el)
+                    const rect = el.getBoundingClientRect()
+                    const visible = cs.display !== 'none' && cs.visibility !== 'hidden' && rect.height > 0
+                    if (!visible) {
+                      errors.push(`Mobile-Check FAIL: ${target.selector} display=${cs.display} visibility=${cs.visibility} height=${rect.height}`)
+                    }
+                  }
+                } catch (e) {
+                  errors.push(`Mobile-Check-Throw: ${String(e.message || e)}`)
+                }
+                clearTimeout(timeout)
+                resolve()
+              }, 2500)
+            })
+
+            iframe.addEventListener('error', () => { clearTimeout(timeout); errors.push('iframe load error'); resolve() })
+            hidden.innerHTML = ''
+            hidden.appendChild(iframe)
+            iframe.src = target.url
+          })
+        } catch (e) {
+          status = 'err'; errText = String(e.message || e).slice(0, 400)
+        }
+
+        if (errors.length && status === 'ok') status = errors.some(e => /FAIL|nicht gefunden|Throw/.test(e)) ? 'err' : 'warn'
+        const errStr = errText || errors.slice(0, 4).join('\n').slice(0, 500)
+        const netStr = networkErrors.map(n => `${n.status} ${n.url.split('/').slice(-2).join('/')}`).slice(0, 3).join('\n')
+
+        const tr = document.createElement('tr')
+        tr.innerHTML = `
+          <td><strong>mobile: ${target.id}</strong></td>
           <td class="${status === 'ok' ? 'ok' : status === 'warn' ? 'warn' : 'err'}">${status.toUpperCase()}</td>
           <td><pre>${errStr || '—'}</pre></td>
           <td><pre>${netStr || '—'}</pre></td>`

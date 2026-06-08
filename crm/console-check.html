@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>CRM Console-Check</title>
+  <style>
+    body { font-family: -apple-system, sans-serif; background: #0e0b1f; color: #ddd; padding: 20px; }
+    h1 { color: #fff; margin-bottom: 4px; }
+    p.sub { color: #999; margin-top: 0; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 13px; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #333; vertical-align: top; }
+    th { background: #1a162e; color: #fff; position: sticky; top: 0; }
+    .ok { color: #4ade80; font-weight: 600; }
+    .err { color: #f87171; font-weight: 600; }
+    .warn { color: #fbbf24; font-weight: 600; }
+    pre { background: #0a0815; padding: 8px; font-size: 11px; max-width: 520px; overflow-x: auto; white-space: pre-wrap; word-break: break-word; margin: 0; border-radius: 4px; }
+    .hidden-mount { position: absolute; left: -10000px; width: 800px; height: 600px; }
+    .summary { font-size: 16px; margin-top: 12px; padding: 10px; background: #1a162e; border-radius: 8px; }
+    button { background: #7C5CFF; color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; cursor: pointer; margin-right: 8px; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    .legend { color: #888; font-size: 12px; margin-top: 8px; }
+    .count-badge { display: inline-block; min-width: 22px; padding: 1px 6px; border-radius: 10px; background: #2a2440; color: #fff; font-size: 11px; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Console Error/Warn Sweep</h1>
+  <p class="sub">Lädt jedes <code>_tab-*.js</code> + alle übrigen <code>panels/*.js</code> dynamisch, mountet in unsichtbaren Container, sammelt <code>console.error</code> + <code>console.warn</code> + uncaught errors. Tabelle unten.</p>
+  <button id="run">Sweep starten</button>
+  <button id="copy" disabled>Report kopieren</button>
+  <div class="summary" id="summary">Noch nicht gestartet.</div>
+  <div class="legend">Hinweis: Tabs mounten ihre Sub-Panels intern. Einzel-Panels werden zusätzlich isoliert getestet, um die Quelle eines Fehlers eindeutig zuzuordnen.</div>
+
+  <table id="results">
+    <thead>
+      <tr>
+        <th>Panel</th>
+        <th>Status</th>
+        <th>Errors <span class="count-badge" id="e-total">0</span></th>
+        <th>Warnings <span class="count-badge" id="w-total">0</span></th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="hidden-area" class="hidden-mount"></div>
+
+  <script type="module">
+    // Alle Panels aus dem Verzeichnis (Stand 08.06.26):
+    const PANELS = [
+      // Top-Tabs (mounten Sub-Panels)
+      '_tab-pulse','_tab-people','_tab-growth','_tab-content','_tab-system',
+      // Sub-Panels einzeln (isolierter Test, eindeutige Fehlerzuordnung)
+      'achievements-unlocks','active-polls','admin-home','app-settings',
+      'audit-log','bug-reports-triage','client-build-versions','crash-rate',
+      'dau-trend','episodes-per-day','insta-approval-queue','insta-post-type-scores',
+      'invite-codes-usage','kpi-live-totals','leads-pipeline','listens-per-day',
+      'new-signups-7d','newsletter-audience-sync','onboarding-funnel','open-bug-reports',
+      'podcast-verification-queue','podcaster-engagement-7d','posts-per-day',
+      'push-broadcast','recent-updates-feed','referral-leaderboard','referral-overview',
+      'settings','storage-ops','tasks-inbox','team-management',
+      'top-listened-podcasts','top-listeners','trending-hashtags','trending-podcasters',
+      'user-type-split','users-by-country','users-list','verified-premium-flags',
+      'vibe-distribution'
+    ]
+
+    const tbody     = document.querySelector('#results tbody')
+    const hidden    = document.getElementById('hidden-area')
+    const summary   = document.getElementById('summary')
+    const runBtn    = document.getElementById('run')
+    const copyBtn   = document.getElementById('copy')
+    const eTotalEl  = document.getElementById('e-total')
+    const wTotalEl  = document.getElementById('w-total')
+
+    let lastReport = ''
+
+    function fmtMsg(args) {
+      return args.map(a => {
+        if (a == null) return String(a)
+        if (a instanceof Error) return a.stack || a.message
+        if (typeof a === 'object') {
+          try { return JSON.stringify(a) } catch { return String(a) }
+        }
+        return String(a)
+      }).join(' ')
+    }
+
+    async function testPanel(id) {
+      const errors   = []
+      const warnings = []
+
+      // console.error / console.warn abfangen
+      const origErr  = console.error
+      const origWarn = console.warn
+      console.error = (...args) => { errors.push(fmtMsg(args));   origErr.apply(console, args) }
+      console.warn  = (...args) => { warnings.push(fmtMsg(args)); origWarn.apply(console, args) }
+
+      // uncaught + unhandledrejection sammeln
+      const onErr = (e) => errors.push('[uncaught] ' + (e.message || String(e)))
+      const onRej = (e) => errors.push('[unhandledrejection] ' + (e.reason && e.reason.message || String(e.reason)))
+      window.addEventListener('error', onErr)
+      window.addEventListener('unhandledrejection', onRej)
+
+      let status  = 'ok'
+      let loadErr = ''
+      const container = document.createElement('div')
+      hidden.innerHTML = ''
+      hidden.appendChild(container)
+
+      try {
+        const mod = await import(`/crm/panels/${id}.js?t=${Date.now()}`)
+        if (mod.default && typeof mod.default.mount === 'function') {
+          await mod.default.mount(container)
+          // 1.5s warten, damit async fetches/render durchlaufen
+          await new Promise(r => setTimeout(r, 1500))
+        } else {
+          status  = 'warn'
+          loadErr = 'kein .default.mount Export'
+        }
+      } catch (e) {
+        status  = 'err'
+        loadErr = String(e.message || e).slice(0, 400)
+        errors.push('[import/mount] ' + loadErr)
+      }
+
+      // restore
+      console.error = origErr
+      console.warn  = origWarn
+      window.removeEventListener('error', onErr)
+      window.removeEventListener('unhandledrejection', onRej)
+
+      if (status === 'ok' && errors.length)   status = 'err'
+      if (status === 'ok' && warnings.length) status = 'warn'
+
+      return { id, status, errors, warnings, loadErr }
+    }
+
+    runBtn.addEventListener('click', async () => {
+      runBtn.disabled = true
+      copyBtn.disabled = true
+      tbody.innerHTML = ''
+      eTotalEl.textContent = '0'
+      wTotalEl.textContent = '0'
+      summary.textContent = 'Sweep läuft …'
+
+      let okCount = 0, warnCount = 0, errCount = 0
+      let totalErrors = 0, totalWarnings = 0
+      const reportLines = ['# CRM Console-Check Report', '']
+
+      for (let i = 0; i < PANELS.length; i++) {
+        const id = PANELS[i]
+        summary.textContent = `Sweep läuft … (${i + 1}/${PANELS.length}) ${id}`
+        const res = await testPanel(id)
+
+        totalErrors   += res.errors.length
+        totalWarnings += res.warnings.length
+        eTotalEl.textContent = String(totalErrors)
+        wTotalEl.textContent = String(totalWarnings)
+
+        if (res.status === 'ok')   okCount++
+        if (res.status === 'warn') warnCount++
+        if (res.status === 'err')  errCount++
+
+        const errStr  = res.errors.slice(0, 5).join('\n').slice(0, 600)   || '—'
+        const warnStr = res.warnings.slice(0, 5).join('\n').slice(0, 600) || '—'
+
+        const tr = document.createElement('tr')
+        tr.innerHTML = `
+          <td><strong>${res.id}</strong></td>
+          <td class="${res.status === 'ok' ? 'ok' : res.status === 'warn' ? 'warn' : 'err'}">${res.status.toUpperCase()}</td>
+          <td><pre>${escapeHtml(errStr)}</pre></td>
+          <td><pre>${escapeHtml(warnStr)}</pre></td>`
+        tbody.appendChild(tr)
+
+        reportLines.push(`## ${res.id}  [${res.status.toUpperCase()}]`)
+        if (res.errors.length)   reportLines.push('Errors:',   ...res.errors.map(e => '  - ' + e))
+        if (res.warnings.length) reportLines.push('Warnings:', ...res.warnings.map(w => '  - ' + w))
+        if (!res.errors.length && !res.warnings.length) reportLines.push('(clean)')
+        reportLines.push('')
+      }
+
+      hidden.innerHTML = ''
+      summary.innerHTML = `<strong>${okCount} clean</strong> · <span class="warn">${warnCount} mit Warnings</span> · <span class="err">${errCount} mit Errors</span> &nbsp;|&nbsp; gesamt: ${totalErrors} Errors / ${totalWarnings} Warnings`
+
+      reportLines.unshift(`Summary: ${okCount} ok / ${warnCount} warn / ${errCount} err — ${totalErrors} errors, ${totalWarnings} warnings`, '')
+      lastReport = reportLines.join('\n')
+      copyBtn.disabled = false
+      runBtn.disabled  = false
+    })
+
+    copyBtn.addEventListener('click', async () => {
+      try {
+        await navigator.clipboard.writeText(lastReport)
+        copyBtn.textContent = 'Kopiert'
+        setTimeout(() => { copyBtn.textContent = 'Report kopieren' }, 1500)
+      } catch (e) {
+        alert('Clipboard blockiert: ' + e.message)
+      }
+    })
+
+    function escapeHtml(s) {
+      return String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]))
+    }
+  </script>
+</body>
+</html>
