@@ -433,7 +433,7 @@
 <nav class="mobile-bottom-bar" id="mobile-bottom-bar" aria-label="Hauptnavigation"></nav>
 
 <script type="module">
-import { sb } from '/lib/supabase.js?v=20260608g'
+import { sb } from '/lib/supabase.js?v=20260608h'
 import { openCmdK, closeCmdK, toggleCmdK, isCmdKOpen, installCmdK } from '/crm/lib/cmdk.js?v=20260608-sticky1'
 
 // ---- Auth-Guard (Admin-Only) ----
@@ -630,8 +630,11 @@ sidebar.addEventListener('click', (e) => {
 })
 
 // ---- Settings button ----
+// settings ist ein SUB-TAB von 'system', nicht ein eigener Top-Tab.
+// Direkter Hash '#settings' würde im Role-Guard (VISIBLE_IDS.has('settings') === false)
+// als "Kein Zugriff" abgelehnt — auch für owner. Daher korrekt auf #system/settings routen.
 document.getElementById('settings-btn')?.addEventListener('click', () => {
-  location.hash = '#settings'
+  location.hash = '#system/settings'
 })
 
 // ---- Cmd-K Universal Bar (lib/cmdk.js) ----

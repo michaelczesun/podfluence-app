@@ -1,6 +1,6 @@
-import { sb } from '/lib/supabase.js?v=20260608g'
-import { toast, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608g'
-import { fadeIn } from '/lib/animations.js?v=20260608g'
+import { sb } from '/lib/supabase.js?v=20260608h'
+import { toast, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608h'
+import { fadeIn } from '/lib/animations.js?v=20260608h'
 
 // ---------------------------------------------------------------------------
 // System Top-Tab
@@ -327,10 +327,13 @@ export default {
   title: 'System',
   category: 'admin_actions',
 
-  async mount(container) {
+  async mount(container, opts = {}) {
     // mounted: key → cleanup fn (null = mount in progress)
     const mounted = new Map()
     let activeKey = SUB_TABS[0].key
+    // sub aus dem Top-Level-Router (crm/index.html): zweites Hash-Segment
+    // #system/<sub>?... — der Router liest das und übergibt es als opts.sub.
+    const routedSub = (opts && typeof opts.sub === 'string') ? opts.sub.trim() : ''
 
     container.innerHTML = `${styles()}<div class="sys-shell">
       ${head()}

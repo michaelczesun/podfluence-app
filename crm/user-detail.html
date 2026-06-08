@@ -241,13 +241,13 @@
 </div>
 
 <script type="module">
-import { sb } from '/lib/supabase.js?v=20260608g'
-import { toast, confirmDialog, fmtDateTime, fmtRelativeTime, htmlEscape } from '/lib/ui.js?v=20260608g'
+import { sb } from '/lib/supabase.js?v=20260608h'
+import { toast, confirmDialog, fmtDateTime, fmtRelativeTime, htmlEscape } from '/lib/ui.js?v=20260608h'
 import {
   verifyUser, unverifyUser, banUser, unbanUser,
   grantPremium, revokePremium, setUserRole,
   sendTestPush, assignInviteCodes
-} from '/lib/panel-actions.js?v=20260608g'
+} from '/lib/panel-actions.js?v=20260608h'
 
 // ---- Auth-Guard (Admin-Only) ----
 const root = document.getElementById('ud-root')
@@ -644,7 +644,7 @@ function paneActions(pane, u) {
           case 'test-push':      await sendTestPush(uid); break
           case 'invite-codes':   await assignInviteCodes(uid); break
           case 'impersonate': {
-            const pa = await import('/lib/panel-actions.js?v=20260608g')
+            const pa = await import('/lib/panel-actions.js?v=20260608h')
             await pa.impersonateUser(uid)
             return
           }

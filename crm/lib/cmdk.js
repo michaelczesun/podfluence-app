@@ -378,7 +378,7 @@ async function runUserAction(action, userId, btn) {
       closeCmdK()
       location.hash = '#people/users?u=' + encodeURIComponent(userId)
     } else if (action === 'verify') {
-      const mod = await import('/lib/panel-actions.js?v=20260608g').catch(() => null)
+      const mod = await import('/lib/panel-actions.js?v=20260608h').catch(() => null)
       if (mod?.verifyUser) {
         await mod.verifyUser(userId)
         btn.disabled = true
