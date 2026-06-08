@@ -1,4 +1,4 @@
-import { htmlEscape } from '/lib/ui.js?v=20260608h'
+import { htmlEscape } from '/lib/ui.js?v=20260608i'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Instagram-Posts Freigabe — DEAKTIVIERT

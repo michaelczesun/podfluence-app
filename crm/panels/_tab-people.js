@@ -2,11 +2,11 @@
 // Delegate-Pattern: lädt das eigentliche Sub-Panel dynamisch und mounted es in die Inner-Container.
 // Sub-Tabs sind echte Panel-Module unter /panels/*.js (oder ein Inline-Placeholder für Phase 3).
 
-import { sb } from '/lib/supabase.js?v=20260608h'
-import { toast, iconHtml } from '/lib/ui.js?v=20260608h'
-import { fadeIn } from '/lib/animations.js?v=20260608h'
-import { pullToRefresh } from '/lib/layout-extras.js?v=20260608h'
-import { sendTestPush } from '/lib/panel-actions.js?v=20260608h'
+import { sb } from '/lib/supabase.js?v=20260608i'
+import { toast, iconHtml } from '/lib/ui.js?v=20260608i'
+import { fadeIn } from '/lib/animations.js?v=20260608i'
+import { pullToRefresh } from '/lib/layout-extras.js?v=20260608i'
+import { sendTestPush } from '/lib/panel-actions.js?v=20260608i'
 
 const SUBTABS = [
   { key: 'users',    label: 'Users',    panel: 'users-list',      icon: 'users' },
