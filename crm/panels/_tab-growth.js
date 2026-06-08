@@ -183,6 +183,16 @@ function injectStyles() {
       transition: background .15s, border-color .15s;
     }
     #panel-tab-growth .tg-btn:hover { background:rgba(255,255,255,.08); }
+
+    /* Mobile: prevent horizontal overflow */
+    @media (max-width: 767px) {
+      #panel-tab-growth .panel-shell { max-width: 100%; overflow-x: hidden; padding: 8px !important; }
+      #panel-tab-growth .subtab-bar { overflow-x: auto; flex-wrap: nowrap !important; }
+      #panel-tab-growth .subtab-bar .subtab-pill { white-space: nowrap; flex-shrink: 0; }
+      #panel-tab-growth .tg-funnel-v2-grid { grid-template-columns: 1fr 1fr !important; }
+      #panel-tab-growth .tg-cohort-table th,
+      #panel-tab-growth .tg-cohort-table td { padding: 6px 8px; font-size: 12px; }
+    }
   `
   document.head.appendChild(s)
 }
@@ -451,7 +461,7 @@ async function renderRetention(host) {
     ]
     const gridCols = `minmax(180px, 1.3fr) repeat(${cols.length}, minmax(70px, 1fr))`
 
-    let html = `<div class="tg-heat" style="grid-template-columns:${gridCols};">`
+    let html = `<div style="overflow-x:auto; -webkit-overflow-scrolling:touch; border-radius:10px;"><div class="tg-heat" style="grid-template-columns:${gridCols}; min-width:380px;">`
     // Header
     html += `<div class="tg-heat-label" style="font-weight:600; color:#fff;">Cohort</div>`
     cols.forEach(c => {
@@ -475,7 +485,7 @@ async function renderRetention(host) {
         html += `<div class="tg-heat-cell" style="background:${bg};" title="${htmlEscape(title)}">${txt}</div>`
       })
     })
-    html += `</div>`
+    html += `</div></div>`
     html += `
       <div class="tg-heat-legend">
         <span>0%</span>

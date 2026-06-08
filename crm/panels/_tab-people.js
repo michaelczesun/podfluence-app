@@ -111,7 +111,13 @@ export default {
           background:rgba(245,158,11,.18); color:#F59E0B;
           letter-spacing:.4px; font-weight:700;
         }
-        .tp-sub-host { min-height: 240px; }
+        .tp-sub-host { min-height: 240px; min-width: 0; }
+        .tp-wrap { min-width: 0; max-width: 100%; }
+        @media (max-width: 767px) {
+          .tp-wrap { overflow-x: hidden; }
+          .tp-seg { overflow-x: auto; flex-wrap: nowrap; align-self: stretch; }
+          .tp-seg button { white-space: nowrap; flex-shrink: 0; }
+        }
       </style>
       <div class="tp-wrap">
         <div class="tp-seg" role="tablist" aria-label="People Sub-Tabs">

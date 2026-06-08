@@ -119,6 +119,13 @@ function styles() {
     .placeholder .icon{font-size:42px;margin-bottom:14px;opacity:.7}
     .placeholder h3{font-size:18px;font-weight:600;margin:0 0 6px}
     .placeholder p{font-size:13px;color:var(--text-muted,#9CA3AF);margin:0;max-width:480px;margin-left:auto;margin-right:auto;line-height:1.55}
+
+    /* Mobile: prevent overflow, single-column API grid */
+    @media (max-width: 767px){
+      .sys-shell{padding:12px}
+      .api-grid{grid-template-columns:1fr}
+      .api-card .nm{font-size:11.5px}
+    }
   </style>`
 }
 

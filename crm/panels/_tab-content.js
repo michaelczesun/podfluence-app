@@ -238,10 +238,13 @@ async function renderSubTab(subKey) {
   `).join('')
 
   // Single-tile sub-tabs render full-width; multi-tile = 2-col split on desktop
+  // Mobile (<768px): force single-column to avoid horizontal overflow
   const gridCls = sub.tiles.length > 1 ? 'content-grid-split' : 'content-grid-single'
-  body.innerHTML = `<div class="${gridCls}" style="display:grid;gap:16px;${
-    sub.tiles.length > 1 ? 'grid-template-columns:repeat(auto-fit,minmax(420px,1fr));' : ''
-  }">${tilesHtml}</div>`
+  const isMobile = (typeof window !== 'undefined' && window.innerWidth < 768)
+  const gridCols = (sub.tiles.length > 1 && !isMobile)
+    ? 'grid-template-columns:repeat(auto-fit,minmax(360px,1fr));'
+    : 'grid-template-columns:1fr;'
+  body.innerHTML = `<div class="${gridCls}" style="display:grid;gap:16px;${gridCols}min-width:0;">${tilesHtml}</div>`
 
   // Mount tiles
   for (let i = 0; i < sub.tiles.length; i++) {
@@ -325,9 +328,16 @@ export default {
           #panel-tab-content .subtab-pill:hover:not(.is-active) {
             background: rgba(255,255,255,0.08) !important;
           }
-          #panel-tab-content .content-tile { min-width: 0; }
+          #panel-tab-content .content-tile { min-width: 0; overflow: hidden; }
           /* Inside a tile, child-panel's own .panel-shell should not double-pad */
           #panel-tab-content .content-tile .panel-shell { padding: 12px !important; }
+          /* Mobile: enforce single-column + prevent horizontal overflow */
+          @media (max-width: 767px) {
+            #panel-tab-content .content-grid-split,
+            #panel-tab-content .content-grid-single { grid-template-columns: 1fr !important; }
+            #panel-tab-content .subtab-bar { overflow-x: auto; }
+            #panel-tab-content .panel-shell { max-width: 100%; overflow-x: hidden; }
+          }
         </style>
 
         <div id="subtab-body"><div class="loading">Lädt…</div></div>

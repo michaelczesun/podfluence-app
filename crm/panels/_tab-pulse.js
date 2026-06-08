@@ -106,6 +106,14 @@ function styles() {
       background:rgba(255,255,255,0.02); border-radius:18px; border:1px dashed rgba(255,255,255,0.08);
     }
     .al-empty .big { font-size:32px; margin-bottom:8px; opacity:.7; }
+
+    /* Mobile: keep sub-tab bar scrollable + no overflow */
+    @media (max-width: 767px) {
+      .pulse-shell { max-width: 100%; overflow-x: hidden; }
+      .pulse-seg { overflow-x: auto; flex-wrap: nowrap; align-self: stretch; }
+      .pulse-seg button { white-space: nowrap; flex-shrink: 0; }
+      .td-grid { grid-template-columns: 1fr 1fr; }
+    }
   </style>`
 }
 
