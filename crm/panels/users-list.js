@@ -295,7 +295,7 @@ function renderShell(body) {
         ${statHero({
           label: 'Nutzer gesamt',
           value: state.totals.all,
-          icon: 'users',
+          icon: iconHtml('users'),
           trend: `+${state.signupSeries.slice(-7).reduce((s, p) => s + p.value, 0)} diese Woche`
         })}
       </div>
