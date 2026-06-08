@@ -119,6 +119,11 @@ function injectStyles() {
       display:inline-block; padding:2px 10px; border-radius:999px;
       font-size:12px; font-weight:600; font-variant-numeric: tabular-nums;
     }
+    #panel-tab-growth .tg-heatmap td.tg-heat-cell {
+      text-align:center; font-variant-numeric: tabular-nums;
+      transition: transform .12s ease;
+    }
+    #panel-tab-growth .tg-heatmap tbody tr:hover td.tg-heat-cell { filter: brightness(1.15); }
 
     /* Heat-Map */
     #panel-tab-growth .tg-heat { display:grid; gap:3px; font-size:11px; }
@@ -344,15 +349,26 @@ async function fetchCohortRetention() {
 
 function normalizeCohortRows(rows) {
   return rows.map(r => {
-    const size = Number(r.cohort_size || r.size || r.users || 0)
+    const size = Number(r.cohort_size || r.signups_count || r.size || r.users || 0)
     return {
       week: r.cohort_week || r.week || r.cohort || '',
       size,
-      d1: normalizePct(r.d1 ?? r.day_1 ?? r.retention_d1, size),
-      d7: normalizePct(r.d7 ?? r.day_7 ?? r.retention_d7, size),
-      d30: normalizePct(r.d30 ?? r.day_30 ?? r.retention_d30, size)
+      d1: normalizePct(r.d1_rate ?? r.d1 ?? r.day_1 ?? r.retention_d1, size),
+      d7: normalizePct(r.d7_rate ?? r.d7 ?? r.day_7 ?? r.retention_d7, size),
+      d30: normalizePct(r.d30_rate ?? r.d30 ?? r.day_30 ?? r.retention_d30, size)
     }
   })
+}
+
+function heatCell(p) {
+  if (p == null || isNaN(p)) {
+    return '<td class="num tg-heat-cell" style="background:rgba(31,31,46,.4); color:#6B7280;">—</td>'
+  }
+  const v = Math.round(p)
+  const bg = pctColor(v)
+  // Contrast: dark bg → light text, light/yellow bg → dark text
+  const fg = v >= 70 ? '#111827' : '#F9FAFB'
+  return `<td class="num tg-heat-cell" style="background:${bg}; color:${fg}; font-weight:600;">${v}%</td>`
 }
 
 async function renderCohorts(host) {
@@ -380,11 +396,11 @@ async function renderCohorts(host) {
 
     body.innerHTML = `
       <div style="overflow-x:auto; border-radius:10px;">
-        <table class="tg-cohort-table">
+        <table class="tg-cohort-table tg-heatmap">
           <thead>
             <tr>
               <th>Cohort-Woche</th>
-              <th class="num">Größe</th>
+              <th class="num">Signups</th>
               <th class="num">D1</th>
               <th class="num">D7</th>
               <th class="num">D30</th>
@@ -395,13 +411,18 @@ async function renderCohorts(host) {
               <tr>
                 <td>${htmlEscape(formatWeek(r.week))}</td>
                 <td class="num">${fmtNumber(r.size)}</td>
-                <td class="num">${pctPill(r.d1)}</td>
-                <td class="num">${pctPill(r.d7)}</td>
-                <td class="num">${pctPill(r.d30)}</td>
+                ${heatCell(r.d1)}
+                ${heatCell(r.d7)}
+                ${heatCell(r.d30)}
               </tr>
             `).join('')}
           </tbody>
         </table>
+      </div>
+      <div style="display:flex; gap:8px; align-items:center; margin-top:10px; font-size:11px; color:#9CA3AF;">
+        <span>0%</span>
+        <div style="flex:1; height:10px; border-radius:5px; background:linear-gradient(90deg, ${pctColor(5)}, ${pctColor(25)}, ${pctColor(50)}, ${pctColor(75)}, ${pctColor(95)});"></div>
+        <span>100%</span>
       </div>
       <div class="tg-tools">
         <button class="tg-btn" id="tg-cohorts-csv">⬇️ CSV exportieren</button>
