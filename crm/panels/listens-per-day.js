@@ -1,9 +1,9 @@
-import { sb } from '/lib/supabase.js?v=20260608i'
-import { toast, fmtNumber, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js?v=20260608i'
-import { makeLineChart, makeHeatmap } from '/lib/charts.js?v=20260608i'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608i'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608i'
-import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js?v=20260608i'
+import { sb } from '/lib/supabase.js?v=20260608j'
+import { toast, fmtNumber, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js?v=20260608j'
+import { makeLineChart, makeHeatmap } from '/lib/charts.js?v=20260608j'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608j'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608j'
+import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js?v=20260608j'
 
 const WEEKDAYS = ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So']
 
@@ -232,7 +232,7 @@ export default {
           if (!chartHost) return
           chartHost.innerHTML = ''
           // FIX high: use canonical {categories, series:[{name,data}], colors, height}
-          // shape per /lib/charts.js?v=20260608i signature.
+          // shape per /lib/charts.js?v=20260608j signature.
           const categories = daily.map(d => d.date)
           const data = daily.map(d => mode === 'plays'
             ? d.plays
@@ -249,7 +249,7 @@ export default {
         drawLine()
 
         // FIX high: heatmap now uses raw listening_activity rows (with created_at)
-        // and the ApexCharts series shape that /lib/charts.js?v=20260608i expects:
+        // and the ApexCharts series shape that /lib/charts.js?v=20260608j expects:
         //   series: [{ name: 'Mo', data: [{x: '00h', y: 12}, ...] }, ...]
         const heatHost = body.querySelector('#heatmapWrap')
         const grid = aggregateHeatmapGrid(rawRows)

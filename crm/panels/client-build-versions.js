@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608i'
-import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js?v=20260608i'
-import { makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608i'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608i'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608i'
-import { drawer, glassCard, statHero } from '/lib/layout-extras.js?v=20260608i'
-import { showUserDetailModal, sendBroadcastPush } from '/lib/panel-actions.js?v=20260608i'
+import { sb } from '/lib/supabase.js?v=20260608j'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js?v=20260608j'
+import { makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608j'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608j'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608j'
+import { drawer, glassCard, statHero } from '/lib/layout-extras.js?v=20260608j'
+import { showUserDetailModal, sendBroadcastPush } from '/lib/panel-actions.js?v=20260608j'
 
 // App Store Review 6.6.: Aktive Runtimes 1.3.0 / 1.3.1 / 1.4.0.
 // Alles darunter gilt als nicht mehr unterstützt und löst Force-Push-Empfehlung aus.

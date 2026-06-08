@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608i'
-import { toast, modal, confirmDialog, fmtNumber, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608i'
-import { makeAreaChart, makeSparkline } from '/lib/charts.js?v=20260608i'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608i'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608i'
-import { drawer, segmentedControl } from '/lib/layout-extras.js?v=20260608i'
-import { showUserDetailModal, grantPremium } from '/lib/panel-actions.js?v=20260608i'
+import { sb } from '/lib/supabase.js?v=20260608j'
+import { toast, modal, confirmDialog, fmtNumber, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608j'
+import { makeAreaChart, makeSparkline } from '/lib/charts.js?v=20260608j'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608j'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608j'
+import { drawer, segmentedControl } from '/lib/layout-extras.js?v=20260608j'
+import { showUserDetailModal, grantPremium } from '/lib/panel-actions.js?v=20260608j'
 
 // Local broadcast-push helper (sendBroadcastPush is not exported from panel-actions)
 async function sendBroadcastPush({ title, body, audience = 'custom', user_ids = [] }) {

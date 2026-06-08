@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608i'
-import { toast, confirmDialog, fmtNumber, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608i'
-import { makeLineChart } from '/lib/charts.js?v=20260608i'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608i'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608i'
-import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js?v=20260608i'
-import { showUserDetailModal, sendBroadcastPush } from '/lib/panel-actions.js?v=20260608i'
+import { sb } from '/lib/supabase.js?v=20260608j'
+import { toast, confirmDialog, fmtNumber, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608j'
+import { makeLineChart } from '/lib/charts.js?v=20260608j'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608j'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608j'
+import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js?v=20260608j'
+import { showUserDetailModal, sendBroadcastPush } from '/lib/panel-actions.js?v=20260608j'
 
 const RANGES = {
   '7d': { days: 7, label: '7 Tage' },
