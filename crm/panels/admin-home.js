@@ -475,8 +475,8 @@ function styles() {
     /* Alerts */
     .alerts-list { display:flex; flex-direction:column; gap:10px; }
     .alert-card { display:flex; align-items:center; gap:14px; padding:14px 16px; border-radius:14px;
-      background:linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
-      border:1px solid rgba(255,255,255,0.06);
+      background:var(--surface-elev, linear-gradient(135deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)));
+      border:1px solid var(--surface-border, rgba(255,255,255,0.06));
       border-left:3px solid var(--alert);
       transition:transform .15s; }
     .alert-card:hover { transform:translateX(2px); }
