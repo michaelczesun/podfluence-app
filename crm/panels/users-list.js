@@ -155,10 +155,10 @@ export default {
       container.innerHTML = `
         <style>
           .ul-fbuilder { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
-          .ul-fbuilder select, .ul-fbuilder input { padding:6px 8px; border-radius:7px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); color:inherit; font-size:12px; }
+          .ul-fbuilder select, .ul-fbuilder input { padding:6px 8px; border-radius:7px; border:1px solid var(--border, rgba(255,255,255,0.08)); background:var(--surface-elev, rgba(255,255,255,0.04)); color:inherit; font-size:12px; }
           .ul-inline-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; }
-          .btn-pill { width:30px; height:30px; border-radius:8px; border:1px solid rgba(255,255,255,0.08); background:rgba(255,255,255,0.04); color:#aaa; cursor:pointer; font-size:13px; padding:0; display:inline-flex; align-items:center; justify-content:center; transition:all .15s; }
-          .btn-pill:hover { background:rgba(255,255,255,0.1); transform:translateY(-1px); }
+          .btn-pill { width:30px; height:30px; border-radius:8px; border:1px solid var(--border, rgba(255,255,255,0.08)); background:var(--surface-elev, rgba(255,255,255,0.04)); color:#aaa; cursor:pointer; font-size:13px; padding:0; display:inline-flex; align-items:center; justify-content:center; transition:all .15s; }
+          .btn-pill:hover { background:var(--surface-elev-2, rgba(255,255,255,0.1)); transform:translateY(-1px); }
           .btn-pill.on { background:rgba(34,197,94,0.18); color:#22c55e; border-color:rgba(34,197,94,0.4); }
           .btn-pill.on.yellow { background:rgba(245,158,11,0.18); color:#F59E0B; border-color:rgba(245,158,11,0.4); }
           .btn-pill.red { color:#f87171; }
@@ -359,11 +359,25 @@ function renderShell(body) {
 
   const areaHost = body.querySelector('#ul-area')
   if (areaHost) {
-    try { makeAreaChart(areaHost, state.signupSeries.map(p => ({ x: p.date, y: p.value })), { color: '#60a5fa', height: 180 }) } catch (e) { console.warn(e) }
+    try {
+      makeAreaChart(areaHost, {
+        categories: state.signupSeries.map(p => p.date),
+        series: [{ name: 'Anmeldungen', data: state.signupSeries.map(p => p.value) }],
+        color: '#60a5fa',
+        height: 180
+      })
+    } catch (e) { console.warn(e) }
   }
   const donutHost = body.querySelector('#ul-donut')
   if (donutHost) {
-    try { makeDonutChart(donutHost, state.typeBreakdown, { height: 180 }) } catch (e) { console.warn(e) }
+    try {
+      makeDonutChart(donutHost, {
+        labels: state.typeBreakdown.map(s => s.label),
+        values: state.typeBreakdown.map(s => s.value),
+        colors: state.typeBreakdown.map(s => s.color),
+        height: 180
+      })
+    } catch (e) { console.warn(e) }
   }
 }
 
