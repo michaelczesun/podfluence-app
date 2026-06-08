@@ -471,10 +471,13 @@
 
   .tab-switch {
     display: flex; gap: 4px;
-    background: rgba(22, 22, 29, 0.7); border: 1px solid var(--border);
+    background: rgba(22, 22, 29, 0.35);
+    border: 1px solid rgba(255,255,255,0.08);
     border-radius: 16px; padding: 5px;
     margin-bottom: 24px;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(24px) saturate(180%);
+    -webkit-backdrop-filter: blur(24px) saturate(180%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 6px 18px rgba(0,0,0,0.22);
   }
   .tab {
     flex: 1; padding: 12px 14px;
@@ -487,8 +490,10 @@
   }
   .tab:hover { color: var(--text); background: rgba(255,255,255,0.03); }
   .tab.active {
-    background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-    color: white; box-shadow: 0 6px 16px rgba(139, 92, 246, 0.4);
+    background: linear-gradient(135deg, rgba(139,92,246,0.92), rgba(124,58,237,0.92));
+    color: white;
+    border: 1px solid rgba(255,255,255,0.12);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.18), 0 6px 16px rgba(139, 92, 246, 0.4);
     transform: translateY(-1px);
   }
   .tab-panel {
@@ -509,18 +514,21 @@
   }
   .feature-grid { display: grid; gap: 12px; }
   .feature-card {
-    background: rgba(22, 22, 29, 0.7);
-    border: 1px solid var(--border);
+    background: linear-gradient(135deg, rgba(40,40,56,0.38), rgba(22,22,29,0.5));
+    border: 1px solid rgba(255,255,255,0.07);
     border-radius: 16px;
     padding: 16px 18px;
     display: flex; align-items: flex-start; gap: 14px;
-    transition: border-color 0.3s, transform 0.3s, background 0.3s;
-    backdrop-filter: blur(8px);
+    transition: border-color 0.3s, transform 0.3s, background 0.3s, box-shadow 0.3s;
+    backdrop-filter: blur(18px) saturate(160%);
+    -webkit-backdrop-filter: blur(18px) saturate(160%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), 0 6px 18px rgba(0,0,0,0.18);
   }
   .feature-card:hover {
     border-color: rgba(139, 92, 246, 0.5);
     transform: translateY(-2px);
-    background: rgba(28, 28, 37, 0.85);
+    background: linear-gradient(135deg, rgba(48,40,72,0.55), rgba(28,22,40,0.6));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 12px 28px rgba(139,92,246,0.18);
   }
   .feature-emoji {
     width: 40px; height: 40px; border-radius: 12px;
@@ -574,11 +582,13 @@
   }
   .pillar {
     text-align: center;
-    background: rgba(22, 22, 29, 0.6);
-    border: 1px solid var(--border);
+    background: linear-gradient(180deg, rgba(40,40,56,0.4), rgba(22,22,29,0.5));
+    border: 1px solid rgba(255,255,255,0.07);
     border-radius: 14px;
     padding: 16px 10px;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(14px) saturate(160%);
+    -webkit-backdrop-filter: blur(14px) saturate(160%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07), inset 0 -1px 0 rgba(0,0,0,0.2);
     transition: border-color 0.2s, transform 0.2s;
   }
   .pillar:hover { border-color: rgba(139, 92, 246, 0.4); transform: translateY(-2px); }
@@ -693,11 +703,13 @@
     max-width: 320px;
     min-width: 240px;
     scroll-snap-align: start;
-    background: linear-gradient(135deg, rgba(28,28,37,0.9), rgba(22,22,29,0.9));
-    border: 1px solid transparent;
+    background: linear-gradient(135deg, rgba(40,40,56,0.42), rgba(22,22,29,0.55));
+    border: 1px solid rgba(255,255,255,0.07);
     border-radius: 18px;
     padding: 18px;
-    backdrop-filter: blur(12px);
+    backdrop-filter: blur(20px) saturate(160%);
+    -webkit-backdrop-filter: blur(20px) saturate(160%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.08), 0 8px 24px rgba(0,0,0,0.25);
     position: relative;
     transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.3s;
     /* gradient border via pseudo */
@@ -756,11 +768,13 @@
   .sp-trust-row {
     display: flex; align-items: center; justify-content: center;
     gap: 0; flex-wrap: wrap;
-    background: rgba(22,22,29,0.5);
-    border: 1px solid var(--border);
+    background: linear-gradient(135deg, rgba(40,40,56,0.35), rgba(22,22,29,0.5));
+    border: 1px solid rgba(255,255,255,0.07);
     border-radius: 14px;
     padding: 14px 16px;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(22px) saturate(170%);
+    -webkit-backdrop-filter: blur(22px) saturate(170%);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.07);
   }
   .sp-trust-item {
     display: flex; align-items: center; gap: 7px;
@@ -976,6 +990,14 @@
       <div class="logo">🎧</div>
     </div>
     <h1>hozd</h1>
+    <div class="hero-live" id="hero-live" hidden>
+      <span class="hero-live-dot" aria-hidden="true"></span>
+      <span class="hero-live-text">
+        <strong id="live-listeners">…</strong> hören gerade ·
+        <strong id="live-podcasts">…</strong> Podcasts ·
+        <strong id="live-users">…</strong> Mitglieder
+      </span>
+    </div>
     <p class="tagline">Die <strong>soziale Podcast-App</strong>.<br/>Hör, kommentier, vernetz dich.</p>
     <div style="margin-top: 24px; font-size: 14px; color: var(--text-soft); line-height: 1.5;">
       Beta-Phase, jeder Slot zählt. Du bist <strong>nicht der 1000te User</strong> — du bist einer der ersten.
