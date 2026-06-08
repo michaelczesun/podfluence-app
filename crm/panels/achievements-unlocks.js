@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608j'
+import { sb } from '/lib/supabase.js?v=20260608k'
 import { toast, modal, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, confirmDialog } from '/lib/ui.js?v=20260608k'
-import { makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608j'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608j'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608j'
-import { drawer, statHero, glassCard } from '/lib/layout-extras.js?v=20260608j'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608j'
+import { makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608k'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608k'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608k'
+import { drawer, statHero, glassCard } from '/lib/layout-extras.js?v=20260608k'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608k'
 
 const ACHIEVEMENT_META = {
   first_post: { label: 'Erster Post', icon: '✍️' },

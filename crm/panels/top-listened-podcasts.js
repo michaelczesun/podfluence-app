@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608j'
+import { sb } from '/lib/supabase.js?v=20260608k'
 import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js?v=20260608k'
-import { makeBarChart, makeDonutChart, makeSparkline } from '/lib/charts.js?v=20260608j'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608j'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608j'
-import { drawer, statHero } from '/lib/layout-extras.js?v=20260608j'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608j'
+import { makeBarChart, makeDonutChart, makeSparkline } from '/lib/charts.js?v=20260608k'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608k'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608k'
+import { drawer, statHero } from '/lib/layout-extras.js?v=20260608k'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608k'
 
 const DAY_MS = 86400000
 // FIX #1: module-scope constant so render() can safely reference it
