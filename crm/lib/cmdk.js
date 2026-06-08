@@ -138,7 +138,8 @@ function injectStylesOnce() {
       font-family: ui-monospace, monospace; font-size: 10px;
       color: var(--text-muted, #9CA3AF);
     }
-    /* Mic FAB — bottom-right floating action button, above safe-area + bottom-bar */
+    /* Mic FAB — bottom-right floating action button, above bottom-bar (mobile only).
+       Bottom-bar height = 56px + safe-area-inset-bottom. FAB sits 12px above it. */
     .cmdk-mic-fab {
       display: flex; align-items: center; justify-content: center;
       width: 52px; height: 52px;
@@ -150,8 +151,12 @@ function injectStylesOnce() {
       cursor: pointer;
       position: fixed;
       right: 16px;
-      bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+      bottom: calc(56px + 12px + env(safe-area-inset-bottom, 0px));
       z-index: 1100;
+    }
+    /* Desktop (>=768px): no bottom-bar, sit closer to bottom-right corner. */
+    @media (min-width: 768px) {
+      .cmdk-mic-fab { bottom: calc(20px + env(safe-area-inset-bottom, 0px)); }
     }
     .cmdk-mic-fab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .cmdk-mic-fab:active { transform: scale(0.94); }
