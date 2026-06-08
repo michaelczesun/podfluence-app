@@ -188,7 +188,11 @@ export const ACTIONS = [
     kind: 'settings',
     icon: 'settings',
     keywords: ['settings', 'einstellungen', 'config', 'optionen'],
-    run: () => _go('#settings')
+    // 'settings' ist KEIN Top-Tab — es ist Sub-Tab von 'system'.
+    // Direkter '#settings' Hash fällt durch VISIBLE_IDS.has() im
+    // Role-Guard (crm/index.html L723) und zeigt "Kein Zugriff" — auch
+    // für owner. Daher korrekt auf #system/settings routen.
+    run: () => _go('#system/settings')
   },
   {
     id: 'settings-email-templates',
