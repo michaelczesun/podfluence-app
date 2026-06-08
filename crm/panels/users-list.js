@@ -9,6 +9,25 @@ import { showUserDetailModal, verifyUser, unverifyUser, banUser, unbanUser, gran
 
 const PAGE_SIZE = 50
 
+// Bug #8: Test-Account-Filter — Apple Reviewer & reviewbot per Default ausblenden,
+// per Toggle ein-/ausblendbar, Status in localStorage.
+const TEST_ACCOUNT_USERNAMES = ['applereview', 'reviewbot']
+const TEST_ACCOUNT_EMAIL_PATTERNS = [/@apple\.com$/i]
+function isTestAccount(r) {
+  if (!r) return false
+  const u = (r.username || '').toLowerCase()
+  if (TEST_ACCOUNT_USERNAMES.includes(u)) return true
+  const email = (r.email || '').toLowerCase()
+  if (email && TEST_ACCOUNT_EMAIL_PATTERNS.some(re => re.test(email))) return true
+  return false
+}
+function readShowTestAccounts() {
+  try { return localStorage.getItem('crm.showTestAccounts') === '1' } catch { return false }
+}
+function writeShowTestAccounts(v) {
+  try { localStorage.setItem('crm.showTestAccounts', v ? '1' : '0') } catch {}
+}
+
 const state = {
   search: '',
   filter: 'all',
@@ -20,7 +39,9 @@ const state = {
   signupSeries: [],
   typeBreakdown: [],
   totals: { all: 0, verified: 0, podcasters: 0, inactive: 0, admins: 0 },
-  filterBuilder: {} // E-Feature: type/verified/premium/country/createdFrom/createdTo
+  filterBuilder: {}, // E-Feature: type/verified/premium/country/createdFrom/createdTo
+  showTestAccounts: readShowTestAccounts(), // Bug #8: Default = false
+  testAccountCount: 0
 }
 
 // Tabelle 'users' existiert nicht im Schema — alle user-Fetches laufen über admin_users_list_full (RPC)
@@ -113,6 +134,12 @@ async function fetchPage() {
   rows = res.data || []
   _allRows = rows
   if (rows.length === 5000) toast('Hinweis: Ergebnis bei 5.000 Nutzern abgeschnitten.', 'warning')
+
+  // Bug #8: Test-Accounts ausfiltern, wenn Toggle nicht aktiv
+  state.testAccountCount = _allRows.filter(isTestAccount).length
+  if (!state.showTestAccounts) {
+    rows = rows.filter(r => !isTestAccount(r))
+  }
 
   const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
   if (state.filter === 'verified') rows = rows.filter(r => r.is_verified)
@@ -340,6 +367,7 @@ function renderShell(body) {
         <input id="fb-from" type="date" value="${(state.filterBuilder.createdFrom || '').slice(0,10)}" title="Registriert von" />
         <input id="fb-to" type="date" value="${(state.filterBuilder.createdTo || '').slice(0,10)}" title="Registriert bis" />
         <button id="fb-clear" class="btn-pill">Reset</button>
+        <button id="fb-test-accounts" class="btn-pill ${state.showTestAccounts ? 'on' : ''}" title="${state.showTestAccounts ? 'Test-Accounts (Apple Reviewer) ausblenden' : 'Test-Accounts (Apple Reviewer) einblenden'}" style="width:auto;padding:0 10px;">👁 Test-Accounts${state.testAccountCount ? ` (${state.testAccountCount})` : ''}${state.showTestAccounts ? ' an' : ' aus'}</button>
       </div>
     </div>
 
@@ -635,6 +663,20 @@ function wireTable(body, container) {
   body.querySelector('#fb-country')?.addEventListener('change', onFbChange)
   body.querySelector('#fb-from')?.addEventListener('change', onFbChange)
   body.querySelector('#fb-to')?.addEventListener('change', onFbChange)
+  // Bug #8: Toggle Test-Accounts (Apple Reviewer etc.) sichtbar/unsichtbar
+  body.querySelector('#fb-test-accounts')?.addEventListener('click', async () => {
+    state.showTestAccounts = !state.showTestAccounts
+    writeShowTestAccounts(state.showTestAccounts)
+    state.page = 1
+    try { await fetchPage(); refreshTableOnly(body, container) } catch (_) {}
+    // Toggle-Button-Label aktualisieren
+    const btn = body.querySelector('#fb-test-accounts')
+    if (btn) {
+      btn.classList.toggle('on', state.showTestAccounts)
+      btn.title = state.showTestAccounts ? 'Test-Accounts (Apple Reviewer) ausblenden' : 'Test-Accounts (Apple Reviewer) einblenden'
+      btn.textContent = `👁 Test-Accounts${state.testAccountCount ? ` (${state.testAccountCount})` : ''}${state.showTestAccounts ? ' an' : ' aus'}`
+    }
+  })
   body.querySelector('#fb-clear')?.addEventListener('click', async () => {
     state.filterBuilder = {}
     ;['#fb-type','#fb-verified','#fb-premium'].forEach(s => { const el = body.querySelector(s); if (el) el.value = '' })
