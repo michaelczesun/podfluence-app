@@ -420,11 +420,15 @@ export default {
 
       refreshTimer = setInterval(load, REFRESH_MS)
 
-      // Realtime: react to external changes on app_settings
+      // Realtime: react to external changes on app_settings.
+      // Debounced: bursts of edits (z.B. Bot-Cron der mehrere Keys schreibt)
+      // sollen NICHT jeweils ein RPC-Reload auslösen — sonst Panel laggt
+      // wie die App-Community-Card (siehe 8.6.26-Beschwerde).
+      const debouncedLoad = debounce ? debounce(() => load(), 1500) : (() => load())
       try {
         rtCh = sb.channel('app-settings-rt')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'app_settings' }, () => {
-            load()
+            debouncedLoad()
           })
           .subscribe()
       } catch (_) { rtCh = null }

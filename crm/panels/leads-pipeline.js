@@ -348,7 +348,17 @@ export default {
           const total = state.rows.length
           const counts = STATUSES.map(s => `${s.icon} ${state.rows.filter(r=>r.status===s.key).length}`).join(' · ')
           subEl.textContent = `${total} Leads · ${counts} · zuletzt ${fmtDateTime(new Date())}`
-          renderBoard(container)
+          if (total === 0) {
+            container.querySelector('#lead-board').innerHTML = `<div class="lp-empty">
+              <div style="font-size:42px;line-height:1;margin-bottom:12px">🎯</div>
+              <div style="font-weight:700;font-size:16px;margin-bottom:6px">Noch keine Leads in der Pipeline</div>
+              <div style="font-size:13px;margin-bottom:16px;max-width:380px;margin-left:auto;margin-right:auto">Lege Deinen ersten Lead an oder importiere bestehende Kontakte. Die Pipeline visualisiert Cold → Warm → Hot → Converted via Drag &amp; Drop.</div>
+              <button class="btn-primary" id="lp-empty-new" style="padding:10px 18px;border-radius:10px;border:none;background:linear-gradient(135deg,#7C5CFF,#22D3EE);color:#fff;font-weight:600;cursor:pointer">${iconHtml('plus')} Ersten Lead anlegen</button>
+            </div>`
+            container.querySelector('#lp-empty-new')?.addEventListener('click', () => openNewLeadModal(container, load))
+          } else {
+            renderBoard(container)
+          }
         } catch (e) {
           container.querySelector('#lead-board').innerHTML = `<div class="lp-empty">
             <div style="font-size:38px;line-height:1;margin-bottom:10px">${iconHtml('alert-triangle')}</div>
