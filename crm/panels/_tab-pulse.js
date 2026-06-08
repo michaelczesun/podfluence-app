@@ -11,8 +11,8 @@ import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } 
 import { fadeIn, countUp } from '/lib/animations.js?v=20260608h'
 import { glassCard, pullToRefresh } from '/lib/layout-extras.js?v=20260608h'
 
-import adminHome from '/panels/admin-home.js?v=20260608h'
-import auditLog  from '/panels/audit-log.js?v=20260608h'
+import adminHome from '/crm/panels/admin-home.js?v=20260608h'
+import auditLog  from '/crm/panels/audit-log.js?v=20260608h'
 
 // ---------- STYLES ----------
 
