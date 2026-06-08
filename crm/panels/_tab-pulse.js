@@ -244,8 +244,14 @@ async function fetchAnomalies() {
             note:   r.note || r.message || null
           }
         })
-        .filter(a => a.severity === 'critical' || a.severity === 'warning' || Math.abs(a.z) >= 2)
-        .sort((a, b) => Math.abs(b.z) - Math.abs(a.z))
+        .filter(a => a.severity === 'critical' || a.severity === 'warning' || a.severity === 'normal' || Math.abs(a.z) >= 2)
+        .sort((a, b) => {
+          const rank = { critical: 0, warning: 1, info: 2, normal: 3 }
+          const ra = rank[a.severity] ?? 4
+          const rb = rank[b.severity] ?? 4
+          if (ra !== rb) return ra - rb
+          return Math.abs(b.z) - Math.abs(a.z)
+        })
     }
   } catch (_) {}
 
