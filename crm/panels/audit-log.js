@@ -16,6 +16,20 @@ const ACTION_META = {
 }
 function metaFor(action) { return ACTION_META[action] || { icon: '•', label: action, color: '#999' } }
 
+const SYSTEM_UUID = '00000000-0000-0000-0000-000000000000'
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+function renderTargetId(tid) {
+  if (!tid) return ''
+  const s = String(tid)
+  if (s === SYSTEM_UUID || s.startsWith('00000000-')) {
+    return `<span class="audit-system-pill" title="System / automatisch">🤖 System</span>`
+  }
+  if (UUID_RE.test(s)) {
+    return `<code title="${htmlEscape(s)}">${htmlEscape(s.slice(0, 8))}•</code>`
+  }
+  return `<code title="${htmlEscape(s)}">${htmlEscape(s.slice(0, 8))}</code>`
+}
+
 const state = { rows: [], total: 0, page: 1, q: '', loading: false }
 
 async function fetchAudit() {
@@ -52,7 +66,7 @@ function renderRows(rows) {
         <div class="audit-head">
           <strong>${htmlEscape(adminName)}</strong>
           <span class="audit-action">${htmlEscape(m.label)}</span>
-          ${r.target_type ? `<span class="audit-target">${htmlEscape(r.target_type)}: <code>${htmlEscape((r.target_id || '').slice(0, 8))}</code></span>` : ''}
+          ${r.target_type ? `<span class="audit-target">${htmlEscape(r.target_type)}: ${renderTargetId(r.target_id)}</span>` : ''}
         </div>
         ${metaStr ? `<div class="audit-meta">${metaStr}</div>` : ''}
       </div>
@@ -80,6 +94,7 @@ function styles() {
     .audit-action { color:var(--text-muted,#9ca3af); font-size:13px; }
     .audit-target { color:var(--text-muted,#9ca3af); font-size:12px; font-family:monospace; }
     .audit-target code { background:rgba(255,255,255,0.06); padding:1px 5px; border-radius:4px; font-size:11px; }
+    .audit-system-pill { display:inline-flex; align-items:center; gap:4px; background:rgba(124,92,255,0.14); color:#A78BFA; padding:2px 8px; border-radius:999px; font-size:11px; font-weight:600; font-family:inherit; letter-spacing:0.01em; }
     .audit-meta { margin-top:4px; display:flex; gap:6px; flex-wrap:wrap; }
     .audit-meta code { font-size:11px; background:rgba(124,92,255,0.12); color:#A78BFA; padding:2px 6px; border-radius:5px; font-family:monospace; }
     .audit-time { font-size:12px; color:var(--text-muted,#9ca3af); white-space:nowrap; flex-shrink:0; }
