@@ -138,22 +138,24 @@ function injectStylesOnce() {
       font-family: ui-monospace, monospace; font-size: 10px;
       color: var(--text-muted, #9CA3AF);
     }
-    /* Mic FAB in mobile bottom bar */
+    /* Mic FAB in mobile bottom bar — absolute centered, doesn't take grid column */
     .cmdk-mic-fab {
-      flex: 0 0 auto;
       display: flex; align-items: center; justify-content: center;
       width: 52px; height: 52px;
-      margin: -16px 6px 0;
       border-radius: 50%;
       background: linear-gradient(135deg, var(--primary, #8B5CF6), var(--primary-dark, #7C3AED));
       color: #fff;
       box-shadow: 0 8px 22px rgba(139,92,246,0.45);
       border: none;
       cursor: pointer;
-      position: relative; z-index: 1;
+      position: absolute;
+      left: 50%;
+      top: -16px;
+      transform: translateX(-50%);
+      z-index: 2;
     }
     .cmdk-mic-fab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-    .cmdk-mic-fab:active { transform: scale(0.94); }
+    .cmdk-mic-fab:active { transform: translateX(-50%) scale(0.94); }
 
     /* Mobile: full-screen modal */
     @media (max-width: 640px) {
@@ -635,9 +637,6 @@ export function installMicFab() {
     e.preventDefault()
     openCmdK()
   })
-  // Insert in the middle of the bar
-  const kids = Array.from(bar.children)
-  const mid = Math.floor(kids.length / 2)
-  if (kids[mid]) bar.insertBefore(fab, kids[mid])
-  else bar.appendChild(fab)
+  // FAB is position:absolute — append doesn't affect grid columns
+  bar.appendChild(fab)
 }
