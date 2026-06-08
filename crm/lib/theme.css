@@ -1,3 +1,59 @@
+/* ============================================================
+ * CRM Typography Scale
+ * Konsistenter Type-Stack + Section-Header-Akzent.
+ * Alle Panels nutzen diese Klassen statt eigener Inline-Styles.
+ * ============================================================ */
+
+:root {
+  --crm-font-sans: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+                   "SF Pro Display", "Segoe UI", Roboto, "Helvetica Neue",
+                   Arial, "Noto Sans", sans-serif,
+                   "Apple Color Emoji", "Segoe UI Emoji";
+  --crm-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+                   "Liberation Mono", monospace;
+}
+
+html, body {
+  font-family: var(--crm-font-sans);
+}
+
+/* h1: Page-Titles */
+h1.crm-page {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+  line-height: 1.15;
+  margin: 0 0 16px;
+  color: var(--text, #fff);
+}
+
+/* h2: Section-Header mit 3px-left-border in Tab-Akzent */
+h2.crm-section {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+  margin: 0 0 12px;
+  padding-left: 8px;
+  border-left: 3px solid var(--tab-accent);
+  color: var(--text, #fff);
+}
+
+/* Mono / tabular-nums für alle Zahlen-Tiles */
+.crm-mono {
+  font-family: var(--crm-font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1;
+}
+
+/* Tiny Labels: 10px Uppercase Tracking */
+.crm-label-tiny {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  line-height: 1.2;
+}
+
 /* CRM Color-Language pro Top-Tab
  * Jeder Top-Tab hat eine eigene Akzent-Farbe.
  * - --tab-accent: solide Hex-Farbe (Borders, Text-Akzente)
@@ -43,17 +99,18 @@
   filter: drop-shadow(0 0 6px rgba(var(--tab-glow), 0.55));
 }
 
-/* ----- Section-Titles: 3px left-border in Tab-Farbe ----- */
+/* ----- Section-Titles: 3px left-border in Tab-Farbe + crm-section type-scale ----- */
 .panel-head h2,
 .section-title,
 h3.section-title,
 .panel-shell h3 {
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
   border-left: 3px solid var(--tab-accent);
-  padding-left: 10px;
+  padding-left: 8px;
+  color: var(--text, #fff);
 }
-
-/* panel-head h2 hatte bisher kein padding-left — sanfter Übergang */
-.panel-head h2 { line-height: 1.2; }
 
 /* ----- Hero-Tiles: subtle Border in Tab-Farbe bei :hover ----- */
 .hero-tile,
