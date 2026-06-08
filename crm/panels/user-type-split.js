@@ -166,10 +166,13 @@ export default {
 
       // FIX: statHero(opts) returns DOM-Node — first-arg-as-container war ignoriert,
       // dadurch leere Hero-Container. Korrekt: returned-Node ans Target hängen.
-      body.querySelector('#heroTotal').replaceChildren(statHero({ label: 'Gesamt-User', value: effectiveTotal, icon: 'users' }))
-      body.querySelector('#heroListeners').replaceChildren(statHero({ label: 'Listener', value: listeners.length, icon: 'headphones', accent: '#6366f1' }))
-      body.querySelector('#heroPodcasters').replaceChildren(statHero({ label: 'Podcaster', value: podcasters.length, icon: 'mic', accent: '#ec4899' }))
-      body.querySelector('#heroConv').replaceChildren(statHero({ label: 'Podcaster-Anteil', value: convRate, suffix: '%', icon: 'trending-up', accent: '#10b981' }))
+      // FIX (Fix-Pass 20260608i): icon als iconHtml()-Markup übergeben, nicht roher Name.
+      // statHero hat zwar einen Lazy-Import-Fallback für rohe Namen, der die Icons aber
+      // kurz leer rendert (FOUC). Direktes Markup spart den Async-Hop.
+      body.querySelector('#heroTotal').replaceChildren(statHero({ label: 'Gesamt-User', value: effectiveTotal, icon: iconHtml('users') }))
+      body.querySelector('#heroListeners').replaceChildren(statHero({ label: 'Listener', value: listeners.length, icon: iconHtml('headphones'), accent: '#6366f1' }))
+      body.querySelector('#heroPodcasters').replaceChildren(statHero({ label: 'Podcaster', value: podcasters.length, icon: iconHtml('mic'), accent: '#ec4899' }))
+      body.querySelector('#heroConv').replaceChildren(statHero({ label: 'Podcaster-Anteil', value: convRate, suffix: '%', icon: iconHtml('trending-up'), accent: '#10b981' }))
 
       // FIX: statHero schreibt .lx-hero-value (nicht .value) — querySelector('.value') war null.
       // statHero feuert intern bereits countUp via requestAnimationFrame; eigener countUp-Aufruf

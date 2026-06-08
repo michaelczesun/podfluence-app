@@ -724,7 +724,12 @@ export default {
         try { makeSparkline(el.querySelector('#growth-listens'), series.listens, { color:'#10B981', height: 28 }) } catch (_) {}
       } catch (e) {
         const el = container.querySelector('#ah-growth')
-        if (el) el.innerHTML = `<div class="section"><h3>Wachstum</h3><div class="audit-empty">Nicht ladbar.</div></div>`
+        if (el) el.innerHTML = `<div class="section"><h3>Wachstum</h3>
+          <div class="audit-empty" style="text-align:center;padding:24px 16px;color:var(--text-muted)">
+            <div style="font-size:28px;opacity:.45;margin-bottom:6px">${iconHtml('trending-up')}</div>
+            <div style="font-weight:600;color:var(--text);margin-bottom:4px">Wachstums-Daten nicht ladbar</div>
+            <div style="font-size:12px;line-height:1.4">RPC <code>admin_daily_series</code> war nicht erreichbar. Sobald die Quelle wieder antwortet, erscheinen Signups/Posts/Listens hier.</div>
+          </div></div>`
       }
     }
 

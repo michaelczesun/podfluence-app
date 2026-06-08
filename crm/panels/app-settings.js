@@ -40,7 +40,7 @@ function styles() {
     @keyframes skelPulse{0%,100%{opacity:.5}50%{opacity:.85}}
 
     .cat-grid{display:grid;grid-template-columns:1fr;gap:18px}
-    .cat-card{position:relative;padding:22px;border-radius:18px;background:linear-gradient(140deg,rgba(255,255,255,.04),rgba(255,255,255,.01));border:1px solid rgba(255,255,255,.06);overflow:hidden}
+    .cat-card{position:relative;padding:22px;border-radius:18px;background:var(--surface-elev,linear-gradient(140deg,rgba(255,255,255,.04),rgba(255,255,255,.01)));border:1px solid var(--border-subtle,rgba(255,255,255,.06));overflow:hidden}
     .cat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--accent,#8b5cf6)}
     .cat-head{display:flex;align-items:center;gap:10px;margin-bottom:18px}
     .cat-icon{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:color-mix(in srgb, var(--accent,#8b5cf6) 18%, transparent);color:var(--accent,#8b5cf6)}

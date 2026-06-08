@@ -272,7 +272,7 @@ function styles() {
     .lead-col-body.is-over { background:rgba(255,255,255,.05); outline:2px dashed var(--col); outline-offset:-4px; }
     .lead-col-empty { text-align:center; padding:30px 10px; color:var(--text-muted,#9ca3af); font-size:12px; border:1px dashed rgba(255,255,255,.08); border-radius:10px; }
 
-    .lead-card { background:linear-gradient(140deg, rgba(255,255,255,.05), rgba(255,255,255,.02)); border:1px solid rgba(255,255,255,.07); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:8px; cursor:grab; transition:transform .12s, box-shadow .12s; }
+    .lead-card { background:var(--surface-elev, linear-gradient(140deg, rgba(255,255,255,.05), rgba(255,255,255,.02))); border:1px solid rgba(255,255,255,.07); border-radius:14px; padding:12px; display:flex; flex-direction:column; gap:8px; cursor:grab; transition:transform .12s, box-shadow .12s; }
     .lead-card:hover { transform:translateY(-2px); box-shadow:0 8px 20px rgba(0,0,0,.3); border-color:rgba(255,255,255,.14); }
     .lead-card.is-dragging { opacity:.4; cursor:grabbing; }
     .lead-card-top { display:flex; gap:10px; align-items:center; }

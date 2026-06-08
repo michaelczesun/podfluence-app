@@ -50,8 +50,8 @@ function styles() {
 
     .glass-card {
       padding:20px; border-radius:16px;
-      background:linear-gradient(140deg, rgba(255,255,255,.04), rgba(255,255,255,.01));
-      border:1px solid rgba(255,255,255,.06);
+      background:var(--surface-elev, rgba(255,255,255,.03));
+      border:1px solid var(--border, rgba(255,255,255,.06));
     }
 
     .data-table { width:100%; border-collapse:collapse; font-size:13px; }
