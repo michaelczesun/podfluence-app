@@ -160,6 +160,8 @@ function injectStylesOnce() {
     }
     .cmdk-mic-fab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
     .cmdk-mic-fab:active { transform: scale(0.94); }
+    /* Hide Mic-FAB while any modal/drawer is open — avoids z-index fights. */
+    body.modal-open .cmdk-mic-fab { opacity: 0; pointer-events: none; transition: opacity 0.2s; }
 
     /* Mobile: full-screen modal */
     @media (max-width: 640px) {
@@ -643,4 +645,29 @@ export function installMicFab() {
   })
   // FAB is position:fixed (bottom-right) — append to body so bar's overflow doesn't clip it
   document.body.appendChild(fab)
+  installModalOpenObserver()
+}
+
+/**
+ * Tracks whether any modal/drawer is currently open and reflects that state
+ * as `body.modal-open`. The Mic-FAB CSS hides itself when this class is set,
+ * so we don't fight z-index with whatever modal a panel decides to mount.
+ *
+ * We watch for:
+ *  - `.modal.open`, `.drawer.open` (CRM convention — see index.html ESC handler)
+ *  - `.modal-backdrop`, `.drawer-backdrop` (transient overlay nodes)
+ *  - `[data-dismiss-on-esc].open` (custom dismiss-on-esc dialogs)
+ */
+let _modalObserverInstalled = false
+function installModalOpenObserver() {
+  if (_modalObserverInstalled) return
+  _modalObserverInstalled = true
+  const SELECTOR = '.modal.open, .drawer.open, .modal-backdrop, .drawer-backdrop, [data-dismiss-on-esc].open'
+  const recompute = () => {
+    const hasOpen = !!document.querySelector(SELECTOR)
+    document.body.classList.toggle('modal-open', hasOpen)
+  }
+  const mo = new MutationObserver(recompute)
+  mo.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class'] })
+  recompute()
 }
