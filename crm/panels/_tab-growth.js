@@ -805,5 +805,3 @@ export default {
     state.ctx = null
   }
 }
-</content>
-</invoke>
