@@ -154,7 +154,10 @@ export default {
 
       await load()
 
-      return () => { if (channel) try { sb.removeChannel(channel) } catch (_) {} }
+      return () => {
+        if (reloadTimer) { clearTimeout(reloadTimer); reloadTimer = null }
+        if (channel) try { sb.removeChannel(channel) } catch (_) {}
+      }
     } catch (e) {
       container.innerHTML = `<div style="padding:40px;text-align:center;color:#ef4444">Audit-Log Panel-Fehler: ${htmlEscape(e.message || String(e))}</div>`
       return () => {}
