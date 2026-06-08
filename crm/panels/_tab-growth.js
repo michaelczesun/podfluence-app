@@ -119,11 +119,11 @@ function injectStyles() {
       display:inline-block; padding:2px 10px; border-radius:999px;
       font-size:12px; font-weight:600; font-variant-numeric: tabular-nums;
     }
-    #panel-tab-growth .tg-heatmap td.tg-heat-cell {
+    #panel-tab-growth .tg-heatmap td.tg-cohort-heat {
       text-align:center; font-variant-numeric: tabular-nums;
       transition: transform .12s ease;
     }
-    #panel-tab-growth .tg-heatmap tbody tr:hover td.tg-heat-cell { filter: brightness(1.15); }
+    #panel-tab-growth .tg-heatmap tbody tr:hover td.tg-cohort-heat { filter: brightness(1.15); }
 
     /* Heat-Map */
     #panel-tab-growth .tg-heat { display:grid; gap:3px; font-size:11px; }
@@ -362,13 +362,13 @@ function normalizeCohortRows(rows) {
 
 function heatCell(p) {
   if (p == null || isNaN(p)) {
-    return '<td class="num tg-heat-cell" style="background:rgba(31,31,46,.4); color:#6B7280;">—</td>'
+    return '<td class="num tg-cohort-heat" style="background:rgba(31,31,46,.4); color:#6B7280;">—</td>'
   }
   const v = Math.round(p)
   const bg = pctColor(v)
   // Contrast: dark bg → light text, light/yellow bg → dark text
   const fg = v >= 70 ? '#111827' : '#F9FAFB'
-  return `<td class="num tg-heat-cell" style="background:${bg}; color:${fg}; font-weight:600;">${v}%</td>`
+  return `<td class="num tg-cohort-heat" style="background:${bg}; color:${fg}; font-weight:600;">${v}%</td>`
 }
 
 async function renderCohorts(host) {
@@ -567,29 +567,42 @@ async function renderForecast(host) {
   }
 
   const points = rows.map(r => ({
-    date: r.date || r.day || r.ds || r.t,
-    value: Number(r.value ?? r.forecast ?? r.yhat ?? r.signups ?? 0),
-    lo:    Number(r.ci_lower ?? r.lower ?? r.yhat_lower ?? r.lo ?? NaN),
-    hi:    Number(r.ci_upper ?? r.upper ?? r.yhat_upper ?? r.hi ?? NaN)
+    date: r.forecast_date || r.date || r.day || r.ds || r.t,
+    value: Number(r.predicted_count ?? r.value ?? r.forecast ?? r.yhat ?? r.signups ?? 0),
+    lo:    Number(r.lower_ci ?? r.ci_lower ?? r.lower ?? r.yhat_lower ?? r.lo ?? NaN),
+    hi:    Number(r.upper_ci ?? r.ci_upper ?? r.upper ?? r.yhat_upper ?? r.hi ?? NaN)
   })).filter(p => p.date)
 
   const categories = points.map(p => p.date)
   const hasCI = points.some(p => !isNaN(p.lo) && !isNaN(p.hi))
 
+  // CI-Band als gefüllte Area: untere Linie (transparent) + Differenz (hi-lo)
+  // gestapelt darüber → sichtbares Band zwischen lower_ci und upper_ci.
+  // Die Forecast-Linie liegt als Line-Series oben drauf.
   const series = []
   if (hasCI) {
-    series.push({ name: 'CI oben',  data: points.map(p => isNaN(p.hi) ? null : p.hi) })
+    series.push({
+      name: 'CI unten',
+      type: 'area',
+      data: points.map(p => isNaN(p.lo) ? null : p.lo)
+    })
+    series.push({
+      name: 'CI-Band',
+      type: 'area',
+      data: points.map(p => (isNaN(p.lo) || isNaN(p.hi)) ? null : (p.hi - p.lo))
+    })
   }
-  series.push({ name: 'Forecast', data: points.map(p => p.value) })
-  if (hasCI) {
-    series.push({ name: 'CI unten', data: points.map(p => isNaN(p.lo) ? null : p.lo) })
-  }
+  series.push({
+    name: 'Forecast',
+    type: 'line',
+    data: points.map(p => p.value)
+  })
 
   const total = points.reduce((s, p) => s + p.value, 0)
   const avg = Math.round(total / Math.max(1, points.length))
 
   body.innerHTML = `
-    <div id="tg-forecast-chart" style="height:340px;"></div>
+    <div id="tg-forecast-chart" style="height:280px;"></div>
     <div class="tg-forecast-meta">
       <div>Datenpunkte: <strong>${fmtNumber(points.length)}</strong></div>
       <div>Prognose-Summe: <strong>${fmtNumber(total)}</strong></div>
@@ -603,16 +616,21 @@ async function renderForecast(host) {
 
   const chartHost = body.querySelector('#tg-forecast-chart')
   try {
-    // Bevorzugt LineChart wenn lib es exportiert, sonst AreaChart als Fallback
     const draw = (typeof Charts.makeLineChart === 'function')
       ? Charts.makeLineChart
       : Charts.makeAreaChart
     if (typeof draw !== 'function') throw new Error('Kein passender Chart-Helper in /lib/charts.js')
+    // Farben: CI-Band in transparentem Lila-Ton, Forecast in #7C5CFF.
+    const colors = hasCI
+      ? ['transparent', 'rgba(124,92,255,0.18)', '#7C5CFF']
+      : ['#7C5CFF']
     draw(chartHost, {
       categories,
       series,
-      colors: hasCI ? ['#A78BFA', '#8B5CF6', '#A78BFA'] : ['#8B5CF6'],
-      height: 340
+      colors,
+      height: 280,
+      stacked: hasCI,
+      smooth: true
     })
   } catch (e) {
     chartHost.innerHTML = `<div class="tg-empty"><div style="font-size:32px;">⚠️</div><h4>Chart-Fehler</h4><p>${htmlEscape(e.message || '')}</p></div>`
