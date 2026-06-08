@@ -140,6 +140,30 @@
     margin: 0 auto; max-width: 360px; font-weight: 400;
   }
   .tagline strong { color: var(--text); font-weight: 600; }
+  .hero-live {
+    display: inline-flex; align-items: center; gap: 8px;
+    margin: 0 auto 14px; padding: 6px 12px;
+    border-radius: 999px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.1);
+    backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+    font-size: 13px; color: var(--text-soft);
+    font-weight: 500;
+  }
+  .hero-live[hidden] { display: none; }
+  .hero-live strong { color: var(--text); font-weight: 600; }
+  .hero-live-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: #2ecc71;
+    box-shadow: 0 0 0 0 rgba(46,204,113,0.7);
+    animation: hero-live-pulse 1.8s ease-out infinite;
+    flex-shrink: 0;
+  }
+  @keyframes hero-live-pulse {
+    0%   { box-shadow: 0 0 0 0 rgba(46,204,113,0.6); }
+    70%  { box-shadow: 0 0 0 8px rgba(46,204,113,0); }
+    100% { box-shadow: 0 0 0 0 rgba(46,204,113,0); }
+  }
   .badge {
     display: inline-flex; align-items: center; gap: 7px;
     padding: 6px 13px; border-radius: 999px;
@@ -971,6 +995,7 @@
 </script>
 </head>
 <body>
+<button id="langToggle" type="button" aria-label="Switch language" style="position:fixed;top:12px;right:12px;z-index:100;padding:6px 12px;font-size:12px;font-weight:600;color:#fff;background:rgba(22,22,29,0.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.12);border-radius:999px;cursor:pointer;letter-spacing:0.04em;font-family:inherit;">DE / EN</button>
 <div class="bubbles" aria-hidden="true">
   <div class="bubble b1 glow"></div>
   <div class="bubble b2"></div>
@@ -989,7 +1014,7 @@
       <div class="logo-glow"></div>
       <div class="logo">🎧</div>
     </div>
-    <h1>hozd</h1>
+    <h1 data-i18n="hero.title">hozd</h1>
     <div class="hero-live" id="hero-live" hidden>
       <span class="hero-live-dot" aria-hidden="true"></span>
       <span class="hero-live-text">
@@ -2172,6 +2197,12 @@
   .cookie-icon { align-self: center; }
   .cookie-btn { width: 100%; }
 }
+/* Scroll-Reveal — added by Worker C */
+.reveal { opacity: 0; transform: translateY(24px); transition: opacity .8s, transform .8s cubic-bezier(.22,1,.36,1); will-change: opacity, transform; }
+.reveal.in { opacity: 1; transform: none; }
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1; transform: none; transition: none; }
+}
 </style>
 
 <script>
@@ -2534,6 +2565,79 @@
     fetchRecentUsers();
     setInterval(fetchRecentUsers, 30000); // refresh every 30s per spec
   })();
+
+  // Hero Live-Counter Strip — fetch public-stats once, hide on fail.
+  // Eigener Call (kein Coupling an die countUp-Race oben).
+  (function heroLiveStrip() {
+    var strip = document.getElementById('hero-live');
+    if (!strip) return;
+    var elList = document.getElementById('live-listeners');
+    var elPod  = document.getElementById('live-podcasts');
+    var elUsr  = document.getElementById('live-users');
+    function fmt(n) {
+      if (typeof n !== 'number' || !Number.isFinite(n)) return null;
+      try { return n.toLocaleString('de-DE'); } catch (e) { return String(n); }
+    }
+    fetch('https://nlgedaxiailhhcmgtmdp.supabase.co/functions/v1/public-stats', {
+      headers: { 'apikey': 'sb_publishable_aJrojJ8QFI0uCETwimeRLw_-ymYCVw_' },
+      cache: 'no-cache'
+    })
+      .then(function(r) { return r.ok ? r.json() : null; })
+      .then(function(d) {
+        if (!d) { strip.hidden = true; return; }
+        var listeners = (typeof d.listeners === 'number') ? d.listeners : null;
+        var podcasts  = (typeof d.podcasts  === 'number') ? d.podcasts  : null;
+        var users     = (typeof d.users     === 'number') ? d.users     : null;
+        if (listeners === null && podcasts === null && users === null) {
+          strip.hidden = true; return;
+        }
+        if (elList) elList.textContent = fmt(listeners) || '0';
+        if (elPod)  elPod.textContent  = fmt(podcasts)  || '0';
+        if (elUsr)  elUsr.textContent  = fmt(users)     || '0';
+        strip.hidden = false;
+      })
+      .catch(function() { strip.hidden = true; });
+  })();
+</script>
+
+<script>
+/* Scroll-Reveal — added by Worker C */
+(function() {
+  try {
+    var selectors = [
+      'section.preview',
+      'section.manifesto',
+      'section.features',
+      'section#social-proof'
+    ];
+    var targets = [];
+    for (var i = 0; i < selectors.length; i++) {
+      var found = document.querySelectorAll(selectors[i]);
+      for (var j = 0; j < found.length; j++) targets.push(found[j]);
+    }
+    if (targets.length === 0) return;
+
+    var reduce = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    for (var k = 0; k < targets.length; k++) targets[k].classList.add('reveal');
+
+    if (reduce || typeof IntersectionObserver === 'undefined') {
+      for (var m = 0; m < targets.length; m++) targets[m].classList.add('in');
+      return;
+    }
+
+    var io = new IntersectionObserver(function(entries) {
+      for (var n = 0; n < entries.length; n++) {
+        var e = entries[n];
+        if (e.isIntersecting) {
+          e.target.classList.add('in');
+          io.unobserve(e.target);
+        }
+      }
+    }, { threshold: 0.15 });
+
+    for (var p = 0; p < targets.length; p++) io.observe(targets[p]);
+  } catch (err) { /* silent */ }
+})();
 </script>
 </body>
 </html>
