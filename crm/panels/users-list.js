@@ -811,18 +811,24 @@ function openActionMenu(anchor, userId, body, container) {
 
   const menu = document.createElement('div')
   menu.className = 'ul-action-menu glass-card'
+  // 3-Punkte-Inline-Menü: Bearbeiten / Ban (toggle) / Premium toggle
   // FIX #6: show Unverify button for already-verified users instead of disabled Verify
   // FIX #7: show Unban button for already-banned users instead of always calling banUser
   menu.innerHTML = `
+    <button data-a="edit">${iconHtml('edit-3')} Bearbeiten</button>
+    ${row.is_premium
+      ? `<button data-a="revoke-premium">${iconHtml('star')} Premium entziehen</button>`
+      : `<button data-a="premium">${iconHtml('star')} Premium gewähren</button>`
+    }
+    ${row.is_banned
+      ? `<button data-a="unban">${iconHtml('unlock')} Entbannen</button>`
+      : `<button data-a="ban" class="danger">${iconHtml('ban')} Bannen</button>`
+    }
+    <div class="ul-menu-sep" style="height:1px;background:rgba(255,255,255,0.06);margin:4px 0;"></div>
     <button data-a="view">${iconHtml('eye')} Details ansehen</button>
     ${row.is_verified
       ? `<button data-a="unverify">${iconHtml('x-circle')} Verifizierung entziehen</button>`
       : `<button data-a="verify">${iconHtml('check-circle')} Verifizieren</button>`
-    }
-    <button data-a="premium">${iconHtml('star')} ${row.is_premium ? 'Premium aktiv' : 'Premium gewähren'}</button>
-    ${row.is_banned
-      ? `<button data-a="unban">${iconHtml('unlock')} Entbannen</button>`
-      : `<button data-a="ban" class="danger">${iconHtml('ban')} Bannen</button>`
     }
   `
   document.body.appendChild(menu)
@@ -840,6 +846,18 @@ function openActionMenu(anchor, userId, body, container) {
   setTimeout(() => document.addEventListener('click', close), 0)
 
   menu.querySelector('[data-a="view"]')?.addEventListener('click', () => { close(); openUserDrawer(userId, container) })
+  menu.querySelector('[data-a="edit"]')?.addEventListener('click', () => { close(); openUserDrawer(userId, container) })
+  menu.querySelector('[data-a="revoke-premium"]')?.addEventListener('click', async () => {
+    close()
+    const ok = await confirmDialog('Premium entziehen?', '', 'Entziehen', true)
+    if (!ok) return
+    try {
+      const pa = await import('/lib/panel-actions.js')
+      await pa.revokePremium(userId)
+      toast('Premium entzogen', 'warning')
+      await loadAll(container)
+    } catch (e) { toast(e?.message || 'Fehler', 'error') }
+  })
   menu.querySelector('[data-a="verify"]')?.addEventListener('click', async () => {
     close()
     const ok = await confirmDialog('Nutzer verifizieren?')
