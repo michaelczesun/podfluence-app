@@ -138,7 +138,7 @@ function injectStylesOnce() {
       font-family: ui-monospace, monospace; font-size: 10px;
       color: var(--text-muted, #9CA3AF);
     }
-    /* Mic FAB in mobile bottom bar — absolute centered, doesn't take grid column */
+    /* Mic FAB — bottom-right floating action button, above safe-area + bottom-bar */
     .cmdk-mic-fab {
       display: flex; align-items: center; justify-content: center;
       width: 52px; height: 52px;
@@ -148,14 +148,13 @@ function injectStylesOnce() {
       box-shadow: 0 8px 22px rgba(139,92,246,0.45);
       border: none;
       cursor: pointer;
-      position: absolute;
-      left: 50%;
-      top: -16px;
-      transform: translateX(-50%);
-      z-index: 2;
+      position: fixed;
+      right: 16px;
+      bottom: calc(72px + env(safe-area-inset-bottom, 0px));
+      z-index: 1100;
     }
     .cmdk-mic-fab svg { width: 22px; height: 22px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
-    .cmdk-mic-fab:active { transform: translateX(-50%) scale(0.94); }
+    .cmdk-mic-fab:active { transform: scale(0.94); }
 
     /* Mobile: full-screen modal */
     @media (max-width: 640px) {
@@ -625,7 +624,7 @@ export function installCmdK(opts = {}) {
 export function installMicFab() {
   const bar = document.getElementById('mobile-bottom-bar')
   if (!bar) return
-  if (bar.querySelector('.cmdk-mic-fab')) return
+  if (document.querySelector('.cmdk-mic-fab')) return
   injectStylesOnce()
   const fab = document.createElement('button')
   fab.type = 'button'
@@ -637,6 +636,6 @@ export function installMicFab() {
     e.preventDefault()
     openCmdK()
   })
-  // FAB is position:absolute — append doesn't affect grid columns
-  bar.appendChild(fab)
+  // FAB is position:fixed (bottom-right) — append to body so bar's overflow doesn't clip it
+  document.body.appendChild(fab)
 }
