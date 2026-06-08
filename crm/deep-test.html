@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Deep-Test · hozd CRM</title>
+<style>
+  body { margin: 0; padding: 20px; background: #07070A; color: #fff; font-family: -apple-system, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  .sub { color: #9CA3AF; font-size: 13px; margin-bottom: 16px; }
+  button { background: #8B5CF6; color: #fff; border: none; padding: 12px 20px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; margin-right: 8px; }
+  button:hover { background: #7C3AED; }
+  button:disabled { opacity: 0.5; cursor: wait; }
+  .row { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); display: grid; grid-template-columns: 200px 80px 1fr; gap: 12px; font-size: 13px; }
+  .row.ok { background: rgba(34,197,94,0.05); }
+  .row.warn { background: rgba(252,211,77,0.05); }
+  .row.err { background: rgba(248,113,113,0.08); }
+  .badge { font-weight: 700; }
+  .badge.ok { color: #34D399; }
+  .badge.warn { color: #FCD34D; }
+  .badge.err { color: #F87171; }
+  .errs { color: #fca5a5; font-family: monospace; font-size: 11px; max-height: 80px; overflow-y: auto; }
+  .progress { font-size: 13px; color: #FCD34D; margin: 10px 0; }
+  #hidden { position: fixed; left: -10000px; width: 800px; height: 600px; }
+  #report { margin-top: 16px; padding: 12px; background: rgba(255,255,255,0.04); border-radius: 8px; font-family: monospace; font-size: 11px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; display: none; }
+</style>
+</head>
+<body>
+<h1>🔬 Deep-Test — alle Sub-Tabs durchmounten</h1>
+<div class="sub">Mountet JEDES Panel in unsichtbarer Insel, 3s warten, Console-Errors + Network-Fehler + RPC-Status sammeln. Dann kannst du den Report kopieren und schicken.</div>
+<button id="run">▶ Starte Deep-Test</button>
+<button id="copy" style="display:none;background:#10B981">📋 Report kopieren</button>
+<div id="progress" class="progress"></div>
+<div id="results"></div>
+<div id="report"></div>
+<div id="hidden"></div>
+
+<script type="module">
+import { sb, currentUserContext } from '/lib/supabase.js?v=20260608h';
+
+// Alle Panel-IDs die wir testen (aus permissions.json struktur, plus admin-home + audit-log)
+const PANELS = [
+  // Pulse
+  'admin-home','kpi-live-totals','dau-trend','new-signups-7d','crash-rate',
+  // People
+  'users-list','user-type-split','verified-premium-flags','onboarding-funnel','client-build-versions','top-listeners','leads-pipeline','team-management',
+  // Growth
+  'posts-per-day','episodes-per-day','trending-hashtags','podcaster-engagement-7d','listens-per-day','top-listened-podcasts','vibe-distribution','users-by-country','referral-leaderboard','referral-overview','invite-codes-usage','trending-podcasters','achievements-unlocks',
+  // Content
+  'recent-updates-feed','active-polls','open-bug-reports','bug-reports-triage','podcast-verification-queue','insta-approval-queue','insta-post-type-scores','newsletter-audience-sync','push-broadcast',
+  // System
+  'settings','app-settings','audit-log','tasks-inbox','storage-ops',
+];
+
+const results = [];
+const networkErrors = [];
+
+// Monkey-patch fetch + console.error
+const origFetch = window.fetch;
+window.fetch = async function(...args) {
+  const url = typeof args[0] === 'string' ? args[0] : args[0].url;
+  try {
+    const r = await origFetch.apply(this, args);
+    if (!r.ok) {
+      const body = await r.clone().text().catch(() => '');
+      networkErrors.push({ url: url.slice(-80), status: r.status, body: body.slice(0, 200) });
+    }
+    return r;
+  } catch (e) {
+    networkErrors.push({ url: url.slice(-80), status: 'ERR', body: String(e.message || e) });
+    throw e;
+  }
+};
+
+const errorsByPanel = new Map();
+const origConsoleError = console.error;
+console.error = function(...args) {
+  const cur = window.__currentPanel;
+  if (cur) {
+    if (!errorsByPanel.has(cur)) errorsByPanel.set(cur, []);
+    errorsByPanel.get(cur).push(args.map(a => (a && a.message) || String(a)).join(' ').slice(0, 200));
+  }
+  origConsoleError.apply(console, args);
+};
+
+document.getElementById('run').addEventListener('click', async () => {
+  const ctx = await currentUserContext();
+  if (!ctx) { alert('Bitte erst im CRM einloggen'); window.location.href = '/login/'; return; }
+
+  const btn = document.getElementById('run');
+  btn.disabled = true; btn.textContent = '⏳ Läuft …';
+  const progress = document.getElementById('progress');
+  const resultsEl = document.getElementById('results');
+  const hidden = document.getElementById('hidden');
+
+  let i = 0;
+  for (const id of PANELS) {
+    i++;
+    progress.textContent = `${i}/${PANELS.length}: ${id}`;
+    window.__currentPanel = id;
+    networkErrors.length = 0;
+    const before = errorsByPanel.has(id) ? errorsByPanel.get(id).length : 0;
+
+    let status = 'ok', errText = '';
+    const cont = document.createElement('div');
+    hidden.innerHTML = '';
+    hidden.appendChild(cont);
+    try {
+      const mod = await import(`/crm/panels/${id}.js?v=20260608h&t=${Date.now()}`);
+      const panel = mod.default || mod;
+      if (panel && typeof panel.mount === 'function') {
+        await panel.mount(cont);
+        await new Promise(r => setTimeout(r, 3000));
+      } else {
+        status = 'warn'; errText = 'kein default.mount export';
+      }
+    } catch (e) {
+      status = 'err'; errText = String(e.message || e).slice(0, 300);
+    }
+
+    const consErrs = errorsByPanel.get(id) || [];
+    const consDelta = consErrs.slice(before);
+    const net4xx = networkErrors.filter(n => typeof n.status === 'number' && n.status >= 400);
+    if (status === 'ok' && (consDelta.length > 0 || net4xx.length > 0)) status = 'warn';
+    if (net4xx.some(n => n.status >= 500)) status = 'err';
+
+    const networkSummary = net4xx.slice(0, 3).map(n => `${n.status} ${n.url}`).join('\n');
+    const errsSummary = errText || consDelta.slice(0, 3).join('\n');
+
+    results.push({ panel: id, status, errors: errsSummary, network: networkSummary });
+    const row = document.createElement('div');
+    row.className = `row ${status}`;
+    row.innerHTML = `
+      <div><strong>${id}</strong></div>
+      <div><span class="badge ${status}">${status.toUpperCase()}</span></div>
+      <div class="errs">${errsSummary || '—'}${networkSummary ? '\n' + networkSummary : ''}</div>
+    `;
+    resultsEl.appendChild(row);
+  }
+
+  const okCount = results.filter(r => r.status === 'ok').length;
+  const warnCount = results.filter(r => r.status === 'warn').length;
+  const errCount = results.filter(r => r.status === 'err').length;
+  progress.innerHTML = `<strong style="color:#34D399">${okCount} OK</strong> · <strong style="color:#FCD34D">${warnCount} WARN</strong> · <strong style="color:#F87171">${errCount} ERR</strong>`;
+
+  // Build copy-ready report
+  const report = results.map(r => `[${r.status.toUpperCase()}] ${r.panel}\n${r.errors}${r.network ? '\nNET: ' + r.network : ''}`).join('\n---\n');
+  const reportEl = document.getElementById('report');
+  reportEl.textContent = report;
+  reportEl.style.display = 'block';
+  document.getElementById('copy').style.display = 'inline-block';
+  btn.disabled = false; btn.textContent = '▶ Nochmal';
+});
+
+document.getElementById('copy').addEventListener('click', async () => {
+  const report = document.getElementById('report').textContent;
+  await navigator.clipboard.writeText(report);
+  const btn = document.getElementById('copy');
+  btn.textContent = '✓ Kopiert'; setTimeout(() => btn.textContent = '📋 Report kopieren', 2000);
+});
+</script>
+</body>
+</html>
