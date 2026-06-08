@@ -3,6 +3,7 @@ import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, d
 import { makeSparkline, makeAreaChart } from '/lib/charts.js?v=20260608j'
 import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260608j'
 import { glassCard } from '/lib/layout-extras.js?v=20260608j'
+import { skeletonCard, skeletonGrid, skeletonChart } from '/crm/lib/skeleton.js?v=20260608m'
 
 // Schema-Truth: siehe CLAUDE-Memory. Diese Datei nutzt NUR existierende Tabellen/Felder:
 //  - users(id,email,is_premium,is_verified,is_admin,created_at,display_name,avatar_url,is_banned)
@@ -594,7 +595,7 @@ export default {
         <div class="ah-head">
           <div>
             <h2>Admin-Home</h2>
-            <div class="sub" id="ah-last-updated">Lädt …</div>
+            <div class="sub" id="ah-last-updated"><span style="opacity:.55">Lädt aktuelle Zahlen …</span></div>
           </div>
           <div class="toolbar">
             <span class="live-dot" id="ah-live">Live</span>
@@ -603,15 +604,13 @@ export default {
         </div>
 
         <div id="ah-hero">
-          <div class="skel-grid">
-            ${[1,2,3,4].map(()=>`<div class="skel-card"></div>`).join('')}
-          </div>
+          ${skeletonGrid({ tiles: 4, minTileWidth: 230, height: 160, radius: 16 })}
         </div>
 
         <div class="ah-grid">
           <div class="section" id="ah-alerts-section">
             <div class="head"><h3>Smart-Alerts</h3><span class="badge" id="ah-alerts-count">…</span></div>
-            <div id="ah-alerts"><div class="skel-card" style="height:120px"></div></div>
+            <div id="ah-alerts">${skeletonCard({ height: 120 })}</div>
           </div>
           <div class="section">
             <h3>Quick-Actions</h3>
@@ -622,9 +621,9 @@ export default {
         <div class="ah-grid">
           <div class="section">
             <div class="head"><h3>Letzte Admin-Aktionen</h3><span class="badge">Live</span></div>
-            <div id="ah-audit"><div class="skel-card" style="height:120px"></div></div>
+            <div id="ah-audit">${skeletonCard({ height: 120 })}</div>
           </div>
-          <div id="ah-growth"><div class="skel-card" style="height:200px; border-radius:18px"></div></div>
+          <div id="ah-growth">${skeletonChart({ height: 200, bars: 14 })}</div>
         </div>
       </div>`
 

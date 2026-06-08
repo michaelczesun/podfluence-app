@@ -7,6 +7,7 @@ import { drawer, statHero } from '/lib/layout-extras.js?v=20260608j'
 // FIX #6: added unverifyUser import; FIX #7: added unbanUser import
 import { showUserDetailModal, verifyUser, unverifyUser, banUser, unbanUser, grantPremium } from '/lib/panel-actions.js?v=20260608j'
 import { openModal } from '/crm/lib/modal.js?v=20260608k'
+import { skeletonRow, skeletonGrid, skeletonChart, skeletonCard } from '/crm/lib/skeleton.js?v=20260608m'
 
 const PAGE_SIZE = 50
 
@@ -304,7 +305,9 @@ export default {
             </div>
           </div>
           <div class="panel-body" id="ul-body">
-            <div class="pf-skeleton" style="width:100%;height:320px;"></div>
+            ${skeletonGrid({ tiles: 4, minTileWidth: 220, height: 120 })}
+            <div style="height:14px"></div>
+            ${skeletonRow({ count: 8, avatar: true, pill: true, lines: 2 })}
           </div>
         </div>
       `
@@ -364,7 +367,14 @@ async function loadAll(container) {
   _allRows = null
   _allRowsInflight = null
   state.loading = true
-  body.innerHTML = '<div class="pf-skeleton" style="width:100%;height:320px;"></div>'
+  // Skeleton-Loader statt Text — fühlt sich schneller an, deutet Struktur an.
+  body.innerHTML = `
+    ${skeletonGrid({ tiles: 4, minTileWidth: 220, height: 120 })}
+    <div style="height:14px"></div>
+    ${skeletonChart({ height: 180, bars: 18 })}
+    <div style="height:14px"></div>
+    ${skeletonRow({ count: 8, avatar: true, pill: true, lines: 2 })}
+  `
 
   try {
     await _loadAllRows()  // single fetch — all three helpers will reuse the cache
@@ -954,7 +964,7 @@ function openUserDrawer(userId, container) {
     const host = drawer({
       title: 'Nutzer-Details',
       width: 540,
-      content: `<div id="ul-drawer-host"><div class="pf-skeleton" style="width:100%;height:240px;"></div></div>`
+      content: `<div id="ul-drawer-host">${skeletonRow({ count: 5, avatar: true, pill: true, lines: 2 })}</div>`
     })
     showUserDetailModal(userId)
   } catch (e) {
