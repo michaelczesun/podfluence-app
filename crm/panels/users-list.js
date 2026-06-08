@@ -6,6 +6,7 @@ import { countUp, fadeIn } from '/lib/animations.js?v=20260608j'
 import { drawer, statHero } from '/lib/layout-extras.js?v=20260608j'
 // FIX #6: added unverifyUser import; FIX #7: added unbanUser import
 import { showUserDetailModal, verifyUser, unverifyUser, banUser, unbanUser, grantPremium } from '/lib/panel-actions.js?v=20260608j'
+import { openModal } from '/crm/lib/modal.js?v=20260608k'
 
 const PAGE_SIZE = 50
 
@@ -964,64 +965,67 @@ function openUserDrawer(userId, container) {
 }
 
 function openBulkPushModal(ids, body, container) {
-  const overlay = document.createElement('div')
-  overlay.className = 'ul-push-overlay'
-  overlay.innerHTML = `
-    <div class="ul-push-modal glass-card" role="dialog" aria-modal="true" aria-label="Push senden">
-      <div class="ul-push-modal-head">
-        <h3>${iconHtml('bell')} Push-Broadcast senden</h3>
-        <button class="btn-icon" id="ul-push-close" title="Schließen">${iconHtml('x')}</button>
-      </div>
-      <div class="ul-push-modal-body">
-        <div class="ul-push-notice">${iconHtml('alert-circle')} Dieser Push wird als Broadcast an <strong>alle</strong> Nutzer gesendet, nicht nur an die Auswahl.</div>
-        <label class="ul-push-label" for="ul-push-title">Titel</label>
-        <input type="text" id="ul-push-title" class="ul-push-input" placeholder="z. B. Neue Funktion für dich!" maxlength="64" />
-        <label class="ul-push-label" for="ul-push-body">Nachricht</label>
-        <textarea id="ul-push-body" class="ul-push-textarea" placeholder="Kurze Push-Nachricht…" maxlength="200" rows="3"></textarea>
-        <div id="ul-push-status" class="ul-push-status" hidden></div>
-      </div>
-      <div class="ul-push-modal-foot">
-        <button class="btn btn-ghost" id="ul-push-cancel">Abbrechen</button>
-        <button class="btn btn-primary" id="ul-push-send">${iconHtml('send')} An alle senden</button>
-      </div>
-    </div>
+  // Push-Broadcast Modal — nutzt zentralisierte Modal-Lib (Escape/Backdrop/KAV/Focus-Trap).
+  const bodyEl = document.createElement('div')
+  bodyEl.innerHTML = `
+    <div class="ul-push-notice">${iconHtml('alert-circle')} Dieser Push wird als Broadcast an <strong>alle</strong> Nutzer gesendet, nicht nur an die Auswahl.</div>
+    <label class="ul-push-label" for="ul-push-title">Titel</label>
+    <input type="text" id="ul-push-title" class="ul-push-input" placeholder="z. B. Neue Funktion für dich!" maxlength="64" />
+    <label class="ul-push-label" for="ul-push-body">Nachricht</label>
+    <textarea id="ul-push-body" class="ul-push-textarea" placeholder="Kurze Push-Nachricht…" maxlength="200" rows="3"></textarea>
+    <div id="ul-push-status" class="ul-push-status" hidden></div>
   `
-  document.body.appendChild(overlay)
 
-  const onKey = (e) => { if (e.key === 'Escape') close() }
-  const close = () => { document.removeEventListener('keydown', onKey); overlay.remove() }
-  document.addEventListener('keydown', onKey)
-  overlay.querySelector('#ul-push-close')?.addEventListener('click', close)
-  overlay.querySelector('#ul-push-cancel')?.addEventListener('click', close)
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
+  // hasUnsavedChanges: Backdrop/Escape blockieren sobald getippt wurde
+  const hasUnsavedChanges = () => {
+    const t = bodyEl.querySelector('#ul-push-title')?.value?.trim()
+    const b = bodyEl.querySelector('#ul-push-body')?.value?.trim()
+    return !!(t || b)
+  }
 
-  overlay.querySelector('#ul-push-send')?.addEventListener('click', async () => {
-    const titleEl = overlay.querySelector('#ul-push-title')
-    const bodyEl = overlay.querySelector('#ul-push-body')
-    const statusEl = overlay.querySelector('#ul-push-status')
-    const title = titleEl?.value?.trim()
-    const body = bodyEl?.value?.trim()
-    if (!title || !body) {
-      if (statusEl) { statusEl.textContent = 'Bitte Titel und Nachricht ausfüllen.'; statusEl.hidden = false }
-      return
-    }
-    const sendBtn = overlay.querySelector('#ul-push-send')
-    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sendet…' }
-    // FIX #2: send_broadcast_push sends to ALL users (audience='all') — one single call, no per-user loop
-    try {
-      const { error } = await sb.rpc('send_broadcast_push', {
-        p_title: title,
-        p_body: body,
-        p_audience: 'all',
-        p_deep_link: null
-      })
-      if (error) throw error
-      close()
-      toast('Broadcast-Push gesendet (alle Nutzer)', 'success')
-    } catch (e) {
-      close()
-      toast(e?.message || 'Push-Versand fehlgeschlagen', 'error')
-    }
+  openModal({
+    title: `${iconHtml('bell')} Push-Broadcast senden`,
+    body: bodyEl,
+    width: 520,
+    hasUnsavedChanges,
+    footerActions: [
+      { label: 'Abbrechen', variant: 'ghost', closeOnClick: true },
+      {
+        label: 'An alle senden',
+        variant: 'primary',
+        closeOnClick: false,
+        onClick: async (api) => {
+          const titleEl = bodyEl.querySelector('#ul-push-title')
+          const inputBodyEl = bodyEl.querySelector('#ul-push-body')
+          const statusEl = bodyEl.querySelector('#ul-push-status')
+          const title = titleEl?.value?.trim()
+          const msg = inputBodyEl?.value?.trim()
+          if (!title || !msg) {
+            if (statusEl) { statusEl.textContent = 'Bitte Titel und Nachricht ausfüllen.'; statusEl.hidden = false }
+            return
+          }
+          const sendBtn = api.footer?.querySelectorAll('.modal-footer-btn')[1]
+          if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sendet…' }
+          try {
+            // FIX #2: send_broadcast_push sends to ALL users (audience='all') — one single call.
+            const { error } = await sb.rpc('send_broadcast_push', {
+              p_title: title,
+              p_body: msg,
+              p_audience: 'all',
+              p_deep_link: null
+            })
+            if (error) throw error
+            if (titleEl) titleEl.value = ''
+            if (inputBodyEl) inputBodyEl.value = ''
+            api.close(true)
+            toast('Broadcast-Push gesendet (alle Nutzer)', 'success')
+          } catch (e) {
+            api.close(true)
+            toast(e?.message || 'Push-Versand fehlgeschlagen', 'error')
+          }
+        }
+      }
+    ]
   })
 }
 
@@ -1190,34 +1194,33 @@ async function doSwipeNote(uid, body, container) {
 }
 
 function promptNote(row) {
+  // Note-Prompt — zentralisierte Modal-Lib. resolve(null) bei Abbruch, resolve(text) bei Speichern.
   return new Promise((resolve) => {
-    const overlay = document.createElement('div')
-    overlay.className = 'ul-push-overlay'
-    overlay.innerHTML = `
-      <div class="ul-push-modal glass-card" role="dialog" aria-modal="true" aria-label="Notiz hinzufügen">
-        <div class="ul-push-modal-head">
-          <h3>${iconHtml('edit-3')} Notiz für ${htmlEscape(row.full_name || row.username || 'Nutzer')}</h3>
-          <button class="btn-icon" data-x="close" title="Schließen">${iconHtml('x')}</button>
-        </div>
-        <div class="ul-push-modal-body">
-          <textarea id="ul-note-text" class="ul-push-textarea" placeholder="Interne Notiz…" rows="4" maxlength="500"></textarea>
-        </div>
-        <div class="ul-push-modal-foot">
-          <button class="btn btn-ghost" data-x="cancel">Abbrechen</button>
-          <button class="btn btn-primary" data-x="save">${iconHtml('save')} Speichern</button>
-        </div>
-      </div>
+    const bodyEl = document.createElement('div')
+    bodyEl.innerHTML = `
+      <textarea id="ul-note-text" class="ul-push-textarea" placeholder="Interne Notiz…" rows="4" maxlength="500"></textarea>
     `
-    document.body.appendChild(overlay)
-    const ta = overlay.querySelector('#ul-note-text')
-    setTimeout(() => ta?.focus(), 30)
-    const onKey = (e) => { if (e.key === 'Escape') done(null) }
-    const done = (val) => { document.removeEventListener('keydown', onKey); overlay.remove(); resolve(val) }
-    document.addEventListener('keydown', onKey)
-    overlay.querySelector('[data-x="close"]').addEventListener('click', () => done(null))
-    overlay.querySelector('[data-x="cancel"]').addEventListener('click', () => done(null))
-    overlay.querySelector('[data-x="save"]').addEventListener('click', () => done(ta?.value || ''))
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) done(null) })
+    let settled = false
+    const settle = (v) => { if (!settled) { settled = true; resolve(v) } }
+
+    openModal({
+      title: `${iconHtml('edit-3')} Notiz für ${htmlEscape(row.full_name || row.username || 'Nutzer')}`,
+      body: bodyEl,
+      width: 480,
+      onClose: () => settle(null),
+      hasUnsavedChanges: () => !!bodyEl.querySelector('#ul-note-text')?.value?.trim(),
+      footerActions: [
+        { label: 'Abbrechen', variant: 'ghost', onClick: () => settle(null) },
+        {
+          label: 'Speichern',
+          variant: 'primary',
+          onClick: () => {
+            const v = bodyEl.querySelector('#ul-note-text')?.value || ''
+            settle(v)
+          }
+        }
+      ]
+    })
   })
 }
 

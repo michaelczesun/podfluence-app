@@ -11,6 +11,7 @@
 
 import { sb } from '/lib/supabase.js?v=20260608j'
 import { toast, htmlEscape } from '/lib/ui.js?v=20260608k'
+import { openModal } from '/crm/lib/modal.js?v=20260608k'
 
 // ---------------------------------------------------------------------------
 // One-time style injection
@@ -244,56 +245,51 @@ async function rpc(name, args = {}) {
 // Sub-Modal: Ban (Reason + bis-Datum)
 // ---------------------------------------------------------------------------
 function showBanModal(currentUser) {
+  // Sub-Modal "User bannen" — zentralisierte Modal-Lib.
   return new Promise((resolve) => {
-    const overlay = document.createElement('div')
-    overlay.className = 'udv2-overlay'
-    overlay.style.zIndex = '10060'
-    overlay.innerHTML = `
-      <div class="udv2-modal" style="width:420px;max-width:420px;" role="dialog" aria-modal="true">
-        <div class="udv2-header">
-          <div class="udv2-avatar">!</div>
-          <div class="udv2-header-text">
-            <div class="udv2-name">User bannen</div>
-            <div class="udv2-meta">@${esc(currentUser.username || '–')}</div>
-          </div>
-          <button class="udv2-close" data-act="cancel" aria-label="Schließen">&times;</button>
-        </div>
-        <div class="udv2-body">
-          <div class="udv2-section">
-            <div class="udv2-section-title">Grund</div>
-            <textarea class="udv2-textarea" id="ban-reason" rows="3" placeholder="z.B. Spam, Hate-Speech, ToS-Verstoß …"></textarea>
-          </div>
-          <div class="udv2-section">
-            <div class="udv2-section-title">Bann bis (optional)</div>
-            <div class="udv2-row">
-              <input type="date" class="udv2-date" id="ban-until" />
-              <button class="udv2-btn" data-act="clear-until" type="button">Permanent</button>
-            </div>
-          </div>
-        </div>
-        <div class="udv2-footer" style="justify-content:flex-end;">
-          <button class="udv2-btn" data-act="cancel">Abbrechen</button>
-          <button class="udv2-btn danger" data-act="confirm">User bannen</button>
+    const body = document.createElement('div')
+    body.innerHTML = `
+      <div class="udv2-section">
+        <div class="udv2-section-title">Grund</div>
+        <textarea class="udv2-textarea" id="ban-reason" rows="3" placeholder="z.B. Spam, Hate-Speech, ToS-Verstoß …"></textarea>
+      </div>
+      <div class="udv2-section">
+        <div class="udv2-section-title">Bann bis (optional)</div>
+        <div class="udv2-row">
+          <input type="date" class="udv2-date" id="ban-until" />
+          <button class="udv2-btn" data-act="clear-until" type="button">Permanent</button>
         </div>
       </div>
     `
-    document.body.appendChild(overlay)
-    const cleanup = () => { document.removeEventListener('keydown', onKey); overlay.remove() }
-    function onKey(e) { if (e.key === 'Escape') { cleanup(); resolve(null) } }
-    document.addEventListener('keydown', onKey)
-    overlay.addEventListener('click', (e) => { if (e.target === overlay) { cleanup(); resolve(null) } })
-    overlay.querySelector('[data-act="clear-until"]').addEventListener('click', () => {
-      overlay.querySelector('#ban-until').value = ''
+    body.querySelector('[data-act="clear-until"]').addEventListener('click', () => {
+      const inp = body.querySelector('#ban-until')
+      if (inp) inp.value = ''
     })
-    overlay.querySelectorAll('[data-act="cancel"]').forEach(b => b.addEventListener('click', () => { cleanup(); resolve(null) }))
-    overlay.querySelector('[data-act="confirm"]').addEventListener('click', () => {
-      const reason = (overlay.querySelector('#ban-reason').value || '').trim()
-      if (!reason) { toast('Bitte Grund angeben.', 'error'); return }
-      const until = overlay.querySelector('#ban-until').value || null
-      cleanup()
-      resolve({ reason, until })
+
+    let settled = false
+    const settle = (v) => { if (!settled) { settled = true; resolve(v) } }
+
+    openModal({
+      title: `User bannen · @${esc(currentUser.username || '–')}`,
+      body,
+      width: 420,
+      onClose: () => settle(null),
+      footerActions: [
+        { label: 'Abbrechen', variant: 'ghost', onClick: () => settle(null) },
+        {
+          label: 'User bannen',
+          variant: 'danger',
+          closeOnClick: false,
+          onClick: (api) => {
+            const reason = (body.querySelector('#ban-reason')?.value || '').trim()
+            if (!reason) { toast('Bitte Grund angeben.', 'error'); return }
+            const until = body.querySelector('#ban-until')?.value || null
+            settle({ reason, until })
+            api.close(true)
+          }
+        }
+      ]
     })
-    setTimeout(() => overlay.querySelector('#ban-reason')?.focus(), 60)
   })
 }
 
@@ -306,13 +302,11 @@ export async function showUserDetailV2(userId) {
   if (!userId) throw new Error('userId required')
   injectStyles()
 
-  // ----- Overlay & Skeleton -----
-  const overlay = document.createElement('div')
-  overlay.className = 'udv2-overlay'
-  overlay.setAttribute('role', 'dialog')
-  overlay.setAttribute('aria-modal', 'true')
-  overlay.innerHTML = `
-    <div class="udv2-modal">
+  // ----- Modal via zentralisierte Lib (Escape/Backdrop/KAV/Focus-Trap/Scroll-Lock) -----
+  // Wir nutzen noHeader: das ursprüngliche udv2-Layout liefert eigene Header-Struktur
+  // im selben Element, das vorher ".udv2-modal" hieß. modalEl ist hier der card-Container.
+  const modalApi = openModal({
+    body: `
       <div class="udv2-header">
         <div class="udv2-avatar">…</div>
         <div class="udv2-header-text" style="flex:1;">
@@ -326,53 +320,15 @@ export async function showUserDetailV2(userId) {
         <div class="udv2-skeleton" style="height:60px;"></div>
         <div class="udv2-skeleton" style="height:60px;"></div>
       </div>
-    </div>
-  `
-  document.body.appendChild(overlay)
-
-  // ----- KAV: VisualViewport-Tracking -----
-  // Setzt --udv2-vh = visualViewport.height damit der Modal-Container nicht
-  // hinter die Tastatur rutscht. Buttons im Footer bleiben sichtbar weil das
-  // Modal flex-column ist und der Body scrollt.
-  const modalEl = overlay.querySelector('.udv2-modal')
-  let kavRaf = 0
-  function updateKav() {
-    if (kavRaf) cancelAnimationFrame(kavRaf)
-    kavRaf = requestAnimationFrame(() => {
-      const vv = window.visualViewport
-      if (!vv || !modalEl) return
-      const h = Math.min(vv.height, window.innerHeight)
-      modalEl.style.setProperty('--udv2-vh', `${Math.max(280, h - 32)}px`)
-      // Bei kleinem Mobile-Viewport (fullscreen): kein -32 Padding
-      if (window.innerWidth <= 560) {
-        modalEl.style.setProperty('--udv2-vh', `${h}px`)
-      }
-    })
-  }
-  if (window.visualViewport) {
-    window.visualViewport.addEventListener('resize', updateKav)
-    window.visualViewport.addEventListener('scroll', updateKav)
-  }
-  window.addEventListener('resize', updateKav)
-  updateKav()
-
-  // ----- Close-Handling -----
-  let closed = false
-  function close() {
-    if (closed) return
-    closed = true
-    document.removeEventListener('keydown', onKey)
-    if (window.visualViewport) {
-      window.visualViewport.removeEventListener('resize', updateKav)
-      window.visualViewport.removeEventListener('scroll', updateKav)
-    }
-    window.removeEventListener('resize', updateKav)
-    overlay.remove()
-  }
-  function onKey(e) { if (e.key === 'Escape') close() }
-  document.addEventListener('keydown', onKey)
-  overlay.addEventListener('click', (e) => { if (e.target === overlay) close() })
-  overlay.querySelector('[data-act="close"]').addEventListener('click', close)
+    `,
+    width: 480,
+    noHeader: true,
+    className: 'udv2-modal'
+  })
+  const modalEl = modalApi.body // alle Selektoren laufen weiter über modalEl
+  const close = () => modalApi.close(true)
+  // X-Button im skeleton wiring
+  modalEl.querySelector('[data-act="close"]')?.addEventListener('click', close)
 
   // ----- Daten laden -----
   let u

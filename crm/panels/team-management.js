@@ -511,26 +511,7 @@ export default {
         searchInput.addEventListener('input', (ev) => runSearch(ev.target.value.trim()))
         setTimeout(() => searchInput.focus(), 50)
 
-        cancelBtn.onclick = () => close()
-        okBtn.onclick = async () => {
-          if (!selectedUser || !selectedRole) return
-          okBtn.disabled = true
-          okBtn.textContent = 'Speichere …'
-          try {
-            const { error } = await sb.rpc('admin_team_set_role', {
-              p_user_id: selectedUser.id,
-              p_role: selectedRole
-            })
-            if (error) throw error
-            toast(`${selectedUser.username} ist jetzt ${ROLES[selectedRole].label}`)
-            close()
-            load()
-          } catch (e) {
-            toast('Fehler: ' + (e.message || 'unbekannt'), 'error')
-            okBtn.disabled = false
-            okBtn.textContent = 'Einladen'
-          }
-        }
+        // Cancel/Einladen werden über footerActions in openModal verdrahtet.
       }
 
       // -------- Toolbar wiring --------

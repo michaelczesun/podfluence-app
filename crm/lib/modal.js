@@ -244,7 +244,8 @@ export function openModal(opts = {}) {
     width = 560,
     hasUnsavedChanges,
     className,
-    showClose = true
+    showClose = true,
+    noHeader = false
   } = opts
 
   // ----- DOM bauen -----
@@ -284,8 +285,16 @@ export function openModal(opts = {}) {
     footerEl.className = 'modal-footer'
   }
 
-  card.appendChild(header)
+  if (!noHeader) card.appendChild(header)
   card.appendChild(bodyEl)
+  if (noHeader) {
+    // Konsument liefert eigenes Header/Body-Layout — bodyEl wird transparent (kein Padding,
+    // flex-column damit nested header/body wie gewohnt stacken).
+    bodyEl.style.padding = '0'
+    bodyEl.style.display = 'flex'
+    bodyEl.style.flexDirection = 'column'
+    bodyEl.style.overflow = 'hidden'
+  }
   if (footerEl) card.appendChild(footerEl)
   backdrop.appendChild(card)
   document.body.appendChild(backdrop)
