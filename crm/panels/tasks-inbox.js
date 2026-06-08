@@ -315,7 +315,10 @@ function injectStyles() {
     .ti-col-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid rgba(255,255,255,.07);font-size:13px;font-weight:600;border-top:3px solid var(--accent)}
     .ti-col-badge{background:rgba(255,255,255,.08);padding:2px 9px;border-radius:999px;font-size:11px;font-weight:700}
     .ti-col-body{padding:10px;display:flex;flex-direction:column;gap:9px;flex:1;min-height:180px}
-    .ti-empty{text-align:center;padding:30px 8px;font-size:12px;opacity:.35;font-style:italic}
+    .ti-empty{text-align:center;padding:28px 12px;display:flex;flex-direction:column;align-items:center;gap:4px}
+    .ti-empty-icon{font-size:30px;opacity:.4;margin-bottom:4px}
+    .ti-empty-title{font-size:13px;font-weight:600;opacity:.75}
+    .ti-empty-sub{font-size:11.5px;opacity:.5;line-height:1.4;max-width:220px}
 
     .ti-card{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.09);border-radius:11px;padding:12px;display:flex;flex-direction:column;gap:8px;transition:all .15s}
     .ti-card:hover{background:rgba(255,255,255,.07);transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.2)}
@@ -397,6 +400,10 @@ export default {
             ${STATUS_COLS.map(c => columnHtml(c, visible)).join('')}
           </div>`
 
+        body.querySelectorAll('[data-empty-new]').forEach(b => {
+          b.addEventListener('click', () => openNewTaskModal(load))
+        })
+
         body.querySelectorAll('.ti-pill').forEach(p => {
           p.addEventListener('click', () => {
             state.filter = p.dataset.f
@@ -441,7 +448,8 @@ export default {
         }
       }
 
-      const debouncedLoad = debounce(load, 400)
+      // Realtime: coalesce bursts to max 1 load per 1.5s (war 400ms → zu spammy bei Bulk-Updates)
+      const debouncedLoad = debounce(load, 1500)
 
       // initial skeleton
       body.innerHTML = ''

@@ -72,8 +72,8 @@ function styles() {
     .audit-toolbar button:hover { background:rgba(255,255,255,0.08); }
     .audit-list { display:flex; flex-direction:column; gap:8px; }
     .audit-row { display:flex; gap:14px; align-items:center; padding:14px 16px; border-radius:14px;
-      background:linear-gradient(140deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
-      border:1px solid rgba(255,255,255,0.06); }
+      background:var(--surface-elev, rgba(255,255,255,0.03));
+      border:1px solid var(--border-subtle, rgba(255,255,255,0.06)); }
     .audit-icon { width:40px; height:40px; border-radius:12px; display:flex; align-items:center; justify-content:center; font-size:20px; flex-shrink:0; }
     .audit-body { flex:1; min-width:0; }
     .audit-head { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
@@ -83,7 +83,7 @@ function styles() {
     .audit-meta { margin-top:4px; display:flex; gap:6px; flex-wrap:wrap; }
     .audit-meta code { font-size:11px; background:rgba(124,92,255,0.12); color:#A78BFA; padding:2px 6px; border-radius:5px; font-family:monospace; }
     .audit-time { font-size:12px; color:var(--text-muted,#9ca3af); white-space:nowrap; flex-shrink:0; }
-    .audit-empty { text-align:center; padding:60px 20px; color:var(--text-muted,#9ca3af); background:rgba(255,255,255,0.02); border-radius:18px; border:1px dashed rgba(255,255,255,0.08); }
+    .audit-empty { text-align:center; padding:60px 20px; color:var(--text-muted,#9ca3af); background:var(--surface-elev, rgba(255,255,255,0.02)); border-radius:18px; border:1px dashed var(--border-subtle, rgba(255,255,255,0.08)); }
   </style>`
 }
 
@@ -141,10 +141,15 @@ export default {
         } catch (_) { toast('CSV-Export fehlgeschlagen', 'error') }
       })
 
-      // Realtime: live update bei neuen Audit-Einträgen
+      // Realtime: live update bei neuen Audit-Einträgen (throttled — verhindert RPC-Sturm bei Bulk-Aktionen)
       let channel = null
+      let reloadTimer = null
+      const throttledReload = () => {
+        if (reloadTimer) return
+        reloadTimer = setTimeout(() => { reloadTimer = null; if (!state.loading) load() }, 2000)
+      }
       try {
-        channel = sb.channel('admin-audit-live').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'admin_audit_log' }, () => { load() }).subscribe()
+        channel = sb.channel('admin-audit-live').on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'admin_audit_log' }, throttledReload).subscribe()
       } catch (_) {}
 
       await load()
