@@ -1,11 +1,11 @@
-import { sb } from '/lib/supabase.js?v=20260608h'
-import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608h'
-import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260608h'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608h'
-import { countUp, fadeIn } from '/lib/animations.js?v=20260608h'
-import { drawer, statHero } from '/lib/layout-extras.js?v=20260608h'
+import { sb } from '/lib/supabase.js?v=20260608i'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608i'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260608i'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608i'
+import { countUp, fadeIn } from '/lib/animations.js?v=20260608i'
+import { drawer, statHero } from '/lib/layout-extras.js?v=20260608i'
 // FIX #6: added unverifyUser import; FIX #7: added unbanUser import
-import { showUserDetailModal, verifyUser, unverifyUser, banUser, unbanUser, grantPremium } from '/lib/panel-actions.js?v=20260608h'
+import { showUserDetailModal, verifyUser, unverifyUser, banUser, unbanUser, grantPremium } from '/lib/panel-actions.js?v=20260608i'
 
 const PAGE_SIZE = 50
 
