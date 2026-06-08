@@ -402,12 +402,17 @@ export default {
       btn.addEventListener('click', () => activate(btn.dataset.key))
     })
 
-    // Default-Sub-Tab beim Öffnen von #system: 'settings' (SUB_TABS[0]).
+    // Default-Sub-Tab beim Öffnen von #system:
+    //   - owner   → 'settings' (volle Konfig-Hoheit)
+    //   - andere  → 'audit'    (Read-Only Audit-Log als sinnvoller Landing-Point)
     // Deep-Link-Quellen, in Reihenfolge der Priorität:
     //   1. opts.sub (vom Top-Router aus #system/<sub> geparst)
     //   2. zweites Segment im location.hash (Back-Compat / direkter Modul-Load)
-    //   3. Default SUB_TABS[0].key === 'settings'
-    let initial = SUB_TABS[0].key
+    //   3. rollen-basierter Default (siehe oben)
+    const role = (typeof window !== 'undefined' && window.__CRM_ROLE__) || ''
+    const isOwner = role === 'owner'
+    const roleDefault = isOwner ? 'settings' : 'audit'
+    let initial = SUB_TABS.some(t => t.key === roleDefault) ? roleDefault : SUB_TABS[0].key
     if (routedSub && SUB_TABS.some(t => t.key === routedSub)) {
       initial = routedSub
     } else {
