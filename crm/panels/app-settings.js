@@ -335,7 +335,13 @@ export default {
   title: 'App-Settings',
   category: 'admin_actions',
 
-  async mount(container) {
+  async mount(container, opts = {}) {
+    // opts.role wird vom Top-Router (_tab-system.js → mountSubPanel → crm/index.html)
+    // durchgereicht. Owner+Admin haben in permissions.json 'rw' auf system.settings,
+    // sollten also NIE einen client-seitigen Block hier sehen. Wenn die RPC
+    // trotzdem einen admin_required-Error zurückgibt, ist das ein DB-seitiger
+    // Bug (admin_role_check kennt 'owner' nicht).
+    const callerRole = opts?.role || null
     let refreshTimer = null
     let rtCh = null
 
@@ -362,7 +368,23 @@ export default {
       const load = async () => {
         try {
           const { data, error } = await sb.rpc('admin_settings_list')
-          if (error) throw error
+          if (error) {
+            // Spezialfall: RPC wirft 'admin_required' obwohl Caller owner ist.
+            // Das ist ein DB-seitiger Bug (require_admin() prüft NUR auf
+            // admin_users.role IN ('admin','support',...) und kennt 'owner'
+            // nicht). Wir fangen das ab, damit der Fehler im UI klar gemeldet
+            // wird statt als generischer Postgres-Fehler durchzurutschen.
+            const msg = String(error.message || '')
+            if (callerRole === 'owner' && /admin_required|admin required|not.*admin/i.test(msg)) {
+              throw new Error(
+                `RPC admin_settings_list verweigert owner-Zugriff (` +
+                `"${msg}"). DB-Funktion require_admin() muss owner-Rolle ` +
+                `whitelisten. Workaround: User im admin_users-Table auf ` +
+                `role='admin' setzen.`
+              )
+            }
+            throw error
+          }
           const settings = (data || []).map(r => ({
             key: r.key,
             value: r.value,

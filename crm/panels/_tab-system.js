@@ -300,7 +300,7 @@ function mountBackups(container) {
 
 const CACHE_BUST = '20260608f'
 
-async function mountSubPanel(paneEl, panelId) {
+async function mountSubPanel(paneEl, panelId, opts = {}) {
   try {
     const mod = await import(`./${panelId}.js?v=${CACHE_BUST}`)
     const panel = mod.default || mod
@@ -308,7 +308,10 @@ async function mountSubPanel(paneEl, panelId) {
       throw new Error(`Panel „${panelId}" exportiert kein mount()`)
     }
     paneEl.innerHTML = '' // remove "Lädt …"
-    const cleanup = await panel.mount(paneEl)
+    // opts (role, access, permissions) durchreichen — sonst weiß das Sub-Panel
+    // nichts vom Caller-Kontext und kann z.B. admin_required-Errors nicht
+    // sinnvoll einordnen.
+    const cleanup = await panel.mount(paneEl, opts)
     return typeof cleanup === 'function' ? cleanup : () => {}
   } catch (e) {
     paneEl.innerHTML = `<div class="sys-error">
@@ -359,7 +362,7 @@ export default {
       try {
         let cleanup
         if (def.panel) {
-          cleanup = await mountSubPanel(pane, def.panel)
+          cleanup = await mountSubPanel(pane, def.panel, opts)
         } else if (key === 'api-health') {
           cleanup = await mountApiHealth(pane)
         } else if (key === 'backups') {
@@ -379,11 +382,17 @@ export default {
       activeKey = key
       tabBtns.forEach(b => b.classList.toggle('active', b.dataset.key === key))
       panes.forEach(p => p.classList.toggle('active', p.dataset.key === key))
-      // Update hash for shareable deep-link (#_tab-system/<sub>)
+      // Update hash for shareable deep-link (#system/<sub>)
+      // Top-Tab heißt 'system' (siehe permissions.json + crm/index.html-Router),
+      // NICHT '_tab-system' — letzteres ist nur der Modul-Filename.
       try {
-        const base = (location.hash || '').split('/')[0] || '#_tab-system'
-        if (base.startsWith('#_tab-system')) {
-          history.replaceState(null, '', `${base}/${key}`)
+        const rawHash = (location.hash || '').replace(/^#/, '')
+        const [pathPart, queryPart = ''] = rawHash.split('?')
+        const seg = pathPart.split('/').filter(Boolean)
+        const tab = seg[0] || 'system'
+        if (tab === 'system') {
+          const target = `#system/${key}${queryPart ? '?' + queryPart : ''}`
+          if (location.hash !== target) history.replaceState(null, '', target)
         }
       } catch (_) {}
       await ensureMounted(key)
@@ -393,12 +402,20 @@ export default {
       btn.addEventListener('click', () => activate(btn.dataset.key))
     })
 
-    // Optional Deep-Link via hash: #_tab-system/audit
+    // Default-Sub-Tab beim Öffnen von #system: 'settings' (SUB_TABS[0]).
+    // Deep-Link-Quellen, in Reihenfolge der Priorität:
+    //   1. opts.sub (vom Top-Router aus #system/<sub> geparst)
+    //   2. zweites Segment im location.hash (Back-Compat / direkter Modul-Load)
+    //   3. Default SUB_TABS[0].key === 'settings'
     let initial = SUB_TABS[0].key
-    try {
-      const parts = (location.hash || '').split('/')
-      if (parts[1] && SUB_TABS.some(t => t.key === parts[1])) initial = parts[1]
-    } catch (_) {}
+    if (routedSub && SUB_TABS.some(t => t.key === routedSub)) {
+      initial = routedSub
+    } else {
+      try {
+        const parts = (location.hash || '').replace(/^#/, '').split('?')[0].split('/').filter(Boolean)
+        if (parts[1] && SUB_TABS.some(t => t.key === parts[1])) initial = parts[1]
+      } catch (_) {}
+    }
 
     await activate(initial)
 
