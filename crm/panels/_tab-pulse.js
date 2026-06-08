@@ -85,8 +85,20 @@ function styles() {
       align-items:flex-start;
     }
     .al-item.sev-critical { border-left:3px solid #EF4444; }
+    .al-item.sev-warning  { border-left:3px solid #F59E0B; }
     .al-item.sev-warn     { border-left:3px solid #F59E0B; }
     .al-item.sev-info     { border-left:3px solid #22D3EE; }
+    .al-item.sev-normal   { border-left:3px solid #10B981; }
+    .al-badge {
+      display:inline-block; padding:3px 9px; border-radius:8px;
+      font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.4px;
+      margin-right:6px;
+    }
+    .al-badge.sev-critical { background:rgba(239,68,68,0.18); color:#EF4444; }
+    .al-badge.sev-warning  { background:rgba(245,158,11,0.18); color:#F59E0B; }
+    .al-badge.sev-warn     { background:rgba(245,158,11,0.18); color:#F59E0B; }
+    .al-badge.sev-info     { background:rgba(34,211,238,0.18); color:#22D3EE; }
+    .al-badge.sev-normal   { background:rgba(16,185,129,0.18); color:#10B981; }
     .al-icon {
       width:36px; height:36px; border-radius:10px;
       background:rgba(255,255,255,0.05);
@@ -195,9 +207,17 @@ async function mountToday(host) {
 
 function severityFor(z) {
   const az = Math.abs(z || 0)
-  if (az >= 3.5) return 'critical'
-  if (az >= 2.0) return 'warn'
+  if (az >= 3) return 'critical'
+  if (az >= 2) return 'warning'
   return 'info'
+}
+
+function normalizeSeverity(s, z) {
+  const v = String(s || '').toLowerCase()
+  if (v === 'critical' || v === 'warning' || v === 'warn' || v === 'info' || v === 'normal') {
+    return v === 'warn' ? 'warning' : v
+  }
+  return severityFor(z)
 }
 
 function iconForMetric(m) {
@@ -211,15 +231,20 @@ async function fetchAnomalies() {
     const { data, error } = await sb.rpc('admin_anomaly_detect')
     if (!error && Array.isArray(data)) {
       return data
-        .map(r => ({
-          metric: r.metric || r.key || 'unknown',
-          value:  Number(r.value ?? r.today ?? 0),
-          mean:   Number(r.mean ?? r.avg ?? 0),
-          z:      Number(r.z ?? r.z_score ?? r.zscore ?? 0),
-          direction: r.direction || (Number(r.z ?? 0) > 0 ? 'up' : 'down'),
-          note:   r.note || r.message || null
-        }))
-        .filter(a => Math.abs(a.z) >= 2)
+        .map(r => {
+          const z = Number(r.z_score ?? r.z ?? r.zscore ?? 0)
+          return {
+            metric: r.metric || r.key || 'unknown',
+            value:  Number(r.current_value ?? r.value ?? r.today ?? 0),
+            mean:   Number(r.baseline_avg ?? r.mean ?? r.avg ?? 0),
+            std:    Number(r.baseline_std ?? r.std ?? 0),
+            z,
+            severity: normalizeSeverity(r.severity, z),
+            direction: r.direction || (z > 0 ? 'up' : 'down'),
+            note:   r.note || r.message || null
+          }
+        })
+        .filter(a => a.severity === 'critical' || a.severity === 'warning' || Math.abs(a.z) >= 2)
         .sort((a, b) => Math.abs(b.z) - Math.abs(a.z))
     }
   } catch (_) {}
@@ -242,7 +267,8 @@ async function fetchAnomalies() {
       const z = (today - mean) / sd
       if (Math.abs(z) >= 2) {
         out.push({
-          metric, value: today, mean: Math.round(mean), z,
+          metric, value: today, mean: Math.round(mean), std: sd, z,
+          severity: severityFor(z),
           direction: z > 0 ? 'up' : 'down',
           note: null
         })
@@ -273,16 +299,17 @@ async function mountAlerts(host) {
   }
 
   listEl.innerHTML = items.map(a => {
-    const sev = severityFor(a.z)
+    const sev = a.severity || severityFor(a.z)
+    const sevLabel = sev === 'critical' ? 'Critical' : sev === 'warning' ? 'Warning' : sev === 'normal' ? 'Normal' : 'Info'
     const arr = a.direction === 'up' ? '▲' : '▼'
     const noteStr = a.note ? ` · ${htmlEscape(a.note)}` : ''
     return `<div class="al-item sev-${sev}">
       <div class="al-icon">${iconForMetric(a.metric)}</div>
       <div class="al-body">
-        <div class="al-title">${htmlEscape(a.metric)} ${arr} ${fmtNumber(a.value)}</div>
+        <div class="al-title"><span class="al-badge sev-${sev}">${sevLabel}</span>${htmlEscape(a.metric)} ${arr} ${fmtNumber(a.value)}</div>
         <div class="al-meta">Ø ${fmtNumber(a.mean)} · ${a.direction === 'up' ? 'über' : 'unter'} dem Mittel${noteStr}</div>
       </div>
-      <div class="al-z">z = ${a.z.toFixed(1)}</div>
+      <div class="al-z">z = ${(Number(a.z) || 0).toFixed(1)}</div>
     </div>`
   }).join('')
 }
