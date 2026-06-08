@@ -30,6 +30,91 @@ function persistActive(key) {
   try { localStorage.setItem(STORAGE_KEY, key) } catch {}
 }
 
+function powerUsersBlockHtml() {
+  return `
+    <div class="pu-block" data-power-users style="margin-bottom:14px;">
+      <style>
+        .pu-block { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px 16px; }
+        .pu-head { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+        .pu-head h3 { margin:0; font-size:14px; font-weight:600; letter-spacing:.2px; }
+        .pu-head .pu-sub { font-size:11px; opacity:.55; }
+        .pu-list { display:flex; flex-direction:column; gap:6px; }
+        .pu-row { display:flex; align-items:center; gap:10px; padding:6px 8px; border-radius:8px; cursor:pointer; transition:background .12s ease; }
+        .pu-row:hover { background:rgba(255,255,255,0.04); }
+        .pu-rank { width:22px; text-align:center; font-size:11px; font-weight:700; opacity:.55; }
+        .pu-rank.top { color:#F59E0B; opacity:1; }
+        .pu-av { width:32px; height:32px; border-radius:50%; background:rgba(255,255,255,0.06); object-fit:cover; flex-shrink:0; }
+        .pu-name { flex:1; min-width:0; }
+        .pu-name .nm { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .pu-name .un { font-size:11px; opacity:.5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .pu-stats { display:flex; gap:10px; font-size:11px; opacity:.7; flex-shrink:0; }
+        .pu-stats b { color:#60A5FA; font-weight:600; }
+        .pu-empty, .pu-err { padding:14px; opacity:.6; font-size:12px; text-align:center; }
+        .pu-err { color:#F87171; }
+        @media (max-width: 480px) {
+          .pu-stats { flex-direction:column; gap:2px; text-align:right; }
+        }
+      </style>
+      <div class="pu-head">
+        <h3>Top 10 Power-Users</h3>
+        <span class="pu-sub">7 Tage · Engagement-Score</span>
+      </div>
+      <div class="pu-list" data-pu-list>
+        <div class="pu-empty">Lade Power-Users…</div>
+      </div>
+    </div>
+  `
+}
+
+async function mountPowerUsers(rootEl) {
+  const listEl = rootEl.querySelector('[data-pu-list]')
+  if (!listEl) return
+  try {
+    const { data, error } = await sb.rpc('admin_power_users', { p_limit: 10 })
+    if (error) throw error
+    const rows = Array.isArray(data) ? data : []
+    if (!rows.length) {
+      listEl.innerHTML = `<div class="pu-empty">Noch keine Engagement-Daten verfügbar.</div>`
+      return
+    }
+    listEl.innerHTML = rows.map(r => {
+      const rank = Number(r.rank || 0)
+      const score = Number(r.engagement_score || 0).toFixed(1)
+      const posts = Number(r.posts_7d || 0)
+      const hours = Number(r.listen_hours_7d || 0).toFixed(1)
+      const name = (r.full_name || r.username || 'Unbekannt').replace(/[<>&"]/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c]))
+      const uname = (r.username ? '@' + r.username : '').replace(/[<>&"]/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c]))
+      const av = r.avatar_url
+        ? `<img class="pu-av" src="${String(r.avatar_url).replace(/"/g, '&quot;')}" alt="" loading="lazy" onerror="this.style.background='rgba(255,255,255,0.08)';this.removeAttribute('src')">`
+        : `<div class="pu-av"></div>`
+      return `
+        <div class="pu-row" data-uid="${r.user_id}" title="Score ${score} · ${posts} Posts · ${hours}h">
+          <div class="pu-rank ${rank <= 3 ? 'top' : ''}">${rank}</div>
+          ${av}
+          <div class="pu-name">
+            <div class="nm">${name}</div>
+            <div class="un">${uname}</div>
+          </div>
+          <div class="pu-stats">
+            <span><b>${score}</b> Score</span>
+            <span>${posts} Posts</span>
+            <span>${hours}h</span>
+          </div>
+        </div>
+      `
+    }).join('')
+    listEl.querySelectorAll('.pu-row').forEach(row => {
+      row.addEventListener('click', () => {
+        const uid = row.dataset.uid
+        if (uid) location.href = `/crm/user-detail.html?id=${encodeURIComponent(uid)}`
+      })
+    })
+  } catch (e) {
+    console.error('[power-users] load failed', e)
+    listEl.innerHTML = `<div class="pu-err">Power-Users konnten nicht geladen werden: ${e?.message || e}</div>`
+  }
+}
+
 async function mountSubPanel(host, sub) {
   host.innerHTML = `<div class="loading" style="padding:24px;opacity:.7">Lade ${sub.label}…</div>`
 
@@ -59,7 +144,15 @@ async function mountSubPanel(host, sub) {
       throw new Error(`Sub-Panel ${sub.panel} hat kein mount()`)
     }
     host.innerHTML = ''
-    await panel.mount(host)
+    if (sub.key === 'users') {
+      const puWrap = document.createElement('div')
+      puWrap.innerHTML = powerUsersBlockHtml()
+      host.appendChild(puWrap.firstElementChild)
+      mountPowerUsers(host).catch(() => {})
+    }
+    const panelMount = document.createElement('div')
+    host.appendChild(panelMount)
+    await panel.mount(panelMount)
     try { fadeIn(host) } catch {}
   } catch (e) {
     console.error('[_tab-people] sub-mount failed', sub.key, e)
