@@ -514,8 +514,8 @@ function styles() {
 
     /* Growth */
     .growth-card { padding:18px; border-radius:18px;
-      background:linear-gradient(140deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01));
-      border:1px solid rgba(255,255,255,0.06); }
+      background:var(--surface-elev, linear-gradient(140deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)));
+      border:1px solid var(--surface-border, rgba(255,255,255,0.06)); }
     .growth-head { display:flex; justify-content:space-between; align-items:center; margin-bottom:14px; }
     .growth-head h3 { margin:0; font-size:15px; }
     .growth-legend { display:flex; gap:12px; font-size:11px; color:var(--text-muted,#9ca3af); }

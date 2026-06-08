@@ -465,12 +465,18 @@ function renderPagination() {
 }
 
 function emptyState() {
+  const hasFilters = state.search || state.filter !== 'all' || Object.values(state.filterBuilder || {}).some(v => v !== null && v !== '' && v !== undefined)
   return `
     <div class="empty-state">
       <div class="empty-icon">${iconHtml('users')}</div>
       <h3>Keine Nutzer gefunden</h3>
-      <p>Für die aktuelle Suche oder Filter gibt es keine Treffer.</p>
-      <button class="btn btn-primary" data-act="reset-filters">Filter zurücksetzen</button>
+      <p>${hasFilters
+        ? 'Für die aktuelle Suche oder Filter-Kombination gibt es keine Treffer.'
+        : 'Es sind aktuell keine Nutzer in der Datenbank vorhanden.'}</p>
+      <p class="muted">${hasFilters
+        ? 'Tipp: Setze die Filter zurück oder probiere einen kürzeren Suchbegriff.'
+        : 'Sobald sich Nutzer registrieren, erscheinen sie hier automatisch.'}</p>
+      ${hasFilters ? `<button class="btn btn-primary" data-act="reset-filters">${iconHtml('refresh-cw')} Filter zurücksetzen</button>` : ''}
     </div>`
 }
 
