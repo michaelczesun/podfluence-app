@@ -323,7 +323,7 @@ async function mountSubPanel(paneEl, panelId) {
 // ---------------------------------------------------------------------------
 
 export default {
-  id: '_tab-system',
+  id: 'system',
   title: 'System',
   category: 'admin_actions',
 

@@ -78,7 +78,7 @@ async function mountSubPanel(host, sub) {
 }
 
 export default {
-  id: '_tab-people',
+  id: 'people',
   title: 'People',
   category: 'people',
 

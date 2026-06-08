@@ -286,7 +286,7 @@ function setSubInHash(subKey) {
 
 // ------------ Public mount/unmount ------------
 export default {
-  id: '_tab-content',
+  id: 'content',
   title: 'Content',
   category: 'content',
 
