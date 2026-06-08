@@ -311,7 +311,9 @@ function renderHeroGrid(totals) {
     ${KPI_DEFS.map(def => {
       const t = totals[def.key] || { value: 0, prev: 0 }
       const change = pctChange(t.value, t.prev)
-      const up = change >= 0
+      const dir = change > 0 ? 'up' : change < 0 ? 'down' : 'flat'
+      const arrowIcon = dir === 'up' ? 'trending-up' : dir === 'down' ? 'trending-down' : 'minus'
+      const sign = change > 0 ? '+' : ''
       return `
       <div class="stat-hero glass-card kpi-card" data-kpi="${def.key}" role="button" tabindex="0" style="--accent:${def.color}">
         <div class="kpi-card-head">
@@ -321,9 +323,9 @@ function renderHeroGrid(totals) {
         </div>
         <div class="kpi-value" id="ah-val-${def.key}" data-fmt="${def.fmt}">${formatValue(t.value, def.fmt)}</div>
         <div class="kpi-spark" id="ah-spark-${def.key}"></div>
-        <div class="kpi-change ${up ? 'up' : 'down'}">
-          ${iconHtml(up ? 'trending-up' : 'trending-down')}
-          <span>${up ? '+' : ''}${change.toFixed(1)}%</span>
+        <div class="kpi-change ${dir}">
+          ${iconHtml(arrowIcon)}
+          <span>${sign}${change.toFixed(1)}%</span>
           <span class="kpi-change-sub">vs gestern</span>
         </div>
       </div>`
@@ -478,19 +480,37 @@ function styles() {
       background:#22c55e; box-shadow:0 0 8px #22c55e; animation:livepulse 1.4s ease-in-out infinite; }
     @keyframes livepulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
 
-    /* Hero KPIs */
+    /* Hero KPIs — Glas + inner-glow in tab-accent, tabular-nums Big-Number */
     .hero-grid { display:grid; grid-template-columns:repeat(auto-fit, minmax(230px, 1fr)); gap:16px; }
-    .kpi-card { padding:20px; border-radius:16px; cursor:pointer; position:relative; overflow:hidden;
+    .kpi-card { padding:22px 22px 18px; border-radius:18px; cursor:pointer; position:relative; overflow:hidden;
       transition:transform .2s ease, box-shadow .2s ease;
-      background:var(--surface-elev, linear-gradient(140deg, rgba(255,255,255,0.04), rgba(255,255,255,0.01)));
-      border:1px solid var(--surface-border, rgba(255,255,255,0.06)); }
-    .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:var(--accent); opacity:0.85; }
-    .kpi-card:hover { transform:translateY(-2px); box-shadow:0 10px 32px rgba(0,0,0,0.3), 0 0 0 1px var(--accent); }
+      background:
+        radial-gradient(130% 90% at 0% 0%, color-mix(in srgb, var(--accent) 12%, transparent), transparent 55%),
+        linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0.012)),
+        rgba(22,22,29,0.62);
+      backdrop-filter: blur(22px) saturate(180%);
+      -webkit-backdrop-filter: blur(22px) saturate(180%);
+      border:1px solid color-mix(in srgb, var(--accent) 22%, rgba(255,255,255,0.06));
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.06),
+        inset 0 0 24px color-mix(in srgb, var(--accent) 10%, transparent),
+        0 10px 30px rgba(0,0,0,0.32);
+    }
+    .kpi-card::before { content:''; position:absolute; top:0; left:0; right:0; height:1px;
+      background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 75%, transparent), transparent); }
+    .kpi-card:hover { transform:translateY(-2px);
+      box-shadow:
+        inset 0 1px 0 rgba(255,255,255,0.08),
+        inset 0 0 28px color-mix(in srgb, var(--accent) 14%, transparent),
+        0 14px 36px rgba(0,0,0,0.4),
+        0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
     .kpi-card.pulsing { animation:kpipulse 1.2s ease-out; }
     @keyframes kpipulse { 0%{box-shadow:0 0 0 0 var(--accent)} 50%{box-shadow:0 0 0 12px transparent} 100%{box-shadow:0 0 0 0 transparent} }
-    .kpi-card-head { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
-    .kpi-icon { display:inline-flex; width:32px; height:32px; border-radius:9px; align-items:center; justify-content:center; }
-    .kpi-label { font-size:12px; font-weight:500; color:var(--text-muted,#9ca3af); }
+    .kpi-card-head { display:flex; align-items:center; gap:10px; margin-bottom:14px; position:relative; z-index:1; }
+    .kpi-icon { display:inline-flex; width:32px; height:32px; border-radius:10px; align-items:center; justify-content:center;
+      box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent); }
+    .kpi-label { font-size:11px; font-weight:600; color:var(--text-muted,#9ca3af);
+      text-transform:uppercase; letter-spacing:0.14em; }
     .kpi-zero-info {
       display:inline-flex; align-items:center; justify-content:center;
       width:18px; height:18px; border-radius:50%;
@@ -498,13 +518,19 @@ function styles() {
       font-size:11px; font-weight:700; cursor:help;
       margin-left:auto;
     }
-    .kpi-value { font-size:34px; font-weight:700; letter-spacing:-0.03em; line-height:1.1; font-variant-numeric:tabular-nums; margin-bottom:8px; }
-    .kpi-spark { height:26px; min-height:26px; margin-bottom:8px; }
+    .kpi-value { font-size:44px; font-weight:700; letter-spacing:-2px; line-height:1.05;
+      font-variant-numeric:tabular-nums; font-feature-settings:"tnum" 1,"lnum" 1;
+      margin-bottom:10px; position:relative; z-index:1;
+      text-shadow: 0 1px 0 rgba(0,0,0,0.25); }
+    .kpi-spark { height:26px; min-height:26px; margin-bottom:10px; opacity:0.55; position:relative; z-index:0; }
     .kpi-spark:empty { display:none; }
-    .kpi-change { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:600; }
-    .kpi-change.up { color:#22c55e; }
-    .kpi-change.down { color:#ef4444; }
-    .kpi-change-sub { color:var(--text-muted,#9ca3af); font-weight:400; margin-left:4px; }
+    .kpi-change { display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
+      font-variant-numeric:tabular-nums; letter-spacing:0.02em; position:relative; z-index:1;
+      padding:4px 10px; border-radius:999px; }
+    .kpi-change.up { color:#4ADE80; background:rgba(34,197,94,0.14); box-shadow: inset 0 0 0 1px rgba(34,197,94,0.28); }
+    .kpi-change.down { color:#F87171; background:rgba(239,68,68,0.14); box-shadow: inset 0 0 0 1px rgba(239,68,68,0.28); }
+    .kpi-change.flat { color:#94A3B8; background:rgba(148,163,184,0.14); box-shadow: inset 0 0 0 1px rgba(148,163,184,0.24); }
+    .kpi-change-sub { color:var(--text-muted,#9ca3af); font-weight:500; margin-left:4px; letter-spacing:0; }
 
     /* Two-column layout below */
     .ah-grid { display:grid; grid-template-columns:1.4fr 1fr; gap:20px; }
@@ -691,11 +717,13 @@ export default {
                 if (badge) head.insertAdjacentHTML('beforeend', badge)
               }
               const change = pctChange(t.value, t.prev)
-              const up = change >= 0
+              const dir = change > 0 ? 'up' : change < 0 ? 'down' : 'flat'
+              const arrowIcon = dir === 'up' ? 'trending-up' : dir === 'down' ? 'trending-down' : 'minus'
+              const sign = change > 0 ? '+' : ''
               const ch = card.querySelector('.kpi-change')
               if (ch) {
-                ch.className = `kpi-change ${up ? 'up' : 'down'}`
-                ch.innerHTML = `${iconHtml(up ? 'trending-up' : 'trending-down')}<span>${up?'+':''}${change.toFixed(1)}%</span><span class="kpi-change-sub">vs gestern</span>`
+                ch.className = `kpi-change ${dir}`
+                ch.innerHTML = `${iconHtml(arrowIcon)}<span>${sign}${change.toFixed(1)}%</span><span class="kpi-change-sub">vs gestern</span>`
               }
             }
           }
