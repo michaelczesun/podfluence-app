@@ -6,6 +6,7 @@ import { sb } from '/lib/supabase.js?v=20260608h'
 import { toast, iconHtml } from '/lib/ui.js?v=20260608h'
 import { fadeIn } from '/lib/animations.js?v=20260608h'
 import { pullToRefresh } from '/lib/layout-extras.js?v=20260608h'
+import { sendTestPush } from '/lib/panel-actions.js?v=20260608h'
 
 const SUBTABS = [
   { key: 'users',    label: 'Users',    panel: 'users-list',      icon: 'users' },
@@ -182,6 +183,110 @@ async function mountPowerUsers(rootEl) {
   }
 }
 
+function churnRiskBlockHtml() {
+  return `
+    <div class="cr-block" data-churn-risk style="margin-bottom:14px;">
+      <style>
+        .cr-block { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px 16px; }
+        .cr-head { display:flex; align-items:center; gap:8px; margin-bottom:10px; }
+        .cr-head h3 { margin:0; font-size:14px; font-weight:600; letter-spacing:.2px; }
+        .cr-head .cr-sub { font-size:11px; opacity:.55; }
+        .cr-list { display:flex; flex-direction:column; gap:6px; }
+        .cr-row { display:flex; align-items:center; gap:10px; padding:6px 8px; border-radius:8px; transition:background .12s ease; }
+        .cr-row:hover { background:rgba(255,255,255,0.04); }
+        .cr-rank { width:22px; text-align:center; font-size:11px; font-weight:700; opacity:.55; }
+        .cr-name { flex:1; min-width:0; cursor:pointer; }
+        .cr-name .nm { font-size:13px; font-weight:500; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .cr-name .un { font-size:11px; opacity:.5; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .cr-stats { display:flex; gap:10px; font-size:11px; opacity:.7; flex-shrink:0; align-items:center; }
+        .cr-score { color:#F87171; font-weight:600; }
+        .cr-score.hot { color:#EF4444; }
+        .cr-days { opacity:.6; }
+        .cr-btn {
+          appearance:none; border:1px solid rgba(96,165,250,.35); background:rgba(96,165,250,.12);
+          color:#60A5FA; font-size:11px; font-weight:600; padding:5px 10px; border-radius:7px;
+          cursor:pointer; display:inline-flex; align-items:center; gap:5px; white-space:nowrap;
+          transition: all .15s ease;
+        }
+        .cr-btn:hover { background:rgba(96,165,250,.22); }
+        .cr-btn:disabled { opacity:.5; cursor:not-allowed; }
+        .cr-empty, .cr-err { padding:14px; opacity:.6; font-size:12px; text-align:center; }
+        .cr-err { color:#F87171; }
+        @media (max-width: 480px) {
+          .cr-stats { flex-direction:column; gap:4px; align-items:flex-end; }
+        }
+      </style>
+      <div class="cr-head">
+        <h3>Churn-Risk-Liste</h3>
+        <span class="cr-sub">Score ≥ 0.7 · Top 20 · Reactivation-Push</span>
+      </div>
+      <div class="cr-list" data-cr-list>
+        <div class="cr-empty">Lade Churn-Risk-User…</div>
+      </div>
+    </div>
+  `
+}
+
+async function mountChurnRisk(rootEl) {
+  const listEl = rootEl.querySelector('[data-cr-list]')
+  if (!listEl) return
+  try {
+    const { data, error } = await sb.rpc('admin_churn_risk_list', { p_min_score: 0.7, p_limit: 20 })
+    if (error) throw error
+    const rows = Array.isArray(data) ? data : []
+    if (!rows.length) {
+      listEl.innerHTML = `<div class="cr-empty">Aktuell keine User mit Churn-Score ≥ 0.7.</div>`
+      return
+    }
+    const esc = (s) => String(s ?? '').replace(/[<>&"]/g, c => ({ '<':'&lt;','>':'&gt;','&':'&amp;','"':'&quot;' }[c]))
+    listEl.innerHTML = rows.map((r, i) => {
+      const score = Number(r.churn_score || 0).toFixed(2)
+      const hot = Number(r.churn_score || 0) >= 0.85
+      const days = Number(r.days_since_seen || 0)
+      const uname = r.username ? '@' + r.username : '—'
+      return `
+        <div class="cr-row" data-uid="${esc(r.user_id)}">
+          <div class="cr-rank">${i + 1}</div>
+          <div class="cr-name" data-act="open">
+            <div class="nm">${esc(uname)}</div>
+            <div class="un">User-ID: ${esc(r.user_id)}</div>
+          </div>
+          <div class="cr-stats">
+            <span class="cr-score${hot ? ' hot' : ''}" title="Churn-Score">${score}</span>
+            <span class="cr-days" title="Tage seit letztem Sehen">${days}d</span>
+            <button class="cr-btn" data-act="push" title="Reactivation-Push senden">
+              ${iconHtml('send') || '🔔'} Push senden
+            </button>
+          </div>
+        </div>
+      `
+    }).join('')
+    listEl.querySelectorAll('.cr-row').forEach(row => {
+      const uid = row.dataset.uid
+      row.querySelector('[data-act="open"]')?.addEventListener('click', () => {
+        if (uid) location.href = `/crm/user-detail.html?id=${encodeURIComponent(uid)}`
+      })
+      row.querySelector('[data-act="push"]')?.addEventListener('click', async (e) => {
+        e.stopPropagation()
+        const btn = e.currentTarget
+        if (!uid || btn.disabled) return
+        btn.disabled = true
+        try {
+          await sendTestPush(uid)
+        } catch (err) {
+          console.error('[churn-risk] push failed', err)
+          toast?.(`Push fehlgeschlagen: ${err?.message || err}`, 'error')
+        } finally {
+          btn.disabled = false
+        }
+      })
+    })
+  } catch (e) {
+    console.error('[churn-risk] load failed', e)
+    listEl.innerHTML = `<div class="cr-err">Churn-Risk konnte nicht geladen werden: ${e?.message || e}</div>`
+  }
+}
+
 async function mountSubPanel(host, sub) {
   host.innerHTML = `<div class="loading" style="padding:24px;opacity:.7">Lade ${sub.label}…</div>`
 
@@ -220,6 +325,11 @@ async function mountSubPanel(host, sub) {
       puWrap.innerHTML = powerUsersBlockHtml()
       host.appendChild(puWrap.firstElementChild)
       mountPowerUsers(host).catch(() => {})
+
+      const crWrap = document.createElement('div')
+      crWrap.innerHTML = churnRiskBlockHtml()
+      host.appendChild(crWrap.firstElementChild)
+      mountChurnRisk(host).catch(() => {})
     }
     const panelMount = document.createElement('div')
     host.appendChild(panelMount)
