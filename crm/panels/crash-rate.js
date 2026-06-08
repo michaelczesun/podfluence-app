@@ -221,15 +221,15 @@ function renderContent(body, data) {
             <button class="btn btn-ghost btn-sm" id="spike-details-btn" data-component="${htmlEscape(data.topSpike.component)}" style="margin-left:auto">Details</button>
           </div>` : ''}
           <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px">
-            <div class="mini-stat" style="padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04)">
+            <div class="mini-stat" style="padding:10px 12px;border-radius:10px;background:var(--surface-elev)">
               <div class="mini-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Crashes ges.</div>
               <div class="mini-value" id="stat-total" style="font-size:20px;font-weight:600;margin-top:2px">0</div>
             </div>
-            <div class="mini-stat" style="padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04)">
+            <div class="mini-stat" style="padding:10px 12px;border-radius:10px;background:var(--surface-elev)">
               <div class="mini-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Betr. Sessions</div>
               <div class="mini-value" id="stat-sessions" style="font-size:20px;font-weight:600;margin-top:2px">0</div>
             </div>
-            <div class="mini-stat" style="padding:10px 12px;border-radius:10px;background:rgba(255,255,255,.04)">
+            <div class="mini-stat" style="padding:10px 12px;border-radius:10px;background:var(--surface-elev)">
               <div class="mini-label" style="font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--text-muted)">Sessions ges.</div>
               <div class="mini-value" id="stat-total-sessions" style="font-size:20px;font-weight:600;margin-top:2px">${data.sessionsUnavailable ? '—' : '0'}</div>
             </div>
