@@ -38,6 +38,18 @@ function formatValue(val, fmt) {
   return fmtNumber(val)
 }
 
+async function fetchListeningEventCount24h() {
+  // Wenn listening_hours=0: prüfe ob wirklich KEINE Events da sind (echt) oder
+  // Events ohne listened_ms (Bug). Gibt {events: N} zurück.
+  const since24h = new Date(Date.now() - 86_400_000).toISOString()
+  try {
+    const { count } = await sb.from('listening_activity')
+      .select('listener_id', { count: 'exact', head: true })
+      .gte('created_at', since24h)
+    return { events: Number(count) || 0 }
+  } catch (_) { return { events: null } }
+}
+
 async function fetchHeroStats() {
   // RPC zuerst — definitiv vorhanden laut Schema
   try {
@@ -55,6 +67,14 @@ async function fetchHeroStats() {
               value: Number(r[def.key]) || 0,
               prev: Number(r[`${def.key}_prev`] ?? r[`${def.key}_yday`]) || 0
             }
+          }
+        }
+        // Bug #10: bei 0h Hörstunden Event-Basis nachzählen für Info-Tooltip
+        if (norm.listening_hours && norm.listening_hours.value === 0) {
+          const { events } = await fetchListeningEventCount24h()
+          norm.listening_hours.basisEvents = events
+          if (events != null) {
+            try { console.info(`[admin-home] Hörstunden=0h (basis: ${events} listening_activity events 24h)`) } catch (_) {}
           }
         }
         return norm
@@ -76,15 +96,23 @@ async function fetchHeroStats() {
     safe(sb.from('listening_activity').select('listened_ms,created_at').gte('created_at', since48h).lt('created_at', since24h).limit(5000))
   ])
   const sumMs = (rows) => (rows || []).reduce((a, r) => a + Number(r.listened_ms || 0), 0)
-  return {
+  const listenHours = Math.round(sumMs(listenT?.data) / 3600000)
+  const result = {
     total_users:     { value: usersC.count ?? 0, prev: usersC.count ?? 0 },
     active_24h:      { value: openT.count ?? 0,  prev: openY.count ?? 0 },
     posts_24h:       { value: postsT.count ?? 0, prev: postsY.count ?? 0 },
     listening_hours: {
-      value: Math.round(sumMs(listenT?.data) / 3600000),
+      value: listenHours,
       prev:  Math.round(sumMs(listenY?.data) / 3600000)
     }
   }
+  // Bug #10: bei 0h Event-Basis loggen (basisEvents = Anzahl Roh-Events)
+  if (listenHours === 0) {
+    const events = (listenT?.data || []).length
+    result.listening_hours.basisEvents = events
+    try { console.info(`[admin-home] Hörstunden=0h (basis: ${events} listening_activity events 24h, fallback)`) } catch (_) {}
+  }
+  return result
 }
 
 async function fetchSpark(def) {
@@ -264,6 +292,19 @@ function actionOpenPanel(id) {
 
 // ---------- RENDER ----------
 
+function zeroInfoBadge(def, t) {
+  // Bug #10: bei Hörstunden = 0h Info-Tooltip — sagt User ob es echt (keine Events)
+  // oder Datenbug (Events ohne listened_ms) ist.
+  if (def.key !== 'listening_hours' || t.value !== 0) return ''
+  const basis = t.basisEvents
+  const label = basis == null
+    ? 'Keine Listening-Events in den letzten 24h registriert.'
+    : basis === 0
+      ? 'Keine Listening-Events in den letzten 24h registriert (basis: 0 events).'
+      : `${basis} Listening-Events vorhanden, aber listened_ms=0 — möglicher Bug (basis: ${basis} events).`
+  return `<span class="kpi-zero-info" title="${htmlEscape(label)}" aria-label="${htmlEscape(label)}">ⓘ</span>`
+}
+
 function renderHeroGrid(totals) {
   return `<div class="hero-grid" id="hero-grid">
     ${KPI_DEFS.map(def => {
@@ -275,6 +316,7 @@ function renderHeroGrid(totals) {
         <div class="kpi-card-head">
           <span class="kpi-icon" style="background:${def.color}22;color:${def.color}">${iconHtml(def.icon)}</span>
           <span class="kpi-label">${htmlEscape(def.label)}</span>
+          ${zeroInfoBadge(def, t)}
         </div>
         <div class="kpi-value" id="ah-val-${def.key}" data-fmt="${def.fmt}">${formatValue(t.value, def.fmt)}</div>
         <div class="kpi-spark" id="ah-spark-${def.key}"></div>
@@ -448,6 +490,13 @@ function styles() {
     .kpi-card-head { display:flex; align-items:center; gap:10px; margin-bottom:12px; }
     .kpi-icon { display:inline-flex; width:32px; height:32px; border-radius:9px; align-items:center; justify-content:center; }
     .kpi-label { font-size:12px; font-weight:500; color:var(--text-muted,#9ca3af); }
+    .kpi-zero-info {
+      display:inline-flex; align-items:center; justify-content:center;
+      width:18px; height:18px; border-radius:50%;
+      background:rgba(245,158,11,0.15); color:#F59E0B;
+      font-size:11px; font-weight:700; cursor:help;
+      margin-left:auto;
+    }
     .kpi-value { font-size:34px; font-weight:700; letter-spacing:-0.03em; line-height:1.1; font-variant-numeric:tabular-nums; margin-bottom:8px; }
     .kpi-spark { height:26px; min-height:26px; margin-bottom:8px; }
     .kpi-spark:empty { display:none; }
@@ -634,6 +683,14 @@ export default {
             }
             const card = container.querySelector(`.kpi-card[data-kpi="${def.key}"]`)
             if (card) {
+              // Bug #10: Zero-Info-Badge live aktualisieren
+              const head = card.querySelector('.kpi-card-head')
+              if (head) {
+                const existing = head.querySelector('.kpi-zero-info')
+                if (existing) existing.remove()
+                const badge = zeroInfoBadge(def, t)
+                if (badge) head.insertAdjacentHTML('beforeend', badge)
+              }
               const change = pctChange(t.value, t.prev)
               const up = change >= 0
               const ch = card.querySelector('.kpi-change')
