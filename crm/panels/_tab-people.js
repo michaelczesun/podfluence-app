@@ -66,6 +66,73 @@ function powerUsersBlockHtml() {
   `
 }
 
+function ltvSummaryBlockHtml() {
+  return `
+    <div class="ltv-block" data-ltv-summary style="margin-bottom:14px;">
+      <style>
+        .ltv-block { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.08); border-radius:12px; padding:14px 16px; }
+        .ltv-head { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+        .ltv-head h3 { margin:0; font-size:14px; font-weight:600; letter-spacing:.2px; }
+        .ltv-head .ltv-sub { font-size:11px; opacity:.55; }
+        .ltv-tiles { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:8px; }
+        .ltv-tile { background:rgba(255,255,255,0.03); border:1px solid rgba(255,255,255,0.06); border-radius:10px; padding:10px 12px; min-width:0; }
+        .ltv-tile .lbl { font-size:10px; opacity:.55; text-transform:uppercase; letter-spacing:.6px; margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ltv-tile .val { font-size:18px; font-weight:700; color:#34D399; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+        .ltv-tile.users .val { color:#60A5FA; }
+        .ltv-tile.share .val { color:#F59E0B; }
+        .ltv-empty, .ltv-err { padding:14px; opacity:.6; font-size:12px; text-align:center; }
+        .ltv-err { color:#F87171; }
+        @media (max-width: 767px) {
+          .ltv-tiles { grid-template-columns:repeat(2,minmax(0,1fr)); }
+          .ltv-tile .val { font-size:16px; }
+        }
+      </style>
+      <div class="ltv-head">
+        <h3>LTV-Summary</h3>
+        <span class="ltv-sub">Premium · Lifetime Value</span>
+      </div>
+      <div data-ltv-body>
+        <div class="ltv-empty">Lade LTV-Summary…</div>
+      </div>
+    </div>
+  `
+}
+
+async function mountLtvSummary(rootEl) {
+  const body = rootEl.querySelector('[data-ltv-body]')
+  if (!body) return
+  try {
+    const { data, error } = await sb.rpc('admin_ltv_summary')
+    if (error) throw error
+    const d = (data && typeof data === 'object' && !Array.isArray(data))
+      ? data
+      : (Array.isArray(data) ? (data[0] || {}) : {})
+    const eur = (n) => {
+      const v = Number(n || 0)
+      try {
+        return new Intl.NumberFormat('de-DE', { style:'currency', currency:'EUR', maximumFractionDigits:0 }).format(v)
+      } catch { return v.toFixed(0) + ' €' }
+    }
+    const total   = eur(d.total_ltv_eur)
+    const avg     = eur(d.avg_ltv_eur)
+    const top10   = eur(d.top10_ltv_eur)
+    const count   = Number(d.premium_user_count || 0).toLocaleString('de-DE')
+    const share   = Number(d.premium_share_pct || 0).toFixed(1) + ' %'
+    body.innerHTML = `
+      <div class="ltv-tiles">
+        <div class="ltv-tile"       title="Summe Lifetime-Value aller Premium-User"><div class="lbl">Total LTV</div><div class="val">${total}</div></div>
+        <div class="ltv-tile"       title="Durchschnittlicher LTV pro Premium-User"><div class="lbl">Ø LTV</div><div class="val">${avg}</div></div>
+        <div class="ltv-tile"       title="LTV der Top-10 Premium-User"><div class="lbl">Top-10 LTV</div><div class="val">${top10}</div></div>
+        <div class="ltv-tile users" title="Anzahl Premium-User"><div class="lbl">Premium</div><div class="val">${count}</div></div>
+        <div class="ltv-tile share" title="Anteil Premium an Gesamt-Usern"><div class="lbl">Premium-Share</div><div class="val">${share}</div></div>
+      </div>
+    `
+  } catch (e) {
+    console.error('[ltv-summary] load failed', e)
+    body.innerHTML = `<div class="ltv-err">LTV-Summary konnte nicht geladen werden: ${e?.message || e}</div>`
+  }
+}
+
 async function mountPowerUsers(rootEl) {
   const listEl = rootEl.querySelector('[data-pu-list]')
   if (!listEl) return
@@ -145,6 +212,10 @@ async function mountSubPanel(host, sub) {
     }
     host.innerHTML = ''
     if (sub.key === 'users') {
+      const ltvWrap = document.createElement('div')
+      ltvWrap.innerHTML = ltvSummaryBlockHtml()
+      host.appendChild(ltvWrap.firstElementChild)
+      mountLtvSummary(host).catch(() => {})
       const puWrap = document.createElement('div')
       puWrap.innerHTML = powerUsersBlockHtml()
       host.appendChild(puWrap.firstElementChild)
