@@ -213,7 +213,7 @@ export default {
             full_name: r.full_name || '',
             email: r.email || '',
             avatar_url: r.avatar_url || null,
-            role: r.role || null, // 'owner' | 'admin' | ...
+            role: r.admin_role || r.role || null, // RPC liefert admin_role
             last_seen_at: r.last_seen_at || null,
             created_at: r.created_at || null
           }))
@@ -235,16 +235,19 @@ export default {
       }
 
       function renderHero() {
-        const counts = {}
-        ROLE_ORDER.forEach(k => { counts[k] = 0 })
-        teamRows.forEach(r => { if (r.role && counts[r.role] != null) counts[r.role]++ })
+        const counts = teamRows.reduce((acc, m) => {
+          const role = m.admin_role || m.role
+          if (role) acc[role] = (acc[role] || 0) + 1
+          return acc
+        }, {})
 
         heroEl.innerHTML = ROLE_ORDER.map(k => {
           const r = ROLES[k]
+          const val = counts[k] ?? 0
           return `<div class="tm-pill">
             <span class="dot" style="background:${r.color};"></span>
             <span class="lbl">${htmlEscape(r.label)}</span>
-            <span class="num cu" data-val="${counts[k]}">0</span>
+            <span class="num cu" data-val="${val}">0</span>
           </div>`
         }).join('')
 
