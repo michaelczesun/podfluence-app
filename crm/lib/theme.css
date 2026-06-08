@@ -1,0 +1,70 @@
+/* CRM Color-Language pro Top-Tab
+ * Jeder Top-Tab hat eine eigene Akzent-Farbe.
+ * - --tab-accent: solide Hex-Farbe (Borders, Text-Akzente)
+ * - --tab-glow:   "r,g,b" Triplet für rgba()-Glows + Hover-Surfaces
+ *
+ * Default-Fallback (kein Tab aktiv / unbekannter Tab): Violett (system-Tab-Farbe).
+ */
+
+:root {
+  --tab-accent: #8B5CF6;
+  --tab-glow: 139,92,246;
+}
+
+[data-active-tab="pulse"]   { --tab-accent: #06B6D4; --tab-glow: 6,182,212; }
+[data-active-tab="people"]  { --tab-accent: #A78BFA; --tab-glow: 167,139,250; }
+[data-active-tab="growth"]  { --tab-accent: #34D399; --tab-glow: 52,211,153; }
+[data-active-tab="content"] { --tab-accent: #F59E0B; --tab-glow: 245,158,11; }
+[data-active-tab="system"]  { --tab-accent: #F87171; --tab-glow: 248,113,113; }
+
+/* ----- Sidebar: aktiver Top-Tab glüht in seiner Tab-Farbe ----- */
+.top-tab-link.active {
+  background: linear-gradient(
+    90deg,
+    rgba(var(--tab-glow), 0.28),
+    rgba(var(--tab-glow), 0.08)
+  ) !important;
+  box-shadow:
+    inset 3px 0 0 var(--tab-accent),
+    0 0 18px rgba(var(--tab-glow), 0.22);
+  color: #fff !important;
+}
+.top-tab-link.active .ic,
+.top-tab-link.active .lbl {
+  color: #fff;
+}
+
+/* Mobile Bottom-Bar: aktiver Tab glüht ebenfalls in der Tab-Farbe */
+.mobile-tab-item.mobile-tab-active {
+  color: var(--tab-accent) !important;
+}
+.mobile-tab-item.mobile-tab-active .mtab-ic svg {
+  stroke: var(--tab-accent);
+  filter: drop-shadow(0 0 6px rgba(var(--tab-glow), 0.55));
+}
+
+/* ----- Section-Titles: 3px left-border in Tab-Farbe ----- */
+.panel-head h2,
+.section-title,
+h3.section-title,
+.panel-shell h3 {
+  border-left: 3px solid var(--tab-accent);
+  padding-left: 10px;
+}
+
+/* panel-head h2 hatte bisher kein padding-left — sanfter Übergang */
+.panel-head h2 { line-height: 1.2; }
+
+/* ----- Hero-Tiles: subtle Border in Tab-Farbe bei :hover ----- */
+.hero-tile,
+.tile,
+.card-tile {
+  transition: border-color 160ms ease, box-shadow 160ms ease, transform 160ms ease;
+}
+.hero-tile:hover,
+.tile:hover,
+.card-tile:hover {
+  border-color: rgba(var(--tab-glow), 0.55) !important;
+  box-shadow: 0 0 0 1px rgba(var(--tab-glow), 0.35),
+              0 4px 24px rgba(var(--tab-glow), 0.12);
+}

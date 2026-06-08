@@ -9,6 +9,7 @@
 <meta name="theme-color" content="#0B0B0F" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E🎧%3C/text%3E%3C/svg%3E" />
 <link rel="stylesheet" href="/crm/lib/mobile.css?v=20260607-cards" />
+<link rel="stylesheet" href="/crm/lib/theme.css?v=20260608-tabcolor" />
 <style>
   :root {
     --bg-deep: #07070A;
@@ -740,6 +741,11 @@ async function loadPanel() {
   bottomBar.querySelectorAll('a[data-pid]').forEach(a => {
     a.classList.toggle('mobile-tab-active', a.dataset.pid === id)
   })
+
+  // Color-Language pro Top-Tab: setzt CSS-Custom-Props via [data-active-tab="…"]-Selektor
+  // (siehe /crm/lib/theme.css). --tab-accent / --tab-glow steuern Sidebar-Glow,
+  // Section-Title-Border und Hero-Tile-Hover-Border.
+  if (id) document.body.setAttribute('data-active-tab', id)
 
   const meta = PANELS.find(p => p.id === id)
   if (!meta) {
