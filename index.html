@@ -1394,18 +1394,32 @@
 
 <style>
 /* ======== SIDEBAR LAYOUT WRAPPER ======== */
+/* 8.6.: User-Feedback: sidebar nebendran sieht mies aus weil main links
+   gedrückt + stats-block mittig → Asymmetrie. Lösung: vertikal stacken,
+   beides zentriert. Sidebar wird zur horizontalen 4-Karten-Section unter main. */
 @media (min-width: 1100px) {
   #page-layout {
-    display: flex;
-    align-items: flex-start;
-    justify-content: center;
-    max-width: 1280px;
+    display: block;
+    max-width: 760px;
     margin: 0 auto;
     position: relative;
   }
-  #page-layout > main {
-    flex: 1 1 0;
-    max-width: 760px;
+  #page-layout > main { max-width: 100%; }
+  #page-layout > aside.activity-sidebar {
+    width: 100%; max-width: 100%; min-width: 0;
+    margin: 40px auto 0;
+    position: static;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 16px;
+    align-self: stretch;
+    max-height: none;
+    overflow: visible;
+  }
+  #page-layout > aside.activity-sidebar > .asb-section,
+  #page-layout > aside.activity-sidebar > .asb-header {
+    flex: 1 1 calc(50% - 8px);
+    min-width: 240px;
   }
 }
 
