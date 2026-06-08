@@ -1,8 +1,8 @@
-import { sb } from '/lib/supabase.js?v=20260608f'
-import { toast, modal, confirmDialog, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608f'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608f'
-import { countUp, fadeIn } from '/lib/animations.js?v=20260608f'
-import { drawer, glassCard } from '/lib/layout-extras.js?v=20260608f'
+import { sb } from '/lib/supabase.js?v=20260608g'
+import { toast, modal, confirmDialog, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608g'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608g'
+import { countUp, fadeIn } from '/lib/animations.js?v=20260608g'
+import { drawer, glassCard } from '/lib/layout-extras.js?v=20260608g'
 
 // Rollen-Definition: key -> { label, color, description, rank }
 // rank steuert: höher = mehr Macht. Owner = read-only für Nicht-Owner.

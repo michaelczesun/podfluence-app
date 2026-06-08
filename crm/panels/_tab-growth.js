@@ -12,16 +12,16 @@
 // statt zu crashen. Keine Spalten geraten — toleranter Normalizer für alternative
 // Feld-Namen (d1/day_1/retention_d1, etc.).
 //
-// CACHE-BUST: ?v=20260608f
+// CACHE-BUST: ?v=20260608g
 
-import { sb } from '/lib/supabase.js?v=20260608f'
+import { sb } from '/lib/supabase.js?v=20260608g'
 import {
   toast, htmlEscape, fmtNumber, fmtRelativeTime, iconHtml, spinnerHtml
-} from '/lib/ui.js?v=20260608f'
-import * as Charts from '/lib/charts.js?v=20260608f'
-import { exportCsv, exportPanelAsPdf } from '/lib/export.js?v=20260608f'
-import { fadeIn, skeletonLoader, countUp } from '/lib/animations.js?v=20260608f'
-import { statHero } from '/lib/layout-extras.js?v=20260608f'
+} from '/lib/ui.js?v=20260608g'
+import * as Charts from '/lib/charts.js?v=20260608g'
+import { exportCsv, exportPanelAsPdf } from '/lib/export.js?v=20260608g'
+import { fadeIn, skeletonLoader, countUp } from '/lib/animations.js?v=20260608g'
+import { statHero } from '/lib/layout-extras.js?v=20260608g'
 
 // -------------------- Sub-Tab Registry --------------------------------------
 
