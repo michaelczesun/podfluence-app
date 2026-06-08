@@ -129,21 +129,21 @@ function injectStyles() {
     .of-hero-row { display:grid; grid-template-columns:repeat(4,1fr); gap:14px; }
     @media(max-width:900px){ .of-hero-row{ grid-template-columns:repeat(2,1fr); } }
     .of-funnel { display:flex; flex-direction:column; gap:14px; padding:24px; }
-    .of-stage { position:relative; cursor:pointer; border-radius:14px; padding:18px 22px; color:#fff;
+    .of-stage { position:relative; cursor:pointer; border-radius:14px; padding:14px; color:#fff;
       transition:transform .18s ease, box-shadow .18s ease, filter .18s ease;
-      display:flex; align-items:center; justify-content:space-between; gap:18px;
+      display:flex; flex-direction:column; gap:8px;
+      min-height:100px;
       box-shadow:0 4px 18px rgba(0,0,0,.08);
     }
     .of-stage:hover { transform:translateY(-2px); filter:brightness(1.05); box-shadow:0 8px 28px rgba(0,0,0,.18); }
-    .of-stage .of-left { display:flex; align-items:center; gap:14px; min-width:0; }
-    .of-stage .of-icon { width:44px; height:44px; border-radius:12px; background:rgba(255,255,255,.18);
+    .of-stage .of-top { display:flex; align-items:center; gap:12px; min-width:0; flex-shrink:0; }
+    .of-stage .of-icon { width:36px; height:36px; border-radius:10px; background:rgba(255,255,255,.18);
       display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-    .of-stage .of-icon svg { width:22px; height:22px; }
-    .of-stage h3 { margin:0; font-size:17px; font-weight:600; color:#fff; }
-    .of-stage .of-desc { margin:2px 0 0; font-size:12px; opacity:.85; }
-    .of-stage .of-right { text-align:right; flex-shrink:0; }
-    .of-stage .of-count { font-size:26px; font-weight:700; line-height:1; }
-    .of-stage .of-pct { font-size:12px; opacity:.85; margin-top:4px; }
+    .of-stage .of-icon svg { width:20px; height:20px; }
+    .of-stage h3 { margin:0; font-size:15px; font-weight:600; color:#fff; line-height:1.2; }
+    .of-stage .of-count { font-size:32px; font-weight:700; line-height:1; flex-shrink:0; }
+    .of-stage .of-desc { font-size:12px; opacity:.85; flex-shrink:0; }
+    .of-stage .of-pct { font-size:11px; opacity:.8; }
     .of-arrow { display:flex; align-items:center; justify-content:center; gap:10px; color:var(--text-secondary,#6b7280); font-size:13px; }
     .of-arrow .of-drop { color:#ef4444; font-weight:600; }
     .of-arrow .of-conv { color:#10b981; font-weight:600; }
@@ -200,14 +200,12 @@ function renderFunnelHTML(data) {
     const overallPct = top ? Math.round((c / top) * 100) : 0
     html += `
       <div class="of-stage" data-stage="${s.key}" style="background:linear-gradient(135deg,${s.color},${s.color}cc); width:${widthPct}%; margin-left:${(100 - widthPct) / 2}%;">
-        <div class="of-left">
+        <div class="of-top">
           <div class="of-icon">${iconHtml(s.icon)}</div>
-          <div><h3>${htmlEscape(s.label)}</h3><div class="of-desc">${htmlEscape(s.desc)}</div></div>
+          <h3>${htmlEscape(s.label)}</h3>
         </div>
-        <div class="of-right">
-          <div class="of-count" data-count="${c}">${fmtNumber(c)}</div>
-          <div class="of-pct">${overallPct}% von Signup</div>
-        </div>
+        <div class="of-count" data-count="${c}">${fmtNumber(c)}</div>
+        <div class="of-desc">${htmlEscape(s.desc)} · <span class="of-pct">${overallPct}% von Signup</span></div>
       </div>
     `
     if (i < STAGES.length - 1) {
