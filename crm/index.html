@@ -447,16 +447,17 @@ try {
   }
   const { data: profile, error: profileError } = await sb
     .from('users')
-    .select('is_app_admin, admin_role')
+    .select('admin_role, is_app_admin')
     .eq('id', session.user.id)
     .maybeSingle()
   if (profileError) throw profileError
-  if (!profile?.is_app_admin) {
+  // admin_role (enum) ist die Wahrheit; is_app_admin (bool) ist Legacy-Fallback
+  const resolvedRole = profile?.admin_role || (profile?.is_app_admin ? 'admin' : null)
+  if (!resolvedRole) {
     location.replace('/app/')
     throw new Error('not admin — redirecting')
   }
-  // Role für Sidebar-Filter — Fallback 'admin' falls Spalte noch leer ist
-  window.__CRM_ROLE__ = (profile?.admin_role || 'admin').toLowerCase()
+  window.__CRM_ROLE__ = resolvedRole.toLowerCase()
 } catch (authErr) {
   mountEl.innerHTML = `<div class="panel-shell"><div class="empty" style="color:#F87171">Auth-Fehler: ${authErr?.message || authErr}<br><br><a href="/login/" style="color:#A78BFA">Erneut anmelden</a></div></div>`
   throw authErr
@@ -488,6 +489,8 @@ try {
 }
 
 const role = window.__CRM_ROLE__ || 'admin'
+// owner + admin sehen IMMER ALLES — höchste Rollen umgehen Permission-Mapping
+const IS_SUPERROLE = role === 'owner' || role === 'admin'
 
 // Top-Tabs gefiltert nach Rolle (deny → ausgeblendet)
 // Hash-Format: #<tab>/<subtab> (z.B. #people/users, #growth/funnels)
@@ -497,7 +500,7 @@ const PANELS = Object.entries(PERMISSIONS.tabs || {}).map(([key, def]) => ({
   tabKey: key,
   title: def.label || key,
   icon: TAB_ICONS[key] || '•',
-  access: def.access?.[role] || (PERMISSIONS.nullRoleAccess ? 'rw' : 'deny'),
+  access: IS_SUPERROLE ? 'rw' : (def.access?.[role] || (PERMISSIONS.nullRoleAccess ? 'rw' : 'deny')),
   subtabs: def.subtabs || null
 }))
 
@@ -510,6 +513,7 @@ function defaultSubFor(tabKey) {
   if (!meta?.subtabs) return ''
   const entries = Object.entries(meta.subtabs)
   const first = entries.find(([, acc]) => {
+    if (IS_SUPERROLE) return true
     const a = (acc && typeof acc === 'object') ? acc[role] : acc
     return a && a !== 'deny'
   })

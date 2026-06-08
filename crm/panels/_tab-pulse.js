@@ -313,7 +313,7 @@ async function mountSubTab(id, host) {
 // ---------- EXPORT ----------
 
 export default {
-  id: 'tab-pulse',
+  id: 'pulse',
   title: 'Pulse',
   category: 'pulse',
 
