@@ -192,7 +192,12 @@ function columnHtml(col, tasks) {
       <div class="ti-col-body">
         ${inCol.length
           ? inCol.map(cardHtml).join('')
-          : `<div class="ti-empty">Keine Aufgaben</div>`}
+          : `<div class="ti-empty">
+              <div class="ti-empty-icon">${col.icon}</div>
+              <div class="ti-empty-title">Keine Aufgaben in "${htmlEscape(col.label)}"</div>
+              <div class="ti-empty-sub">${col.key === 'open' ? 'Alles erledigt — oder noch nichts angelegt.' : col.key === 'in_progress' ? 'Nichts in Bearbeitung.' : 'Noch keine Aufgaben abgeschlossen.'}</div>
+              ${col.key === 'open' ? `<button class="ti-btn ti-btn-p ti-empty-cta" data-empty-new="1" style="margin-top:10px">＋ Aufgabe anlegen</button>` : ''}
+            </div>`}
       </div>
     </section>`
 }
