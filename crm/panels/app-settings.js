@@ -319,7 +319,7 @@ function wireRows(body, settings) {
       saveBtn.disabled = true
       saveBtn.innerHTML = '⏳ Speichert…'
       try {
-        const { error } = await sb.rpc('admin_setting_set', {
+        const { error } = await sb.rpc('admin_settings_set', {
           p_key: key,
           p_value: serialized
         })
