@@ -6,13 +6,13 @@
 //   - alerts:          NEU — admin_anomaly_detect() RPC → Liste z>2 Anomalien (mit Fallback)
 //   - activity-stream: reused → audit-log.js (Realtime Audit-Feed)
 
-import { sb } from '/lib/supabase.js?v=20260608m'
-import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608m'
-import { fadeIn, countUp } from '/lib/animations.js?v=20260608m'
-import { glassCard, pullToRefresh } from '/lib/layout-extras.js?v=20260608m'
+import { sb } from '/lib/supabase.js?v=20260608n'
+import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608n'
+import { fadeIn, countUp } from '/lib/animations.js?v=20260608n'
+import { glassCard, pullToRefresh } from '/lib/layout-extras.js?v=20260608n'
 
-import adminHome from '/crm/panels/admin-home.js?v=20260608m'
-import auditLog  from '/crm/panels/audit-log.js?v=20260608m'
+import adminHome from '/crm/panels/admin-home.js?v=20260608n'
+import auditLog  from '/crm/panels/audit-log.js?v=20260608n'
 
 // ---------- STYLES ----------
 

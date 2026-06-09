@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608m'
-import { toast, fmtNumber, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608m'
-import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608m'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608m'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608m'
-import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js?v=20260608m'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608m'
+import { sb } from '/lib/supabase.js?v=20260608n'
+import { toast, fmtNumber, fmtRelativeTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608n'
+import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608n'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608n'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608n'
+import { drawer, segmentedControl, statHero } from '/lib/layout-extras.js?v=20260608n'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608n'
 
 // HINWEIS: Datenquelle insta_posts_queue ist eine TOTE Tabelle (siehe Schema-Audit).
 // Es existiert KEINE produktive Quelle für IG-Post-Performance-Daten und kein passendes Admin-RPC.
