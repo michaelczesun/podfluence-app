@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Transparenz · hozd</title>
+<meta name="description" content="Transparenz-Seite von hozd: wie der Feed funktioniert, wie unser Empfehlungssystem rankt, und wo wir KI einsetzen (DSA Art. 27 + EU AI Act Disclosure)." />
+<link rel="canonical" href="https://hozd.app/transparenz/" />
+<meta name="robots" content="index,follow" />
+<meta name="theme-color" content="#0B0B0F" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E🎧%3C/text%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg-deep: #07070A;
+    --surface: #16161D;
+    --border: #2A2A33;
+    --primary-2: #A78BFA;
+    --text: #FFFFFF;
+    --text-muted: #9CA3AF;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-deep); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6;
+  }
+  body {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(139, 92, 246, 0.18), transparent 60%),
+      var(--bg-deep);
+    min-height: 100vh;
+  }
+  main { max-width: 760px; margin: 0 auto; padding: 56px 24px 64px; }
+  h1 { font-size: 32px; margin: 0 0 8px; }
+  h2 { font-size: 20px; margin: 28px 0 8px; color: var(--primary-2); }
+  h3 { font-size: 16px; margin: 18px 0 6px; }
+  p, li { color: var(--text-muted); }
+  ul { padding-left: 22px; }
+  strong { color: var(--text); }
+  a { color: var(--primary-2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .back { display: inline-block; margin-bottom: 24px; font-size: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 24px; margin: 16px 0; }
+  .pill { display: inline-block; font-size: 11px; padding: 3px 8px; border-radius: 999px; background: rgba(167,139,250,0.15); color: var(--primary-2); border: 1px solid rgba(167,139,250,0.30); margin-left: 6px; vertical-align: middle; }
+  .ok { color: #34D399; }
+  .no { color: #F87171; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">← zurück zu hozd.app</a>
+  <h1>Transparenz</h1>
+  <p>Wie der Feed funktioniert, wie wir empfehlen, und wo KI im Spiel ist. Stand: Juni 2026.</p>
+  <p style="font-size: 13px;">Diese Seite erfüllt die Informationspflichten nach <strong>DSA Art. 27</strong> (Transparenz von Empfehlungssystemen) und der <strong>EU-KI-Verordnung (AI Act) Art. 50</strong> (Kennzeichnung KI-generierter Inhalte).</p>
+
+  <div class="card">
+    <h2>1. Wie funktioniert der Feed?</h2>
+    <p>
+      Der Haupt-Feed („Discover") ist <strong>überwiegend chronologisch</strong>. Du siehst zuerst die neuesten Beiträge von <strong>Accounts, denen du folgst</strong>. Dazwischen mischen wir vereinzelt Posts mit ähnlichen „Vibes" (passenden Themen-Tags zu Podcasts, die du oft hörst), damit du nicht in einer Filterblase landest.
+    </p>
+    <p>
+      Es gibt <strong>keine</strong> Werbe-Einschübe, keine bezahlten Boosts und keine algorithmische Reihenfolge, die ältere Posts nach oben hebt, weil sie „performen". Neu schlägt alt.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>2. Wie funktioniert das Empfehlungssystem?</h2>
+    <p>
+      Im „For You"-Bereich (Empfehlungen) ranken wir Beiträge heuristisch nach drei Hauptsignalen:
+    </p>
+    <ul>
+      <li><strong>Topic-Match:</strong> Wie stark überschneiden sich die Themen-Tags eines Posts mit den Podcasts, die du regelmäßig hörst?</li>
+      <li><strong>Friends-Signal:</strong> Hat jemand interagiert (Like, Kommentar), dem du folgst — oder der dir folgt?</li>
+      <li><strong>Recency:</strong> Wie frisch ist der Post? Ältere Beiträge fallen exponentiell ab.</li>
+    </ul>
+    <p>
+      Das Ranking ist eine <strong>fest verdrahtete Formel</strong>, kein neuronales Netz. Es lernt nichts „im Hintergrund" über dich — deine Hör-Historie und dein Follow-Graph sind die einzigen Eingaben. Du kannst die Empfehlungen jederzeit umgehen, indem du im Discover-Tab bleibst.
+    </p>
+    <p style="font-size: 13px;">
+      <strong>Wichtige Parameter:</strong> Topic-Match-Gewicht 50 %, Friends-Signal 30 %, Recency 20 %. Halbwertszeit eines Posts: ca. 48 Stunden.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>3. KI in der App — was ist KI-erzeugt? <span class="pill">AI Act Art. 50</span></h2>
+    <p>Folgende Inhalte werden durch generative KI erstellt oder unterstützt und sind in der App als solche gekennzeichnet:</p>
+    <ul>
+      <li><strong>Bot-Newsletter:</strong> Der tägliche „hozd-Bot"-Report (Tagesreport, Stabilitätsupdates) wird durch ein LLM aus internen Plattform-Metriken zusammengefasst. Erkennbar am Bot-Avatar und am Hinweis „🤖 vom hozd-Bot".</li>
+      <li><strong>KI-Polls:</strong> Vorgeschlagene Umfrage-Antworten in der Poll-Erstellung. Endgültige Auswahl trifft immer der Mensch.</li>
+      <li><strong>Translation-Suggestions:</strong> Übersetzung von Kommentaren / Posts in deine Sprache auf Tap. Quelle bleibt sichtbar.</li>
+      <li><strong>Push-Hooks:</strong> Variantenvorschläge für Push-Benachrichtigungs-Texte (intern, nicht user-facing inhaltlich).</li>
+    </ul>
+    <p><strong>Anbieter:</strong> Wir nutzen Modelle von <strong>OpenAI</strong> (GPT-Familie) und <strong>Anthropic</strong> (Claude-Familie). Es werden keine persönlich identifizierbaren Daten an die Anbieter übertragen, die nicht für die jeweilige Funktion zwingend nötig sind.</p>
+  </div>
+
+  <div class="card">
+    <h2>4. Was wird <span class="no">NICHT</span> mit KI gemacht?</h2>
+    <ul>
+      <li><strong class="ok">Moderation:</strong> Meldungen, Sperren und Content-Entscheidungen werden <strong>manuell</strong> durch das hozd-Team geprüft. Es gibt keine automatisierte Account-Löschung und keinen KI-basierten Shadowban.</li>
+      <li><strong class="ok">Eure Posts, Kommentare, Voice-Reactions:</strong> Werden zu 100 % von euch geschrieben/aufgenommen. Wir generieren keine Posts in eurem Namen.</li>
+      <li><strong class="ok">Hörverhalten-Daten:</strong> Werden nicht an KI-Anbieter verkauft oder zum Modell-Training freigegeben.</li>
+      <li><strong class="ok">Profilbilder, Voice-Clips:</strong> Werden nicht KI-generiert eingesetzt — wir kennzeichnen sie nicht als KI, weil sie es nicht sind.</li>
+    </ul>
+  </div>
+
+  <div class="card">
+    <h2>5. Recht auf ein nicht-personalisiertes Erlebnis <span class="pill">DSA Art. 27 Abs. 3</span></h2>
+    <p>
+      Du hast das Recht auf einen <strong>Feed ohne personalisiertes Ranking</strong>. Da unser Discover-Feed ohnehin chronologisch ist, betrifft das vor allem den „For You"-Bereich.
+    </p>
+    <p>
+      Ein expliziter Toggle <em>„Empfehlungen abschalten"</em> wird in den App-Einstellungen unter <strong>Einstellungen → Privatsphäre → Empfehlungen</strong> ausgerollt. Bis dahin kannst du den Discover-Tab nutzen — er ist die nicht-personalisierte Variante.
+    </p>
+    <p style="font-size: 13px;">
+      Fragen, Beschwerden oder Auskunftsersuchen zum Ranking: <a href="mailto:hello@hozd.app">hello@hozd.app</a>.
+    </p>
+  </div>
+
+  <p style="font-size: 12px; margin-top: 32px; text-align: center;">
+    <a href="/impressum/">Impressum</a> · <a href="/datenschutz/">Datenschutz</a> · <a href="/transparenz/">Transparenz</a>
+  </p>
+</main>
+</body>
+</html>
