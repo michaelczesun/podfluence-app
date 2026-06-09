@@ -1,0 +1,393 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Auto-Tester · hozd CRM</title>
+<style>
+  body { margin: 0; padding: 20px; background: #07070A; color: #fff; font-family: -apple-system, sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 8px; }
+  .sub { color: #9CA3AF; font-size: 13px; margin-bottom: 16px; }
+  button { background: #8B5CF6; color: #fff; border: none; padding: 12px 20px; border-radius: 10px; font-size: 14px; font-weight: 700; cursor: pointer; margin-right: 8px; margin-bottom: 6px; }
+  button:hover { background: #7C3AED; }
+  button:disabled { opacity: 0.5; cursor: wait; }
+  .row { padding: 10px 12px; border-bottom: 1px solid rgba(255,255,255,0.06); display: grid; grid-template-columns: 200px 80px 1fr; gap: 12px; font-size: 13px; }
+  .row.ok { background: rgba(34,197,94,0.05); }
+  .row.warn { background: rgba(252,211,77,0.05); }
+  .row.err { background: rgba(248,113,113,0.08); }
+  .badge { font-weight: 700; }
+  .badge.ok { color: #34D399; }
+  .badge.warn { color: #FCD34D; }
+  .badge.err { color: #F87171; }
+  .errs { color: #fca5a5; font-family: monospace; font-size: 11px; max-height: 140px; overflow-y: auto; white-space: pre-wrap; }
+  .progress { font-size: 13px; color: #FCD34D; margin: 10px 0; }
+  #hidden { position: fixed; left: -10000px; top: 0; width: 1200px; height: 800px; pointer-events: none; }
+  #report { margin-top: 16px; padding: 12px; background: rgba(255,255,255,0.04); border-radius: 8px; font-family: monospace; font-size: 11px; white-space: pre-wrap; max-height: 300px; overflow-y: auto; display: none; }
+  .toolbar { margin: 12px 0; }
+  .summary { font-size: 14px; margin: 8px 0; }
+</style>
+</head>
+<body>
+<h1>🤖 Auto-Tester — Browser-Side Panel- & Button-Walker</h1>
+<div class="sub">Mountet alle Sub-Panels in unsichtbarer Insel, klickt sichere Buttons, prüft Modale, sammelt thrown errors / console.error / network 4xx-5xx / layout-overflow. <code>?auto=1</code> für Autostart.</div>
+
+<div class="toolbar">
+  <button id="run">▶ Auto-Tester starten</button>
+  <button id="copyJson" style="display:none;background:#10B981">📋 JSON kopieren</button>
+  <button id="download" style="display:none;background:#3B82F6">⬇ Download JSON</button>
+  <button id="send" style="display:none;background:#F59E0B">📤 An Edge-Function senden</button>
+</div>
+
+<div id="progress" class="progress"></div>
+<div id="summary" class="summary"></div>
+<div id="results"></div>
+<div id="report"></div>
+<div id="hidden"></div>
+
+<script type="module">
+import { sb, currentUserContext } from '/lib/supabase.js?v=20260608l';
+
+const CACHE_BUST = 'v=20260608l';
+
+const PANELS = [
+  // Pulse
+  'admin-home','kpi-live-totals','dau-trend','new-signups-7d','crash-rate',
+  // People
+  'users-list','user-type-split','verified-premium-flags','onboarding-funnel','client-build-versions','top-listeners','leads-pipeline','team-management',
+  // Growth
+  'posts-per-day','episodes-per-day','trending-hashtags','podcaster-engagement-7d','listens-per-day','top-listened-podcasts','vibe-distribution','users-by-country','referral-leaderboard','referral-overview','invite-codes-usage','trending-podcasters','achievements-unlocks',
+  // Content
+  'recent-updates-feed','active-polls','open-bug-reports','bug-reports-triage','podcast-verification-queue','insta-approval-queue','insta-post-type-scores','newsletter-audience-sync','push-broadcast',
+  // System
+  'settings','app-settings','audit-log','tasks-inbox','storage-ops',
+];
+
+// Skip-Regex: alles was mutiert / DB schreibt / sendet
+const SKIP = /speichern|löschen|delete|remove|senden|publizier|ban|kick|reset|bestätig|confirm|abmelden|logout|abschicken|verschick|broadcast|push|approve|freigeb|verbieten|sperr|entfern|verwerf|update|anlegen|erstell|create/i;
+
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+// -------- Collectors --------
+const networkErrors = [];
+const errorsByPanel = new Map();
+const thrownByPanel = new Map();
+const layoutOverflowByPanel = new Map();
+const buttonFindings = [];
+const modalFindings = [];
+
+const origFetch = window.fetch;
+window.fetch = async function(...args) {
+  const url = typeof args[0] === 'string' ? args[0] : (args[0] && args[0].url) || '';
+  try {
+    const r = await origFetch.apply(this, args);
+    if (!r.ok) {
+      const body = await r.clone().text().catch(() => '');
+      networkErrors.push({ panel: window.__currentPanel, url: url.slice(-100), status: r.status, body: body.slice(0, 200) });
+    }
+    return r;
+  } catch (e) {
+    networkErrors.push({ panel: window.__currentPanel, url: url.slice(-100), status: 'ERR', body: String(e.message || e) });
+    throw e;
+  }
+};
+
+const origConsoleError = console.error;
+console.error = function(...args) {
+  const cur = window.__currentPanel;
+  if (cur) {
+    if (!errorsByPanel.has(cur)) errorsByPanel.set(cur, []);
+    errorsByPanel.get(cur).push(args.map(a => (a && a.message) || String(a)).join(' ').slice(0, 300));
+  }
+  origConsoleError.apply(console, args);
+};
+
+window.addEventListener('error', (ev) => {
+  const cur = window.__currentPanel;
+  if (!cur) return;
+  if (!thrownByPanel.has(cur)) thrownByPanel.set(cur, []);
+  thrownByPanel.get(cur).push(`window.error: ${ev.message}`);
+});
+window.addEventListener('unhandledrejection', (ev) => {
+  const cur = window.__currentPanel;
+  if (!cur) return;
+  if (!thrownByPanel.has(cur)) thrownByPanel.set(cur, []);
+  thrownByPanel.get(cur).push(`unhandledrejection: ${String(ev.reason && ev.reason.message || ev.reason)}`);
+});
+
+// -------- Layout overflow scan --------
+function scanOverflow(root) {
+  const overflows = [];
+  const all = root.querySelectorAll('*');
+  for (const el of all) {
+    if (el.scrollWidth > el.clientWidth + 2 && el.clientWidth > 0) {
+      const tag = el.tagName.toLowerCase();
+      const cls = (el.className && typeof el.className === 'string') ? el.className.slice(0, 40) : '';
+      overflows.push(`${tag}.${cls} (sw=${el.scrollWidth}, cw=${el.clientWidth})`);
+      if (overflows.length >= 5) break;
+    }
+  }
+  return overflows;
+}
+
+// -------- Modal detection --------
+const MODAL_SEL = '.modal-overlay, .modal, .dialog, .sheet, [role=dialog], .lightbox';
+const CLOSE_SEL = '.modal-close, [data-close], [aria-label*=close i], [aria-label*=schließ i], button[aria-label*=close i], .close-btn';
+const BACKDROP_SEL = '.modal-backdrop, .backdrop, .overlay-bg';
+
+function isVisible(el) {
+  if (!el) return false;
+  const s = getComputedStyle(el);
+  if (s.display === 'none' || s.visibility === 'hidden' || parseFloat(s.opacity) === 0) return false;
+  const r = el.getBoundingClientRect();
+  return r.width > 0 && r.height > 0;
+}
+
+async function checkModalAfterClick(panelId, btnLabel, container) {
+  // Search globally — modals often portal to body
+  const all = [...document.querySelectorAll(MODAL_SEL), ...container.querySelectorAll(MODAL_SEL)];
+  const modal = all.find(isVisible);
+  if (!modal) return null;
+
+  const findings = [];
+  const closeBtn = modal.querySelector(CLOSE_SEL);
+  if (!closeBtn) findings.push('kein close-X gefunden');
+
+  // Try backdrop close
+  const backdrop = document.querySelector(BACKDROP_SEL);
+  if (backdrop && isVisible(backdrop)) {
+    backdrop.click();
+    await wait(400);
+    const stillThere = [...document.querySelectorAll(MODAL_SEL)].some(isVisible);
+    if (stillThere) findings.push('Backdrop-Click schließt Modal nicht');
+  }
+
+  // Force close: try close button, then ESC
+  if (closeBtn) { try { closeBtn.click(); await wait(300); } catch {} }
+  const stillOpen = [...document.querySelectorAll(MODAL_SEL)].filter(isVisible);
+  for (const m of stillOpen) {
+    try { m.remove(); } catch {}
+  }
+  // ESC fallback
+  document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+  await wait(150);
+
+  return findings.length ? { panel: panelId, button: btnLabel, findings } : null;
+}
+
+// -------- Button walker --------
+async function walkButtons(panelId, container) {
+  const errors = [];
+  const btns = container.querySelectorAll('button:not([disabled]), [role=button]:not([disabled])');
+  let clicked = 0;
+  for (const btn of btns) {
+    if (clicked >= 12) break; // Safety cap per panel
+    const label = (btn.textContent || btn.getAttribute('aria-label') || '').trim().slice(0, 40);
+    if (!label) continue;
+    if (SKIP.test(label)) continue;
+    if (btn.classList.contains('danger') || btn.dataset.danger) continue;
+
+    const errBefore = (errorsByPanel.get(panelId) || []).length;
+    const netBefore = networkErrors.length;
+    const thrownBefore = (thrownByPanel.get(panelId) || []).length;
+
+    try {
+      btn.click();
+    } catch (e) {
+      errors.push({ button: label, error: String(e.message || e).slice(0, 200) });
+      continue;
+    }
+    clicked++;
+    await wait(1500);
+
+    // Check for modal
+    const modalFinding = await checkModalAfterClick(panelId, label, container);
+    if (modalFinding) modalFindings.push(modalFinding);
+
+    const errAfter = (errorsByPanel.get(panelId) || []).slice(errBefore);
+    const thrownAfter = (thrownByPanel.get(panelId) || []).slice(thrownBefore);
+    const netAfter = networkErrors.slice(netBefore).filter(n => typeof n.status === 'number' && n.status >= 400);
+
+    if (errAfter.length || thrownAfter.length || netAfter.length) {
+      errors.push({
+        button: label,
+        consoleErrors: errAfter.slice(0, 2),
+        thrown: thrownAfter.slice(0, 2),
+        network: netAfter.slice(0, 2).map(n => `${n.status} ${n.url}`),
+      });
+    }
+  }
+  if (errors.length) buttonFindings.push({ panel: panelId, clicked, errors });
+  return clicked;
+}
+
+// -------- Main run --------
+const results = [];
+
+async function runAll() {
+  const ctx = await currentUserContext();
+  if (!ctx) { alert('Bitte erst im CRM einloggen'); window.location.href = '/login/'; return; }
+
+  const btn = document.getElementById('run');
+  btn.disabled = true; btn.textContent = '⏳ Läuft …';
+  const progress = document.getElementById('progress');
+  const resultsEl = document.getElementById('results');
+  const hidden = document.getElementById('hidden');
+
+  let i = 0;
+  for (const id of PANELS) {
+    i++;
+    progress.textContent = `${i}/${PANELS.length}: ${id}`;
+    window.__currentPanel = id;
+    const netBefore = networkErrors.length;
+
+    let status = 'ok', errText = '', clicked = 0, overflows = [];
+    const cont = document.createElement('div');
+    cont.style.cssText = 'width:1200px;height:800px;overflow:auto;';
+    hidden.innerHTML = '';
+    hidden.appendChild(cont);
+
+    try {
+      const mod = await import(`/crm/panels/${id}.js?${CACHE_BUST}&t=${Date.now()}`);
+      const panel = mod.default || mod;
+      if (panel && typeof panel.mount === 'function') {
+        await panel.mount(cont);
+        await wait(4000);
+        overflows = scanOverflow(cont);
+        clicked = await walkButtons(id, cont);
+      } else {
+        status = 'warn'; errText = 'kein default.mount export';
+      }
+    } catch (e) {
+      status = 'err'; errText = String(e.message || e).slice(0, 300);
+    }
+
+    const consErrs = errorsByPanel.get(id) || [];
+    const thrown = thrownByPanel.get(id) || [];
+    const net4xx = networkErrors.slice(netBefore).filter(n => typeof n.status === 'number' && n.status >= 400);
+
+    if (status === 'ok') {
+      if (thrown.length || net4xx.some(n => n.status >= 500)) status = 'err';
+      else if (consErrs.length || net4xx.length || overflows.length) status = 'warn';
+    }
+
+    if (overflows.length) layoutOverflowByPanel.set(id, overflows);
+
+    const result = {
+      panel: id,
+      status,
+      mountError: errText || null,
+      consoleErrors: consErrs.slice(0, 5),
+      thrown: thrown.slice(0, 5),
+      network: net4xx.slice(0, 5).map(n => ({ status: n.status, url: n.url })),
+      overflows,
+      buttonsClicked: clicked,
+    };
+    results.push(result);
+
+    const errsDisplay = [
+      errText && `MOUNT: ${errText}`,
+      ...thrown.slice(0,2).map(t => `THROWN: ${t}`),
+      ...consErrs.slice(0,2).map(t => `CONSOLE: ${t}`),
+      ...net4xx.slice(0,2).map(n => `NET ${n.status}: ${n.url}`),
+      overflows.length && `OVERFLOW: ${overflows[0]}`,
+      clicked && `clicked ${clicked} btn`,
+    ].filter(Boolean).join('\n');
+
+    const row = document.createElement('div');
+    row.className = `row ${status}`;
+    row.innerHTML = `
+      <div><strong>${id}</strong></div>
+      <div><span class="badge ${status}">${status.toUpperCase()}</span></div>
+      <div class="errs"></div>
+    `;
+    row.querySelector('.errs').textContent = errsDisplay || '—';
+    resultsEl.appendChild(row);
+
+    // cleanup before next panel
+    hidden.innerHTML = '';
+  }
+
+  const okCount = results.filter(r => r.status === 'ok').length;
+  const warnCount = results.filter(r => r.status === 'warn').length;
+  const errCount = results.filter(r => r.status === 'err').length;
+  document.getElementById('summary').innerHTML =
+    `<strong style="color:#34D399">${okCount} OK</strong> · <strong style="color:#FCD34D">${warnCount} WARN</strong> · <strong style="color:#F87171">${errCount} ERR</strong> · Modal-Findings: ${modalFindings.length} · Button-Findings: ${buttonFindings.length}`;
+  progress.textContent = 'fertig.';
+
+  const fullReport = {
+    generatedAt: new Date().toISOString(),
+    user: ctx && ctx.user_id || null,
+    panels: results,
+    modalFindings,
+    buttonFindings,
+  };
+
+  const reportEl = document.getElementById('report');
+  reportEl.textContent = JSON.stringify(fullReport, null, 2);
+  reportEl.style.display = 'block';
+  document.getElementById('copyJson').style.display = 'inline-block';
+  document.getElementById('download').style.display = 'inline-block';
+  document.getElementById('send').style.display = 'inline-block';
+  btn.disabled = false; btn.textContent = '▶ Nochmal';
+
+  window.__autoTesterReport = fullReport;
+}
+
+document.getElementById('run').addEventListener('click', runAll);
+
+document.getElementById('copyJson').addEventListener('click', async () => {
+  await navigator.clipboard.writeText(document.getElementById('report').textContent);
+  const b = document.getElementById('copyJson');
+  b.textContent = '✓ Kopiert'; setTimeout(() => b.textContent = '📋 JSON kopieren', 2000);
+});
+
+document.getElementById('download').addEventListener('click', () => {
+  const blob = new Blob([document.getElementById('report').textContent], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `auto-tester-${new Date().toISOString().slice(0,19).replace(/[:T]/g,'-')}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+document.getElementById('send').addEventListener('click', async () => {
+  const b = document.getElementById('send');
+  b.disabled = true; b.textContent = '⏳ sende …';
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    const r = await origFetch(`${sb.supabaseUrl}/functions/v1/tester-collect`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${session && session.access_token || sb.supabaseKey}`,
+        'apikey': sb.supabaseKey,
+      },
+      body: document.getElementById('report').textContent,
+    });
+    if (!r.ok) throw new Error(`${r.status} ${await r.text().catch(()=>'')}`);
+    b.textContent = '✓ Gesendet';
+  } catch (e) {
+    b.textContent = '✗ Fehler';
+    alert('Send failed: ' + (e.message || e));
+  } finally {
+    setTimeout(() => { b.disabled = false; b.textContent = '📤 An Edge-Function senden'; }, 3000);
+  }
+});
+
+// Auto-Run wenn ?auto=1
+const params = new URLSearchParams(location.search);
+if (params.get('auto') === '1') {
+  (async () => {
+    // Warte bis Auth ready
+    for (let i = 0; i < 20; i++) {
+      const ctx = await currentUserContext();
+      if (ctx) break;
+      await wait(500);
+    }
+    runAll();
+  })();
+}
+</script>
+</body>
+</html>
