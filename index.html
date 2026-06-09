@@ -1592,27 +1592,27 @@
   </section>
 
   <section class="stats-wrap">
-    <div class="stats-eyebrow">Live &amp; wächst täglich</div>
+    <div class="stats-eyebrow" data-i18n="hero.live-grows">Live &amp; wächst täglich</div>
     <div class="stats-hero">
       <div class="stats-hero-num" data-count="0" id="stat-episodes-big">…</div>
       <div class="stats-hero-lbl">
-        <strong>Episoden ready zum Hören</strong>
-        plus täglich neue Folgen rein.
+        <strong data-i18n="hero.episodes-ready">Episoden ready zum Hören</strong>
+        <span data-i18n="hero.daily-new">plus täglich neue Folgen rein.</span>
       </div>
     </div>
-    <p class="stats-sub">
+    <p class="stats-sub" data-i18n="hero.open-for-all">
       <strong>Offen für alle.</strong> Egal ob du seit Jahren Podcasts machst oder gerade erst überlegst anzufangen — RSS-Feed rein, fertig. Jede:r kann sich registrieren, jede:r kann posten, jede:r kann mitreden.
     </p>
     <div class="stats-pillars">
       <div class="pillar">
         <div class="pillar-num" data-count="0" id="stat-podcasts-big">…</div>
-        <div class="pillar-lbl">Shows aktiv</div>
-        <div class="pillar-sub">alle mit Cover &amp; RSS</div>
+        <div class="pillar-lbl" data-i18n="stats.shows-active">Shows aktiv</div>
+        <div class="pillar-sub" data-i18n="stats.shows-sub">alle mit Cover &amp; RSS</div>
       </div>
       <div class="pillar">
         <div class="pillar-num" data-count="0" id="stat-users-big">…</div>
-        <div class="pillar-lbl">Menschen drin</div>
-        <div class="pillar-sub" id="stat-users-sub">Podcaster:innen · Hörer:innen</div>
+        <div class="pillar-lbl" data-i18n="stats.people-in">Menschen drin</div>
+        <div class="pillar-sub" id="stat-users-sub" data-i18n="stats.people-sub">Podcaster:innen · Hörer:innen</div>
       </div>
     </div>
   </section>
@@ -2527,27 +2527,41 @@
         setCount('stat-podcasts-big', d.podcasts);
         setCount('stat-episodes-big', d.episodes);
 
-        // Subtitle unter "Menschen drin" mit echten Aufteilung
+        // Subtitle unter "Menschen drin" mit echter Aufteilung
         var sub = document.getElementById('stat-users-sub');
         if (sub && typeof d.podcasters === 'number') {
-          sub.textContent = d.podcasters + ' Podcaster:innen · ' + (d.listeners || 0) + ' Hörer:innen';
+          var isEn = (typeof lang !== 'undefined' && lang === 'en');
+          sub.textContent = isEn
+            ? d.podcasters + ' Podcasters · ' + (d.listeners || 0) + ' Listeners'
+            : d.podcasters + ' Podcaster:innen · ' + (d.listeners || 0) + ' Hörer:innen';
         }
 
         // Footer-Bot mit Live-Zahlen — bevorzugt podcasters/listeners
         // separat, fallback auf users-Summe.
         var botMsg = document.getElementById('footer-bot-msg');
         if (botMsg && (d.users || d.podcasts)) {
+          var isEn2 = (typeof lang !== 'undefined' && lang === 'en');
           var pods = typeof d.podcasters === 'number' ? d.podcasters : 0;
           var lis  = typeof d.listeners === 'number' ? d.listeners
                    : Math.max(0, (d.users || 0) - pods);
           var parts = [];
-          if (pods > 0) parts.push('<strong>' + pods + '</strong> Podcaster:innen');
-          if (lis > 0)  parts.push('<strong>' + lis + '</strong> Hörer:innen');
-          if (d.episodes) parts.push('<strong>' + d.episodes + '</strong> Folgen schon vernetzt');
-          var joined = parts.length === 0 ? '' : parts.length === 1 ? parts[0]
-            : parts.length === 2 ? parts.join(' und ')
-            : parts.slice(0, -1).join(', ') + ' und ' + parts[parts.length - 1];
-          botMsg.innerHTML = 'Grad sind <strong>' + (d.users || 0) + '</strong> Menschen mit dabei — ' + joined + '. Frische Zahlen, direkt aus der DB. 🤘';
+          if (isEn2) {
+            if (pods > 0) parts.push('<strong>' + pods + '</strong> podcasters');
+            if (lis > 0)  parts.push('<strong>' + lis + '</strong> listeners');
+            if (d.episodes) parts.push('<strong>' + d.episodes + '</strong> episodes connected');
+            var joined = parts.length === 0 ? '' : parts.length === 1 ? parts[0]
+              : parts.length === 2 ? parts.join(' and ')
+              : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
+            botMsg.innerHTML = 'Right now <strong>' + (d.users || 0) + '</strong> people are here — ' + joined + '. Fresh numbers, straight from the DB. 🤘';
+          } else {
+            if (pods > 0) parts.push('<strong>' + pods + '</strong> Podcaster:innen');
+            if (lis > 0)  parts.push('<strong>' + lis + '</strong> Hörer:innen');
+            if (d.episodes) parts.push('<strong>' + d.episodes + '</strong> Folgen schon vernetzt');
+            var joined = parts.length === 0 ? '' : parts.length === 1 ? parts[0]
+              : parts.length === 2 ? parts.join(' und ')
+              : parts.slice(0, -1).join(', ') + ' und ' + parts[parts.length - 1];
+            botMsg.innerHTML = 'Grad sind <strong>' + (d.users || 0) + '</strong> Menschen mit dabei — ' + joined + '. Frische Zahlen, direkt aus der DB. 🤘';
+          }
         }
       })
       .catch(function() { /* silent — Fallback bleiben die statischen data-count Werte */ });
@@ -2820,6 +2834,14 @@
       "feat.6.title": "Direkt-Feedback an deinen Folgen",
       "feat.7.title": "Lounge nur für Podcaster:innen",
       "feat.8.title": "Co-Hosts integriert",
+      "hero.live-grows": "Live &amp; wächst täglich",
+      "hero.episodes-ready": "Episoden ready zum Hören",
+      "hero.daily-new": "plus täglich neue Folgen rein.",
+      "hero.open-for-all": "<strong>Offen für alle.</strong> Egal ob du seit Jahren Podcasts machst oder gerade erst überlegst anzufangen — RSS-Feed rein, fertig. Jede:r kann sich registrieren, jede:r kann posten, jede:r kann mitreden.",
+      "stats.shows-active": "Shows aktiv",
+      "stats.shows-sub": "alle mit Cover &amp; RSS",
+      "stats.people-in": "Menschen drin",
+      "stats.people-sub": "Podcaster:innen · Hörer:innen",
       "hero.live.listeners": "hören gerade",
       "hero.live.podcasts": "Podcasts",
       "hero.live.members": "Mitglieder",
@@ -2886,6 +2908,14 @@
       "feat.6.title": "Direct feedback on your episodes",
       "feat.7.title": "Lounge only for podcasters",
       "feat.8.title": "Co-hosts built in",
+      "hero.live-grows": "Live &amp; growing daily",
+      "hero.episodes-ready": "Episodes ready to listen",
+      "hero.daily-new": "plus new ones daily.",
+      "hero.open-for-all": "<strong>Open to everyone.</strong> Whether you've been podcasting for years or are just starting to think about it — paste your RSS feed, done. Anyone can register, anyone can post, anyone can join the conversation.",
+      "stats.shows-active": "SHOWS ACTIVE",
+      "stats.shows-sub": "all with cover &amp; RSS",
+      "stats.people-in": "PEOPLE INSIDE",
+      "stats.people-sub": "Podcasters · Listeners",
       "hero.live.listeners": "listening now",
       "hero.live.podcasts": "podcasts",
       "hero.live.members": "members",
@@ -2914,7 +2944,7 @@
       "sticky.text": "↑ Download now"
     }
   };
-  var HTML_KEYS = { "hero.tagline": 1, "hero.sub": 1, "hero.ios.hint": 1, "hero.ios.note": 1, "hero.android.hint": 1, "hero.android.note": 1, "faq.a1": 1, "faq.a2": 1, "faq.a3": 1, "faq.a4": 1, "faq.a5": 1, "faq.a6": 1, "faq.a7": 1, "faq.a8": 1, "footer.contact": 1 };
+  var HTML_KEYS = { "hero.tagline": 1, "hero.sub": 1, "hero.ios.hint": 1, "hero.ios.note": 1, "hero.android.hint": 1, "hero.android.note": 1, "hero.open-for-all": 1, "faq.a1": 1, "faq.a2": 1, "faq.a3": 1, "faq.a4": 1, "faq.a5": 1, "faq.a6": 1, "faq.a7": 1, "faq.a8": 1, "footer.contact": 1 };
   var stored = null;
   try { stored = localStorage.getItem('lang'); } catch(e) {}
   var lang = stored || ((navigator.language || 'de').toLowerCase().indexOf('en') === 0 ? 'en' : 'de');
