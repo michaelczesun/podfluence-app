@@ -1,9 +1,9 @@
-import { sb } from '/lib/supabase.js?v=20260608k'
-import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608k'
-import { makeAreaChart, makeLineChart, makeSparkline } from '/lib/charts.js?v=20260608k'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608k'
-import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260608k'
-import { drawer } from '/lib/layout-extras.js?v=20260608k'
+import { sb } from '/lib/supabase.js?v=20260608l'
+import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608l'
+import { makeAreaChart, makeLineChart, makeSparkline } from '/lib/charts.js?v=20260608l'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608l'
+import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260608l'
+import { drawer } from '/lib/layout-extras.js?v=20260608l'
 
 const REFRESH_MS = 60_000
 

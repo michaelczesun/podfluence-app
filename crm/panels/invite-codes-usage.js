@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608k'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608k'
-import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608k'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608k'
-import { countUp, fadeIn } from '/lib/animations.js?v=20260608k'
-import { drawer, segmentedControl } from '/lib/layout-extras.js?v=20260608k'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608k'
+import { sb } from '/lib/supabase.js?v=20260608l'
+import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608l'
+import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608l'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608l'
+import { countUp, fadeIn } from '/lib/animations.js?v=20260608l'
+import { drawer, segmentedControl } from '/lib/layout-extras.js?v=20260608l'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608l'
 
 const PAGE_SIZE = 50
 
