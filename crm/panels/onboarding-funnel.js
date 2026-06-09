@@ -286,8 +286,20 @@ function renderCharts(host, data) {
     area.innerHTML = `<div class="of-empty">${iconHtml('bar-chart')}<div style="font-weight:600; margin-bottom:4px;">Keine Signups</div><div style="font-size:12px;">Im gewählten Zeitraum wurden keine neuen Accounts erstellt.</div></div>`
   }
 
-  // FIX (data): Donut-Shape {labels, values, colors, height} statt {data:[...]}
-  const donutValues = STAGES.map(s => data.counts[s.key] || 0)
+  // FIX (donut-double-count): Stufen sind kaskadiert (jede next ⊆ prev),
+  // d.h. ein User taucht in mehreren Buckets auf. Wenn wir die Counts direkt
+  // in den Donut werfen, summieren sie sich auf weit über die Userbasis
+  // (z.B. 51+53+13+31=148, Center zeigt 150 statt 53).
+  // Lösung: jeder User wird in seiner HÖCHSTEN erreichten Stufe gezählt
+  // (mutually exclusive) — Summe = N_signup = komplette Userbasis.
+  const c = data.counts
+  const exclusive = {
+    signup:  Math.max(0, (c.signup  || 0) - (c.profile || 0)), // nur Signup
+    profile: Math.max(0, (c.profile || 0) - (c.listen  || 0)), // nur Profil
+    listen:  Math.max(0, (c.listen  || 0) - (c.active  || 0)), // nur First-Listen
+    active:  c.active || 0                                      // Active = höchste
+  }
+  const donutValues = STAGES.map(s => exclusive[s.key] || 0)
   const donutHasData = donutValues.some(v => v > 0)
   if (donutHasData) {
     try {
@@ -295,7 +307,10 @@ function renderCharts(host, data) {
         labels: STAGES.map(s => s.label),
         values: donutValues,
         colors: STAGES.map(s => s.color),
-        height: 240
+        height: 240,
+        showLegend: true,
+        centerLabel: 'Gesamt',
+        centerValue: fmtNumber(c.signup || 0)
       })
     } catch (e) {
       donut.innerHTML = `<div class="of-empty">${iconHtml('alert-triangle')}<div>Chart-Fehler: ${htmlEscape(e.message || '')}</div></div>`
