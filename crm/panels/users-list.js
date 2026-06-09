@@ -1058,8 +1058,7 @@ function openBulkPushModal(ids, body, container) {
             const { data, error } = await sb.rpc('admin_push_to_users', {
               p_user_ids: ids,
               p_title: title,
-              p_body: msg,
-              p_data: {}
+              p_message: msg
             })
             if (error) throw error
             const n = typeof data === 'number' ? data : ids.length

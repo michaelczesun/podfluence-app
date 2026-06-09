@@ -185,8 +185,7 @@ async function sendToUsers({ userIds, title, body, deepLink }) {
   if (!userIds || !userIds.length) throw new Error('Keine Ziel-User')
   // 1. admin_push_to_users
   try {
-    const params = { user_ids: userIds, title, body }
-    if (deepLink && deepLink.trim()) params.deep_link = deepLink.trim()
+    const params = { p_user_ids: userIds, p_title: title, p_message: body }
     const { data, error } = await sb.rpc('admin_push_to_users', params)
     if (!error) return { data, via: 'admin_push_to_users' }
     if (error.code !== '42883' && !/does not exist|not found|could not find/i.test(error.message || '')) {
