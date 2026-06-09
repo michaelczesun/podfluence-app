@@ -7,7 +7,7 @@ import { toast, iconHtml } from '/lib/ui.js?v=20260608k'
 import { fadeIn } from '/lib/animations.js?v=20260608k'
 import { pullToRefresh } from '/lib/layout-extras.js?v=20260608k'
 import { sendTestPush } from '/lib/panel-actions.js?v=20260608k'
-import { emptyState } from '/crm/lib/empty.js?v=20260608a'
+import { emptyState } from '/crm/lib/empty.js?v=20260608k'
 
 const SUBTABS = [
   { key: 'users',    label: 'Users',    panel: 'users-list',      icon: 'users' },
