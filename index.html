@@ -788,6 +788,18 @@
     }
   }
 
+  /* --- Auto-Scroll Testimonial Marquee --- */
+  .lv-marquee { margin-top: 32px; overflow: hidden; position: relative; mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); -webkit-mask-image: linear-gradient(90deg, transparent, #000 10%, #000 90%, transparent); }
+  .lv-marquee__track { display: flex; gap: 16px; width: max-content; animation: lv-marquee-scroll 40s linear infinite; }
+  .lv-marquee:hover .lv-marquee__track { animation-play-state: paused; }
+  .lv-marquee__card { flex: 0 0 280px; background: linear-gradient(180deg, rgba(34,34,42,0.7), rgba(22,22,29,0.85)); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border: 1px solid rgba(255,255,255,0.06); border-radius: 14px; padding: 18px; display: flex; flex-direction: column; gap: 8px; }
+  .lv-marquee__stars { color: #F59E0B; font-size: 12px; letter-spacing: 1px; }
+  .lv-marquee__title { font-size: 14px; font-weight: 700; color: #FFF; }
+  .lv-marquee__quote { font-size: 13px; color: #D4D4DD; line-height: 1.55; }
+  .lv-marquee__author { font-size: 11px; color: #9CA3AF; }
+  @keyframes lv-marquee-scroll { to { transform: translateX(-50%); } }
+  @media (prefers-reduced-motion: reduce) { .lv-marquee__track { animation: none; } }
+
   /* --- Trust Row --- */
   .sp-trust-row {
     display: flex; align-items: center; justify-content: center;
@@ -1204,6 +1216,84 @@
           <div class="sp-stars" aria-label="5 Sterne">★★★★★</div>
         </div>
         <p class="sp-quote">Bubbles oben? Geil. Hab schon 4 neue Hörer-Freundschaften.</p>
+      </div>
+    </div>
+
+    <!-- 2b) Auto-Scroll Testimonial Marquee -->
+    <div class="lv-marquee" aria-label="Weitere Stimmen">
+      <div class="lv-marquee__track">
+        <div class="lv-marquee__card">
+          <div class="lv-marquee__stars" aria-label="5 Sterne">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="lv-marquee__title">Endlich kein Podcast-Solo mehr</div>
+          <p class="lv-marquee__quote">Vorher Spotify allein. Jetzt im Feed mit anderen H&ouml;rer:innen &uuml;ber jede Folge reden.</p>
+          <div class="lv-marquee__author">Lukas, Wien</div>
+        </div>
+        <div class="lv-marquee__card">
+          <div class="lv-marquee__stars" aria-label="5 Sterne">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="lv-marquee__title">Voice-Replies sind Game-Changer</div>
+          <p class="lv-marquee__quote">Statt Text einfach 30 Sekunden Voice. F&uuml;hlt sich wie WhatsApp mit Podcasts an.</p>
+          <div class="lv-marquee__author">Sarah, Berlin</div>
+        </div>
+        <div class="lv-marquee__card">
+          <div class="lv-marquee__stars" aria-label="5 Sterne">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="lv-marquee__title">Polls beeinflussen Folgen</div>
+          <p class="lv-marquee__quote">Mein Lieblings-Podcast macht eine Folge zum Thema das ich mitgew&auml;hlt habe. Kein anderer macht das.</p>
+          <div class="lv-marquee__author">Marc, Hamburg</div>
+        </div>
+        <div class="lv-marquee__card">
+          <div class="lv-marquee__stars" aria-label="5 Sterne">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="lv-marquee__title">Audiogram ist mein Insta-Hack</div>
+          <p class="lv-marquee__quote">Beste Stelle markieren, Story-Card raus, Insta &mdash; H&ouml;rer:innen kommen ohne Werbung.</p>
+          <div class="lv-marquee__author">@derkrankenpfleger</div>
+        </div>
+        <div class="lv-marquee__card">
+          <div class="lv-marquee__stars" aria-label="5 Sterne">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="lv-marquee__title">H&ouml;rer-Map ist eyecandy</div>
+          <p class="lv-marquee__quote">Sehen wo geh&ouml;rt wird motiviert wahnsinnig. Letztens jemand aus Tokio.</p>
+          <div class="lv-marquee__author">Antje, Chronik der Schatten</div>
+        </div>
+        <div class="lv-marquee__card">
+          <div class="lv-marquee__stars" aria-label="5 Sterne">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="lv-marquee__title">Made in Austria z&auml;hlt</div>
+          <p class="lv-marquee__quote">Servers EU, DSGVO-konform, Made in Vienna. Bei Spotify wei&szlig; ich nie wo meine Daten landen.</p>
+          <div class="lv-marquee__author">Jule, H&ouml;rerin</div>
+        </div>
+        <div class="lv-marquee__card" aria-hidden="true">
+          <div class="lv-marquee__stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="lv-marquee__title">Endlich kein Podcast-Solo mehr</div>
+          <p class="lv-marquee__quote">Vorher Spotify allein. Jetzt im Feed mit anderen H&ouml;rer:innen &uuml;ber jede Folge reden.</p>
+          <div class="lv-marquee__author">Lukas, Wien</div>
+        </div>
+        <div class="lv-marquee__card" aria-hidden="true">
+          <div class="lv-marquee__stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="lv-marquee__title">Voice-Replies sind Game-Changer</div>
+          <p class="lv-marquee__quote">Statt Text einfach 30 Sekunden Voice. F&uuml;hlt sich wie WhatsApp mit Podcasts an.</p>
+          <div class="lv-marquee__author">Sarah, Berlin</div>
+        </div>
+        <div class="lv-marquee__card" aria-hidden="true">
+          <div class="lv-marquee__stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="lv-marquee__title">Polls beeinflussen Folgen</div>
+          <p class="lv-marquee__quote">Mein Lieblings-Podcast macht eine Folge zum Thema das ich mitgew&auml;hlt habe. Kein anderer macht das.</p>
+          <div class="lv-marquee__author">Marc, Hamburg</div>
+        </div>
+        <div class="lv-marquee__card" aria-hidden="true">
+          <div class="lv-marquee__stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="lv-marquee__title">Audiogram ist mein Insta-Hack</div>
+          <p class="lv-marquee__quote">Beste Stelle markieren, Story-Card raus, Insta &mdash; H&ouml;rer:innen kommen ohne Werbung.</p>
+          <div class="lv-marquee__author">@derkrankenpfleger</div>
+        </div>
+        <div class="lv-marquee__card" aria-hidden="true">
+          <div class="lv-marquee__stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="lv-marquee__title">H&ouml;rer-Map ist eyecandy</div>
+          <p class="lv-marquee__quote">Sehen wo geh&ouml;rt wird motiviert wahnsinnig. Letztens jemand aus Tokio.</p>
+          <div class="lv-marquee__author">Antje, Chronik der Schatten</div>
+        </div>
+        <div class="lv-marquee__card" aria-hidden="true">
+          <div class="lv-marquee__stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="lv-marquee__title">Made in Austria z&auml;hlt</div>
+          <p class="lv-marquee__quote">Servers EU, DSGVO-konform, Made in Vienna. Bei Spotify wei&szlig; ich nie wo meine Daten landen.</p>
+          <div class="lv-marquee__author">Jule, H&ouml;rerin</div>
+        </div>
       </div>
     </div>
 
