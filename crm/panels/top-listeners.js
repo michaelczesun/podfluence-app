@@ -32,17 +32,19 @@ async function fetchListeners(days) {
   const perUser = new Map()
   for (const ev of events || []) {
     if (!ev.listener_id) continue
-    const m = Number(ev.listened_ms || 0) / 60000  // ms → minutes
+    // Use float division to avoid 0 when listened_ms < 3_600_000.
+    // Aggregate in hours throughout so totals never silently round to 0.0h.
+    const h = Number(ev.listened_ms || 0) / 3600000.0  // ms → hours (float!)
     const day = (ev.created_at || '').slice(0, 10)
     let agg = perUser.get(ev.listener_id)
     if (!agg) {
-      agg = { user_id: ev.listener_id, total: 0, byDay: {}, episodeMins: {} }
+      agg = { user_id: ev.listener_id, total: 0, byDay: {}, episodeHours: {} }
       perUser.set(ev.listener_id, agg)
     }
-    agg.total += m
-    agg.byDay[day] = (agg.byDay[day] || 0) + m
+    agg.total += h
+    agg.byDay[day] = (agg.byDay[day] || 0) + h
     if (ev.episode_guid) {
-      agg.episodeMins[ev.episode_guid] = (agg.episodeMins[ev.episode_guid] || 0) + m
+      agg.episodeHours[ev.episode_guid] = (agg.episodeHours[ev.episode_guid] || 0) + h
     }
   }
 
@@ -68,14 +70,17 @@ async function fetchListeners(days) {
     buckets.push(d.toISOString().slice(0, 10))
   }
 
+  // Round to 1 decimal place — keep precision so small but non-zero hours never show as 0.0h.
+  const round1 = (x) => Math.round((Number(x) || 0) * 10) / 10
+
   const rows = sorted.map((u, i) => {
     const profile = profileMap[u.user_id] || {}
-    const series = buckets.map((b) => Math.round(u.byDay[b] || 0))
-    // Top-5 episodes by minutes for drawer drill-down
-    const topEpisodes = Object.entries(u.episodeMins)
+    const series = buckets.map((b) => round1(u.byDay[b] || 0))
+    // Top-5 episodes by hours for drawer drill-down
+    const topEpisodes = Object.entries(u.episodeHours)
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5)
-      .map(([episode_id, mins]) => ({ episode_id, mins: Math.round(mins) }))
+      .map(([episode_id, hours]) => ({ episode_id, hours: round1(hours) }))
     return {
       rank: i + 1,
       user_id: u.user_id,
@@ -84,7 +89,7 @@ async function fetchListeners(days) {
       avatar: profile.avatar_url || '',
       is_premium: profile.is_premium || false,
       is_verified: profile.is_verified || false,
-      total: Math.round(u.total),
+      total: round1(u.total),
       series,
       topEpisodes,
     }
@@ -93,11 +98,11 @@ async function fetchListeners(days) {
   const totalsByDay = buckets.map((b) => {
     let sum = 0
     for (const u of sorted) sum += u.byDay[b] || 0
-    return { day: b, minutes: Math.round(sum) }
+    return { day: b, hours: round1(sum) }
   })
 
-  const grandTotal = rows.reduce((s, r) => s + r.total, 0)
-  const avgPerListener = rows.length ? Math.round(grandTotal / rows.length) : 0
+  const grandTotal = round1(rows.reduce((s, r) => s + r.total, 0))
+  const avgPerListener = rows.length ? round1(grandTotal / rows.length) : 0
   const top10Share = rows.length
     ? Math.round((rows.slice(0, 10).reduce((s, r) => s + r.total, 0) / Math.max(1, grandTotal)) * 100)
     : 0
@@ -120,6 +125,13 @@ function rankBadge(rank) {
   return `<span class="rank-badge">${rank}</span>`
 }
 
+function fmtHours(value) {
+  // Fallback: show em-dash for non-positive hours so 0.0h doesn't pollute the leaderboard.
+  const v = Number(value) || 0
+  if (v <= 0) return `<span class="muted">—</span>`
+  return `<strong>${v.toFixed(1)}</strong> <span class="unit">h</span>`
+}
+
 function renderRow(row) {
   const verified = row.is_verified ? `<span class="chip chip-verified" title="Verifiziert">${iconHtml('check') || '✓'}</span>` : ''
   const premium = row.is_premium ? `<span class="chip chip-premium" title="Premium">PRO</span>` : ''
@@ -135,7 +147,7 @@ function renderRow(row) {
           </div>
         </div>
       </td>
-      <td class="col-minutes"><strong>${fmtNumber(row.total)}</strong> <span class="unit">min</span></td>
+      <td class="col-hours">${fmtHours(row.total)}</td>
       <td class="col-spark"><div class="sparkline-host" data-spark='${htmlEscape(JSON.stringify(row.series))}'></div></td>
       <td class="col-actions">
         <button class="btn-icon btn-dots" data-action="menu" data-user-id="${htmlEscape(row.user_id)}" aria-label="Aktionen">⋯</button>
@@ -160,7 +172,7 @@ function renderTable(rows) {
         <tr>
           <th class="col-rank">#</th>
           <th class="col-user">Hörer</th>
-          <th class="col-minutes sortable" data-sort="total">Hörminuten</th>
+          <th class="col-hours sortable" data-sort="total">Hörstunden</th>
           <th class="col-spark">Trend</th>
           <th class="col-actions"></th>
         </tr>
@@ -247,13 +259,13 @@ function openListenerDrawer(row) {
   const episodesHtml = row.topEpisodes && row.topEpisodes.length
     ? `
       <div class="drawer-section">
-        <div class="drawer-section-title">Top-Episoden (Hörminuten)</div>
+        <div class="drawer-section-title">Top-Episoden (Hörstunden)</div>
         <ul class="episode-list">
           ${row.topEpisodes.map((ep, idx) => `
             <li class="episode-item">
               <span class="episode-rank">${idx + 1}.</span>
               <span class="episode-id" title="${htmlEscape(ep.episode_id)}">${htmlEscape(ep.episode_id.slice(0, 8))}…</span>
-              <span class="episode-mins"><strong>${fmtNumber(ep.mins)}</strong> min</span>
+              <span class="episode-mins">${ep.hours > 0 ? `<strong>${Number(ep.hours).toFixed(1)}</strong> h` : '—'}</span>
             </li>
           `).join('')}
         </ul>
@@ -273,8 +285,8 @@ function openListenerDrawer(row) {
     </div>
     <div class="drawer-stats">
       <div class="stat-tile">
-        <div class="stat-label">Hörminuten</div>
-        <div class="stat-value" data-countup="${row.total}">0</div>
+        <div class="stat-label">Hörstunden</div>
+        <div class="stat-value">${row.total > 0 ? Number(row.total).toFixed(1) + ' h' : '—'}</div>
       </div>
       <div class="stat-tile">
         <div class="stat-label">Rang</div>
@@ -298,7 +310,7 @@ function openListenerDrawer(row) {
     if (host && row.series && row.series.length) {
       makeAreaChart(host, {
         categories: row.series.map((_, i) => `T-${row.series.length - 1 - i}`),
-        series: [{ name: 'Minuten', data: row.series }],
+        series: [{ name: 'Stunden', data: row.series }],
         colors: ['#7c5cff'],
         height: 180,
       })
@@ -382,7 +394,7 @@ export default {
           <div class="panel-head">
             <div class="panel-title">
               <h2>Aktivste Hörer</h2>
-              <p class="panel-sub">Leaderboard der Hörminuten · Top 100</p>
+              <p class="panel-sub">Leaderboard der Hörstunden · Top 100</p>
             </div>
             <div class="toolbar" id="tl-toolbar">
               <div id="tl-range"></div>
@@ -454,19 +466,19 @@ export default {
         body.innerHTML = `
           <div class="hero-row">
             <div class="glass-card hero-card">
-              <div class="hero-label">Gesamte Hörminuten</div>
-              <div class="hero-value" id="hero-total">0</div>
+              <div class="hero-label">Gesamte Hörstunden</div>
+              <div class="hero-value" id="hero-total">${grandTotal > 0 ? grandTotal.toFixed(1) + ' h' : '—'}</div>
               <div class="hero-sub">in den letzten ${data.days} Tagen</div>
             </div>
             <div class="glass-card hero-card">
               <div class="hero-label">Ø pro Top-Hörer</div>
-              <div class="hero-value" id="hero-avg">0</div>
-              <div class="hero-sub">Minuten / Person</div>
+              <div class="hero-value" id="hero-avg">${avgPerListener > 0 ? avgPerListener.toFixed(1) + ' h' : '—'}</div>
+              <div class="hero-sub">Stunden / Person</div>
             </div>
             <div class="glass-card hero-card">
               <div class="hero-label">Top-10 Anteil</div>
               <div class="hero-value" id="hero-share">0%</div>
-              <div class="hero-sub">der Top-100-Minuten</div>
+              <div class="hero-sub">der Top-100-Stunden</div>
             </div>
             <div class="glass-card hero-card hero-chart-card">
               <div class="hero-label">Verlauf</div>
@@ -486,18 +498,16 @@ export default {
           </div>
         `
 
-        const totalEl = body.querySelector('#hero-total')
-        const avgEl = body.querySelector('#hero-avg')
+        // Hero-total/avg are now rendered as static strings ("12.3 h" / "—")
+        // so countUp would overwrite them with raw numbers; skip animation here.
         const shareEl = body.querySelector('#hero-share')
-        countUp(totalEl, grandTotal, { duration: 900, format: fmtNumber })
-        countUp(avgEl, avgPerListener, { duration: 900, format: fmtNumber })
         countUp(shareEl, top10Share, { duration: 900, format: (v) => `${v}%` })
 
         const chartHost = body.querySelector('#hero-chart')
         if (chartHost && totalsByDay.length) {
           makeAreaChart(chartHost, {
             categories: totalsByDay.map((d) => d.day),
-            series: [{ name: 'Minuten', data: totalsByDay.map((d) => d.minutes) }],
+            series: [{ name: 'Stunden', data: totalsByDay.map((d) => d.hours) }],
             colors: ['#7c5cff'],
             height: 90,
           })
@@ -578,7 +588,7 @@ export default {
               user_id: r.user_id,
               name: r.name,
               username: r.username,
-              minutes: r.total,
+              hours: r.total,
               premium: r.is_premium ? 'yes' : 'no',
               verified: r.is_verified ? 'yes' : 'no',
             })),
