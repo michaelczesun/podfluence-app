@@ -995,7 +995,7 @@
 </script>
 </head>
 <body>
-<button id="langToggle" type="button" aria-label="Switch language" style="position:fixed;top:12px;right:12px;z-index:100;padding:6px 12px;font-size:12px;font-weight:600;color:#fff;background:rgba(22,22,29,0.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.12);border-radius:999px;cursor:pointer;letter-spacing:0.04em;font-family:inherit;">DE / EN</button>
+<button id="langToggle" type="button" aria-label="Switch language" aria-pressed="false" style="position:fixed;top:12px;right:12px;z-index:100;padding:6px 12px;font-size:12px;font-weight:600;color:#fff;background:rgba(22,22,29,0.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.12);border-radius:999px;cursor:pointer;letter-spacing:0.04em;font-family:inherit;">DE / EN</button>
 <div class="bubbles" aria-hidden="true">
   <div class="bubble b1 glow"></div>
   <div class="bubble b2"></div>
@@ -2711,7 +2711,10 @@
     }
     try { document.documentElement.setAttribute('lang', l); } catch(e) {}
     var btn = document.getElementById('langToggle');
-    if (btn) { btn.textContent = (l === 'de' ? 'DE / EN' : 'EN / DE'); }
+    if (btn) {
+      btn.textContent = (l === 'de' ? 'DE / EN' : 'EN / DE');
+      btn.setAttribute('aria-pressed', l === 'en' ? 'true' : 'false');
+    }
   }
 
   function ready(fn){
