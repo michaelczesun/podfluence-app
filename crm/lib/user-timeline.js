@@ -90,7 +90,7 @@ function safeStr(v, max = 80) {
 
 async function fetchAll(sb, userId) {
   const tasks = [
-    sb.from('users').select('id, created_at, updated_at, email, display_name').eq('id', userId).maybeSingle(),
+    sb.from('users').select('id, created_at, updated_at, email, full_name, username').eq('id', userId).maybeSingle(),
     sb.from('updates').select('id, created_at, content, podcast_id').eq('user_id', userId).order('created_at', { ascending: false }).limit(FETCH_LIMIT),
     sb.from('comments').select('id, created_at, content, update_id').eq('user_id', userId).order('created_at', { ascending: false }).limit(FETCH_LIMIT),
     sb.from('listening_activity').select('id, created_at, podcast_title, episode_title, listened_ms').eq('user_id', userId).order('created_at', { ascending: false }).limit(FETCH_LIMIT),
@@ -108,7 +108,7 @@ async function fetchAll(sb, userId) {
     if (u.created_at) {
       events.push({
         type: 'signup', ts: u.created_at,
-        detail: u.email || u.display_name || u.id,
+        detail: u.email || u.full_name || u.username || u.id,
         raw: u,
       })
     }
