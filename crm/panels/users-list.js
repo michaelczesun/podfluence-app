@@ -1234,11 +1234,66 @@ function promptNote(row) {
   })
 }
 
+// Bug D fix: stat-cards re-aggregate aus _allRows (gleiche Quelle wie Pills),
+// und countUp wird mit korrekter Signatur (from, to, duration) aufgerufen —
+// die alte Form `countUp(el, v, {duration:700})` interpretierte v als `from`
+// und das Options-Objekt als `to` → animierte auf 0 runter, daher zeigten alle
+// 4 Cards "0" obwohl die Pills die korrekten Counts hatten.
+function recalcTotalsFromRows() {
+  const rows = _allRows || []
+  const sevenDaysAgo = new Date(Date.now() - 7 * 86400000).toISOString()
+  state.totals = {
+    all: rows.length,
+    verified: rows.filter(r => r.is_verified).length,
+    podcasters: rows.filter(r =>
+      r.is_podcaster || r.podcaster_id || r.user_type === 'podcaster' ||
+      r.type === 'podcaster' || r.type === 'both'
+    ).length,
+    admins: rows.filter(r => r.is_app_admin || r.admin_role).length,
+    inactive: rows.filter(r => {
+      if (!r.last_seen_at) return false
+      const ms = Date.now() - new Date(r.last_seen_at).getTime()
+      return ms / 86400000 >= 7
+    }).length
+  }
+  return state.totals
+}
+
+function paintStatCards(body) {
+  if (!body) return
+  // Aggregate IMMER frisch aus _allRows — exakt gleiche Quelle wie die Pills.
+  const t = recalcTotalsFromRows()
+  const map = [
+    ['Verifiziert', t.verified],
+    ['Podcaster', t.podcasters],
+    ['Admins', t.admins],
+    ['Inaktiv', t.inactive]
+  ]
+  body.querySelectorAll('.mini-stat').forEach(card => {
+    const label = card.querySelector('.mini-stat-label')?.textContent?.trim() || ''
+    const valEl = card.querySelector('.mini-stat-val')
+    if (!valEl) return
+    // Match per Label-Prefix (Inaktiv (>7d) → Inaktiv).
+    const hit = map.find(([k]) => label.startsWith(k))
+    const v = Number(hit ? hit[1] : (valEl.dataset.count || 0)) || 0
+    valEl.dataset.count = String(v)
+    // Sofort den korrekten Wert anzeigen — kein "0"-Flash mehr.
+    valEl.textContent = v.toLocaleString('de-DE')
+  })
+}
+
 function animateHero(body) {
+  // Vor jeder Animation: Cards aus aktuellem _allRows neu setzen.
+  paintStatCards(body)
   const heroVal = body.querySelector('.ul-hero .stat-hero-value, .ul-hero [data-hero-value], .ul-hero .value, .ul-hero strong')
-  if (heroVal) { try { countUp(heroVal, state.totals.all, { duration: 900 }) } catch {} }
+  if (heroVal) {
+    // Korrekte Signatur: countUp(element, from, to, durationMs)
+    try { countUp(heroVal, 0, state.totals.all, 900) } catch {
+      heroVal.textContent = String(state.totals.all)
+    }
+  }
   body.querySelectorAll('.mini-stat-val').forEach(el => {
     const v = Number(el.dataset.count || 0)
-    try { countUp(el, v, { duration: 700 }) } catch { el.textContent = String(v) }
+    try { countUp(el, 0, v, 700) } catch { el.textContent = String(v) }
   })
 }
