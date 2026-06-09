@@ -2062,20 +2062,70 @@
   var SB_KEY   = 'sb_publishable_aJrojJ8QFI0uCETwimeRLw_-ymYCVw_';
   var REST_HDR = { 'apikey': SB_KEY, 'Accept': 'application/json' };
 
-  /* --- Testimonials (hardcoded, echte Beta-User) --- */
-  var TESTIMONIALS = [
-    {
-      text: 'Endlich eine App die beides kann — hören und richtig mitreden. Ich hab meine ersten 3 Follower in 10 Minuten gehabt.',
-      author: '@machmalrichtig · Beta-User seit Mai 2026'
+  /* --- Sidebar i18n mini-dict --- */
+  var ASB_STRINGS = {
+    de: {
+      'asb.live':               'LIVE',
+      'asb.count.label':        'User in der Beta',
+      'asb.joins.title':        'Letzte Joins',
+      'asb.joins.empty':        'Noch keine Daten',
+      'asb.joins.loading':      'Feed lädt gleich…',
+      'asb.joins.row':          '{time} beigetreten',
+      'asb.joins.badge':        'Beta',
+      'asb.testimonials.title': 'Was Beta-User sagen',
+      'time.now':               'gerade eben',
+      'time.min':               'vor {n} Min',
+      'time.hour':              'vor {n} Std',
+      'time.day':               'vor {n} Tag',
+      'time.days':              'vor {n} Tagen',
+      'asb.t1.text':   'Endlich eine App die beides kann — hören und richtig mitreden. Ich hab meine ersten 3 Follower in 10 Minuten gehabt.',
+      'asb.t1.author': '@machmalrichtig · Beta-User seit Mai 2026',
+      'asb.t2.text':   'Der RSS-Sync hat 2 Minuten gedauert und alles war drin. Cover, Episoden, alles. So muss das sein.',
+      'asb.t2.author': '@podcastfabrik · Podcaster:in, Beta',
+      'asb.t3.text':   'Die Kommentare direkt unter einer Folge sind Gold. Meine Hörer:innen reden endlich miteinander.',
+      'asb.t3.author': '@klangraum_oe · Host, Beta'
     },
-    {
-      text: 'Der RSS-Sync hat 2 Minuten gedauert und alles war drin. Cover, Episoden, alles. So muss das sein.',
-      author: '@podcastfabrik · Podcaster:in, Beta'
-    },
-    {
-      text: 'Die Kommentare direkt unter einer Folge sind Gold. Meine Hörer:innen reden endlich miteinander.',
-      author: '@klangraum_oe · Host, Beta'
+    en: {
+      'asb.live':               'LIVE',
+      'asb.count.label':        'Beta users',
+      'asb.joins.title':        'Recent joins',
+      'asb.joins.empty':        'No data yet',
+      'asb.joins.loading':      'Feed loading…',
+      'asb.joins.row':          '{time} joined',
+      'asb.joins.badge':        'Beta',
+      'asb.testimonials.title': 'What beta users say',
+      'time.now':               'just now',
+      'time.min':               '{n} min ago',
+      'time.hour':              '{n}h ago',
+      'time.day':               '{n} day ago',
+      'time.days':              '{n} days ago',
+      'asb.t1.text':   'Finally an app that does both — listen and really join the conversation. I got my first 3 followers in 10 minutes.',
+      'asb.t1.author': '@machmalrichtig · Beta user since May 2026',
+      'asb.t2.text':   'RSS sync took 2 minutes and everything was in. Cover, episodes, everything. That’s how it should work.',
+      'asb.t2.author': '@podcastfabrik · Podcaster, Beta',
+      'asb.t3.text':   'Comments right below an episode are gold. My listeners are finally talking to each other.',
+      'asb.t3.author': '@klangraum_oe · Host, Beta'
     }
+  };
+
+  /* Resolve current lang: same logic as main i18n script */
+  function asbLang() {
+    var stored = null;
+    try { stored = localStorage.getItem('lang'); } catch(e) {}
+    return stored || ((navigator.language || 'de').toLowerCase().indexOf('en') === 0 ? 'en' : 'de');
+  }
+
+  function asbT(key) {
+    var l = asbLang();
+    var dict = ASB_STRINGS[l] || ASB_STRINGS.de;
+    return Object.prototype.hasOwnProperty.call(dict, key) ? dict[key] : key;
+  }
+
+  /* --- Testimonials (lang-aware) --- */
+  var TESTIMONIALS = [
+    { textKey: 'asb.t1.text', authorKey: 'asb.t1.author' },
+    { textKey: 'asb.t2.text', authorKey: 'asb.t2.author' },
+    { textKey: 'asb.t3.text', authorKey: 'asb.t3.author' }
   ];
 
   var currentTestimonial = 0;
@@ -2084,11 +2134,11 @@
   /* --- Relative time helper --- */
   function relTime(isoStr) {
     var diff = Math.floor((Date.now() - new Date(isoStr).getTime()) / 1000);
-    if (diff < 60)  return 'gerade eben';
-    if (diff < 3600) return 'vor ' + Math.floor(diff/60) + ' Min';
-    if (diff < 86400) return 'vor ' + Math.floor(diff/3600) + ' Std';
+    if (diff < 60)  return asbT('time.now');
+    if (diff < 3600) return asbT('time.min').replace('{n}', Math.floor(diff/60));
+    if (diff < 86400) return asbT('time.hour').replace('{n}', Math.floor(diff/3600));
     var d = Math.floor(diff/86400);
-    return 'vor ' + d + ' Tag' + (d === 1 ? '' : 'en');
+    return (d === 1 ? asbT('time.day') : asbT('time.days')).replace('{n}', d);
   }
 
   /* --- Avatar gradient by name hash --- */
