@@ -113,10 +113,10 @@ export default {
       `
 
       const body = container.querySelector('#body')
-      body.innerHTML = skeletonLoader(400, 56).outerHTML
+      body.innerHTML = skeletonLoader({ rows: 6 })
 
       async function load() {
-        body.innerHTML = skeletonLoader(400, 56).outerHTML
+        body.innerHTML = skeletonLoader({ rows: 6 })
         try {
           // Daily series is required; raw activity is best-effort (heatmap-only).
           const [daily, raw] = await Promise.allSettled([
