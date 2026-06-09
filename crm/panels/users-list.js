@@ -814,16 +814,18 @@ function wireBulk(body, container) {
     const ids = Array.from(state.selected)
     const ok = await confirmDialog(`${ids.length} Nutzer verifizieren?`, 'Diese Nutzer werden als verifiziert markiert.')
     if (!ok) return
-    try {
-      // FIX #4: correct RPC param name is uids[] not user_ids
-      const { data, error } = await sb.rpc('admin_bulk_verify', { uids: ids })
-      if (error) throw error
-      const n = typeof data === 'number' ? data : ids.length
-      toast(`${n} verifiziert`, 'success')
-    } catch (e) {
-      toast(e?.message || 'Fehler beim Verifizieren', 'error')
-      return
+    // Loop admin_set_user_verified — keine Bulk-RPC, jede ID einzeln.
+    let n = 0
+    const errs = []
+    for (const id of ids) {
+      try {
+        const { error } = await sb.rpc('admin_set_user_verified', { p_user_id: id, p_verified: true })
+        if (error) throw error
+        n++
+      } catch (e) { errs.push(id); console.warn('verify failed', id, e) }
     }
+    if (errs.length) toast(`${n} verifiziert, ${errs.length} fehlgeschlagen`, 'warning')
+    else toast(`${n} verifiziert`, 'success')
     state.selected.clear()
     await loadAll(container)
   })
@@ -835,8 +837,8 @@ function wireBulk(body, container) {
     const errs = []
     for (const id of ids) {
       try {
-        // FIX #3: correct RPC param names are uid + bool (not user_id + premium)
-        const { error } = await sb.rpc('admin_set_premium', { uid: id, bool: true })
+        // Loop admin_set_user_premium (p_user_id, p_premium, [p_until]).
+        const { error } = await sb.rpc('admin_set_user_premium', { p_user_id: id, p_premium: true })
         if (error) throw error
         n++
       } catch (e) { errs.push(id); console.warn('premium failed', id, e) }
@@ -975,10 +977,12 @@ function openUserDrawer(userId, container) {
 }
 
 function openBulkPushModal(ids, body, container) {
-  // Push-Broadcast Modal — nutzt zentralisierte Modal-Lib (Escape/Backdrop/KAV/Focus-Trap).
+  // Push an die AUSGEWÄHLTEN Nutzer — nutzt admin_push_to_users RPC.
+  // Nicht mehr Broadcast-an-alle.
+  const count = ids.length
   const bodyEl = document.createElement('div')
   bodyEl.innerHTML = `
-    <div class="ul-push-notice">${iconHtml('alert-circle')} Dieser Push wird als Broadcast an <strong>alle</strong> Nutzer gesendet, nicht nur an die Auswahl.</div>
+    <div class="ul-push-notice">${iconHtml('alert-circle')} Dieser Push geht an <strong>${count}</strong> ausgewählte Nutzer.</div>
     <label class="ul-push-label" for="ul-push-title">Titel</label>
     <input type="text" id="ul-push-title" class="ul-push-input" placeholder="z. B. Neue Funktion für dich!" maxlength="64" />
     <label class="ul-push-label" for="ul-push-body">Nachricht</label>
@@ -986,7 +990,6 @@ function openBulkPushModal(ids, body, container) {
     <div id="ul-push-status" class="ul-push-status" hidden></div>
   `
 
-  // hasUnsavedChanges: Backdrop/Escape blockieren sobald getippt wurde
   const hasUnsavedChanges = () => {
     const t = bodyEl.querySelector('#ul-push-title')?.value?.trim()
     const b = bodyEl.querySelector('#ul-push-body')?.value?.trim()
@@ -994,14 +997,14 @@ function openBulkPushModal(ids, body, container) {
   }
 
   openModal({
-    title: `${iconHtml('bell')} Push-Broadcast senden`,
+    title: `${iconHtml('bell')} Push an ${count} Nutzer senden`,
     body: bodyEl,
     width: 520,
     hasUnsavedChanges,
     footerActions: [
       { label: 'Abbrechen', variant: 'ghost', closeOnClick: true },
       {
-        label: 'An alle senden',
+        label: `An ${count} senden`,
         variant: 'primary',
         closeOnClick: false,
         onClick: async (api) => {
@@ -1014,24 +1017,30 @@ function openBulkPushModal(ids, body, container) {
             if (statusEl) { statusEl.textContent = 'Bitte Titel und Nachricht ausfüllen.'; statusEl.hidden = false }
             return
           }
+          if (!ids.length) {
+            if (statusEl) { statusEl.textContent = 'Keine Nutzer ausgewählt.'; statusEl.hidden = false }
+            return
+          }
           const sendBtn = api.footer?.querySelectorAll('.modal-footer-btn')[1]
           if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sendet…' }
           try {
-            // FIX #2: send_broadcast_push sends to ALL users (audience='all') — one single call.
-            const { error } = await sb.rpc('send_broadcast_push', {
+            const { data, error } = await sb.rpc('admin_push_to_users', {
+              p_user_ids: ids,
               p_title: title,
               p_body: msg,
-              p_audience: 'all',
-              p_deep_link: null
+              p_data: {}
             })
             if (error) throw error
+            const n = typeof data === 'number' ? data : ids.length
             if (titleEl) titleEl.value = ''
             if (inputBodyEl) inputBodyEl.value = ''
             api.close(true)
-            toast('Broadcast-Push gesendet (alle Nutzer)', 'success')
+            toast(`Push an ${n} Nutzer gesendet`, 'success')
+            state.selected.clear()
+            try { await loadAll(container) } catch (_) {}
           } catch (e) {
-            api.close(true)
-            toast(e?.message || 'Push-Versand fehlgeschlagen', 'error')
+            if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = `An ${count} senden` }
+            if (statusEl) { statusEl.textContent = e?.message || 'Push-Versand fehlgeschlagen'; statusEl.hidden = false }
           }
         }
       }
