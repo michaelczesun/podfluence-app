@@ -33,28 +33,52 @@ function buildDayBuckets(rangeDays) {
   return buckets
 }
 
+// Defensive: race RPCs against a hard timeout so a hung request can't freeze the panel.
+const FETCH_TIMEOUT_MS = 15000
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error((label || 'RPC') + ' timeout (' + ms + 'ms)')), ms))
+  ])
+}
+
 // FIX (high): use parameter names matching DB signature admin_daily_series(metric, days) — no p_ prefix
 // FIX (med): return { buckets, total } directly from admin_daily_series data — no dummy-row synthesis
 async function fetchSignupsInRange(rangeDays) {
-  const { data, error } = await sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: rangeDays })
+  const { data, error } = await withTimeout(
+    sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: rangeDays }),
+    FETCH_TIMEOUT_MS,
+    'admin_daily_series'
+  )
   if (error) throw error
   const buckets = buildDayBuckets(rangeDays)
   const idx = new Map(buckets.map((b, i) => [b.key, i]))
   let total = 0
-  for (const d of (data || [])) {
-    const k = dayKey(d.date)
-    const count = Number(d.value) || 0
-    if (idx.has(k)) buckets[idx.get(k)].count = count
-    total += count
+  const rows = Array.isArray(data) ? data : []
+  try {
+    for (const d of rows) {
+      if (!d || !d.date) continue
+      const k = dayKey(d.date)
+      const count = Number(d.value) || 0
+      if (idx.has(k)) buckets[idx.get(k)].count = count
+      total += count
+    }
+  } catch (e) {
+    console.warn('[new-signups-7d] bucket aggregation failed:', e.message)
   }
   return { buckets, total }
 }
 
 // FIX (med): fetch 200 rows so clientside sort reliably captures the newest 20
 async function fetchLatestSignups(limit = 20) {
-  const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: 200, p_offset: 0, p_search: '' })
+  const { data, error } = await withTimeout(
+    sb.rpc('admin_users_list_full', { p_limit: 200, p_offset: 0, p_search: '' }),
+    FETCH_TIMEOUT_MS,
+    'admin_users_list_full'
+  )
   if (error) throw error
-  const rows = (data || []).slice().sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+  const raw = Array.isArray(data) ? data : []
+  const rows = raw.slice().sort((a, b) => new Date(b?.created_at || 0) - new Date(a?.created_at || 0))
   return rows.slice(0, limit)
 }
 
