@@ -23,12 +23,35 @@ const SOURCES = [
   { key: 'other',       label: 'Sonstiges',     color: '#9CA3AF' },
 ]
 
+const FILTERS_KEY = 'crm.leads-pipeline.filters'
+const DEFAULT_FILTERS = { filterAssignee: '', filterSource: '', search: '' }
+function readFilters() {
+  try {
+    const raw = localStorage.getItem(FILTERS_KEY)
+    if (!raw) return { ...DEFAULT_FILTERS }
+    return { ...DEFAULT_FILTERS, ...(JSON.parse(raw) || {}) }
+  } catch (_) { return { ...DEFAULT_FILTERS } }
+}
+function writeFilters(f) {
+  try {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify({
+      filterAssignee: f.filterAssignee || '',
+      filterSource:   f.filterSource   || '',
+      search:         f.search         || '',
+    }))
+  } catch (_) {}
+}
+function clearFilters() {
+  try { localStorage.removeItem(FILTERS_KEY) } catch (_) {}
+}
+
+const _initF = readFilters()
 const state = {
   rows: [],
   loading: false,
-  filterAssignee: '',
-  filterSource: '',
-  search: '',
+  filterAssignee: _initF.filterAssignee || '',
+  filterSource:   _initF.filterSource   || '',
+  search:         _initF.search         || '',
   assignees: [],
 }
 
@@ -231,14 +254,15 @@ function openNewLeadModal(container, reload) {
 
 function toolbarHtml() {
   const sourceOpts = ['<option value="">Alle Quellen</option>']
-    .concat(SOURCES.map(s => `<option value="${s.key}">${htmlEscape(s.label)}</option>`)).join('')
+    .concat(SOURCES.map(s => `<option value="${s.key}"${state.filterSource === s.key ? ' selected' : ''}>${htmlEscape(s.label)}</option>`)).join('')
   return `<div class="toolbar">
     <span class="live-dot"></span>
-    <input id="lead-search" placeholder="Suchen (Name, Email, Source) …" />
+    <input id="lead-search" placeholder="Suchen (Name, Email, Source) …" value="${htmlEscape(state.search || '')}" />
     <select id="lead-filter-assignee"><option value="">Alle Owner</option></select>
     <select id="lead-filter-source">${sourceOpts}</select>
     <button id="lead-new" class="btn-primary">${iconHtml('plus')} Neuer Lead</button>
     <button id="lead-refresh">${iconHtml('refresh')} Aktualisieren</button>
+    <button id="lead-reset" title="Filter zurücksetzen">${iconHtml('refresh')} Reset</button>
     <button id="lead-csv">${iconHtml('download')} CSV</button>
   </div>`
 }
@@ -330,6 +354,7 @@ export default {
       const searchEl    = container.querySelector('#lead-search')
       const assigneeSel = container.querySelector('#lead-filter-assignee')
       const sourceSel   = container.querySelector('#lead-filter-source')
+      const resetBtn    = container.querySelector('#lead-reset')
 
       const load = async () => {
         state.loading = true
@@ -342,7 +367,7 @@ export default {
               owners[r.assigned_to] = r.assigned_to_name || r.assigned_to_username || r.assigned_to.slice(0,8)
             }
           }
-          const cur = assigneeSel.value
+          const cur = assigneeSel.value || state.filterAssignee || ''
           assigneeSel.innerHTML = '<option value="">Alle Owner</option>' +
             Object.entries(owners).map(([id,name]) => `<option value="${htmlEscape(id)}">${htmlEscape(name)}</option>`).join('')
           assigneeSel.value = cur
@@ -374,12 +399,23 @@ export default {
 
       const debouncedSearch = debounce(() => {
         state.search = (searchEl.value || '').toLowerCase()
+        writeFilters(state)
         renderBoard(container)
       }, 150)
 
       searchEl.addEventListener('input', debouncedSearch)
-      assigneeSel.addEventListener('change', () => { state.filterAssignee = assigneeSel.value; load() })
-      sourceSel.addEventListener('change',  () => { state.filterSource   = sourceSel.value;   load() })
+      assigneeSel.addEventListener('change', () => { state.filterAssignee = assigneeSel.value; writeFilters(state); load() })
+      sourceSel.addEventListener('change',  () => { state.filterSource   = sourceSel.value;   writeFilters(state); load() })
+      resetBtn?.addEventListener('click', () => {
+        state.filterAssignee = ''
+        state.filterSource   = ''
+        state.search         = ''
+        clearFilters()
+        searchEl.value = ''
+        assigneeSel.value = ''
+        sourceSel.value = ''
+        load()
+      })
       container.querySelector('#lead-refresh').addEventListener('click', load)
       container.querySelector('#lead-new').addEventListener('click', () => openNewLeadModal(container, load))
       container.querySelector('#lead-csv').addEventListener('click', () => {

@@ -31,18 +31,45 @@ function renderTargetId(tid) {
   return `<code title="${htmlEscape(s)}">${htmlEscape(s.slice(0, 8))}</code>`
 }
 
+// Filter-Persistenz (localStorage pro Panel)
+const FILTERS_KEY = 'crm.audit-log.filters'
+const DEFAULT_FILTERS = { q: '', action: '', targetType: '', dateRange: 'all', customFrom: '', customTo: '' }
+function readPanelFilters() {
+  try {
+    const raw = localStorage.getItem(FILTERS_KEY)
+    if (!raw) return { ...DEFAULT_FILTERS }
+    return { ...DEFAULT_FILTERS, ...(JSON.parse(raw) || {}) }
+  } catch (_) { return { ...DEFAULT_FILTERS } }
+}
+function writePanelFilters() {
+  try {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify({
+      q: state.q || '',
+      action: state.action || '',
+      targetType: state.targetType || '',
+      dateRange: state.dateRange || 'all',
+      customFrom: state.customFrom || '',
+      customTo: state.customTo || '',
+    }))
+  } catch (_) {}
+}
+function clearPanelFilters() {
+  try { localStorage.removeItem(FILTERS_KEY) } catch (_) {}
+}
+
+const _initF = readPanelFilters()
 const state = {
   rows: [],
   total: 0,
   page: 1,
   loading: false,
   // filters
-  q: '',
-  action: '',
-  targetType: '',
-  dateRange: 'all', // 'today' | '7d' | '30d' | 'custom' | 'all'
-  customFrom: '',
-  customTo: '',
+  q:          _initF.q,
+  action:     _initF.action,
+  targetType: _initF.targetType,
+  dateRange:  _initF.dateRange, // 'today' | '7d' | '30d' | 'custom' | 'all'
+  customFrom: _initF.customFrom,
+  customTo:   _initF.customTo,
 }
 
 async function fetchAudit() {
@@ -328,17 +355,19 @@ export default {
         const targetEl = filterBarEl.querySelector('#audit-f-target')
         const resetEl  = filterBarEl.querySelector('#audit-f-reset')
 
-        actionEl?.addEventListener('change', () => { state.action = actionEl.value; renderList() })
-        targetEl?.addEventListener('change', () => { state.targetType = targetEl.value; renderList() })
+        actionEl?.addEventListener('change', () => { state.action = actionEl.value; writePanelFilters(); renderList() })
+        targetEl?.addEventListener('change', () => { state.targetType = targetEl.value; writePanelFilters(); renderList() })
         rangeEl?.addEventListener('change', () => {
           state.dateRange = rangeEl.value
+          writePanelFilters()
           rebuildFilterBar(); renderList()
         })
-        fromEl?.addEventListener('change', () => { state.customFrom = fromEl.value; renderList() })
-        toEl?.addEventListener('change',   () => { state.customTo   = toEl.value;   renderList() })
+        fromEl?.addEventListener('change', () => { state.customFrom = fromEl.value; writePanelFilters(); renderList() })
+        toEl?.addEventListener('change',   () => { state.customTo   = toEl.value;   writePanelFilters(); renderList() })
 
         const debouncedActor = debounce(() => {
           state.q = (actorEl.value || '').toLowerCase().trim()
+          writePanelFilters()
           renderList()
         }, 150)
         actorEl?.addEventListener('input', debouncedActor)
@@ -346,6 +375,7 @@ export default {
         resetEl?.addEventListener('click', () => {
           state.action = ''; state.targetType = ''; state.q = '';
           state.dateRange = 'all'; state.customFrom = ''; state.customTo = '';
+          clearPanelFilters()
           rebuildFilterBar(); renderList()
         })
       }

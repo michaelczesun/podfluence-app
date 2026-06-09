@@ -30,9 +30,38 @@ function writeShowTestAccounts(v) {
   try { localStorage.setItem('crm.showTestAccounts', v ? '1' : '0') } catch {}
 }
 
+// Filter-Persistenz pro Panel
+const FILTERS_KEY = 'crm.users-list.filters'
+const DEFAULT_FILTERS = { search: '', filter: 'all', filterBuilder: {} }
+function readPanelFilters() {
+  try {
+    const raw = localStorage.getItem(FILTERS_KEY)
+    if (!raw) return { ...DEFAULT_FILTERS }
+    const p = JSON.parse(raw) || {}
+    return {
+      search: p.search || '',
+      filter: p.filter || 'all',
+      filterBuilder: p.filterBuilder && typeof p.filterBuilder === 'object' ? p.filterBuilder : {},
+    }
+  } catch (_) { return { ...DEFAULT_FILTERS } }
+}
+function writePanelFilters() {
+  try {
+    localStorage.setItem(FILTERS_KEY, JSON.stringify({
+      search: state.search || '',
+      filter: state.filter || 'all',
+      filterBuilder: state.filterBuilder || {},
+    }))
+  } catch (_) {}
+}
+function clearPanelFilters() {
+  try { localStorage.removeItem(FILTERS_KEY) } catch (_) {}
+}
+
+const _initPF = readPanelFilters()
 const state = {
-  search: '',
-  filter: 'all',
+  search: _initPF.search,
+  filter: _initPF.filter,
   page: 1,
   rows: [],
   total: 0,
@@ -41,7 +70,7 @@ const state = {
   signupSeries: [],
   typeBreakdown: [],
   totals: { all: 0, verified: 0, podcasters: 0, inactive: 0, admins: 0 },
-  filterBuilder: {}, // E-Feature: type/verified/premium/country/createdFrom/createdTo
+  filterBuilder: _initPF.filterBuilder, // E-Feature: type/verified/premium/country/createdFrom/createdTo
   showTestAccounts: readShowTestAccounts(), // Bug #8: Default = false
   testAccountCount: 0
 }
@@ -606,6 +635,7 @@ function wire(body, container) {
       state.search = e.target.value
       state.page = 1
       state.selected.clear()
+      writePanelFilters()
       try { await fetchPage(); refreshTableOnly(body, container) } catch (err) { toast(err?.message || 'Fehler', 'error') }
     }, 280)
     search.addEventListener('input', onSearch)
@@ -616,6 +646,7 @@ function wire(body, container) {
       state.filter = p.dataset.filter
       state.page = 1
       state.selected.clear()
+      writePanelFilters()
       try {
         await fetchPage()
         refreshTableOnly(body, container)

@@ -17,9 +17,25 @@ const FETCH_LIMIT = 500
 
 // ─── State ───────────────────────────────────────────────────────────────────
 
+const FILTERS_KEY = 'crm.bug-reports.filters'
+const DEFAULT_FILTERS = { platform: 'alle', age: 'alle' }
+function readFilters() {
+  try {
+    const raw = localStorage.getItem(FILTERS_KEY)
+    if (!raw) return { ...DEFAULT_FILTERS }
+    return { ...DEFAULT_FILTERS, ...(JSON.parse(raw) || {}) }
+  } catch (_) { return { ...DEFAULT_FILTERS } }
+}
+function writeFilters(f) {
+  try { localStorage.setItem(FILTERS_KEY, JSON.stringify(f)) } catch (_) {}
+}
+function clearFiltersLs() {
+  try { localStorage.removeItem(FILTERS_KEY) } catch (_) {}
+}
+
 const state = {
   reports: [],
-  filters: { platform: 'alle', age: 'alle' },
+  filters: readFilters(),
 }
 
 // ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -305,6 +321,7 @@ export default {
             <h2>🐞 Bug-Reports Triage</h2>
             <div class="brt-toolbar">
               <button class="tb-btn" id="tb-refresh">🔄 Aktualisieren</button>
+              <button class="tb-btn" id="tb-reset" title="Filter zurücksetzen">↺ Filter-Reset</button>
               <button class="tb-btn" id="tb-pdf">📄 PDF</button>
               <button class="tb-btn" id="tb-csv">💾 CSV</button>
             </div>
@@ -327,6 +344,7 @@ export default {
         body.querySelectorAll('.pill').forEach(p => {
           p.addEventListener('click', () => {
             state.filters[p.dataset.g] = p.dataset.v
+            writeFilters(state.filters)
             render()
           })
         })
@@ -353,6 +371,12 @@ export default {
       }
 
       container.querySelector('#tb-refresh').addEventListener('click', refresh)
+
+      container.querySelector('#tb-reset').addEventListener('click', () => {
+        state.filters = { ...DEFAULT_FILTERS }
+        clearFiltersLs()
+        render()
+      })
 
       container.querySelector('#tb-pdf').addEventListener('click', () => {
         try { exportPanelAsPdf({ title: 'Bug-Reports Triage', element: container, filename: 'bug-reports-triage.pdf' }) }
