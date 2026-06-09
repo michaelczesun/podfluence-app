@@ -1624,10 +1624,10 @@
   <!-- 4.6.j Michael: "unten kannst du auch den superbot schreiben, weil du
        ja aufschreibst wieivele menschen, hörer oder podcaster aktiv sind". -->
   <div id="footer-bot" style="background: rgba(139,92,246,0.10); border: 1px solid rgba(139,92,246,0.30); border-radius: 14px; padding: 16px 18px; margin: 0 auto 32px; max-width: 520px; text-align: left;">
-    <p style="margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--primary-2); text-transform: uppercase; letter-spacing: 0.6px;">
+    <p style="margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--primary-2); text-transform: uppercase; letter-spacing: 0.6px;" data-i18n="bot.label">
       🤖 hozd-Bot · Live
     </p>
-    <p id="footer-bot-msg" style="margin: 0; font-size: 14px; line-height: 1.5; color: var(--text);">
+    <p id="footer-bot-msg" data-i18n="footer.bot-loading" style="margin: 0; font-size: 14px; line-height: 1.5; color: var(--text);">
       Hozd ist gerade … <em style="opacity: 0.6;">lade Live-Zahlen</em>
     </p>
   </div>
@@ -1644,11 +1644,11 @@
     &nbsp;·&nbsp;
     <a href="/transparenz/" data-i18n="footer.transparency">Transparenz</a>
     &nbsp;·&nbsp;
-    <a href="/agb/">AGB</a>
+    <a href="/agb/" data-i18n="footer.agb">AGB</a>
   </p>
 
   <details class="legal">
-    <summary>Impressum &amp; Kontakt</summary>
+    <summary data-i18n="footer.impressum-card">Impressum &amp; Kontakt</summary>
     <div class="legal-content">
       <p><strong>Webseitenbetreiber:</strong> Michael Czesun – DAS GEHT!</p>
       <p>
@@ -1682,17 +1682,17 @@
   <div class="asb-header">
     <div class="asb-live-row">
       <span class="asb-live-dot"></span>
-      <span class="asb-live-label">LIVE</span>
+      <span class="asb-live-label" data-i18n="asb.live">LIVE</span>
     </div>
     <div class="asb-user-count">
       <span id="asb-count-num">…</span>
-      <span class="asb-count-label">User in der Beta</span>
+      <span class="asb-count-label" data-i18n="asb.count.label">User in der Beta</span>
     </div>
   </div>
 
   <!-- 2) Activity Feed -->
   <div class="asb-section">
-    <div class="asb-section-title">Letzte Joins</div>
+    <div class="asb-section-title" data-i18n="asb.joins.title">Letzte Joins</div>
     <div id="asb-feed" class="asb-feed">
       <div class="asb-feed-skeleton"></div>
       <div class="asb-feed-skeleton" style="width:75%"></div>
@@ -1702,7 +1702,7 @@
 
   <!-- 3) Testimonial Carousel -->
   <div class="asb-section">
-    <div class="asb-section-title">Was Beta-User sagen</div>
+    <div class="asb-section-title" data-i18n="asb.testimonials.title">Was Beta-User sagen</div>
     <div id="asb-testimonial" class="asb-testimonial">
       <div class="asb-testimonial-quote" id="asb-quote-text"></div>
       <div class="asb-testimonial-author" id="asb-quote-author"></div>
@@ -1712,21 +1712,21 @@
 
   <!-- 4) Slot Counter -->
   <div class="asb-section asb-slot-section">
-    <div class="asb-section-title">Dein Beta-Slot</div>
+    <div class="asb-section-title" data-i18n="slot.label">Dein Beta-Slot</div>
     <div class="asb-slot-counter">
       <div class="asb-slot asb-slot-past">#<span id="asb-slot-n2">…</span></div>
       <div class="asb-slot asb-slot-past">#<span id="asb-slot-n1">…</span></div>
       <div class="asb-slot asb-slot-current">
-        <div class="asb-slot-label">DEIN SLOT</div>
+        <div class="asb-slot-label" data-i18n="slot.your">DEIN SLOT</div>
         #<span id="asb-slot-next">…</span>
       </div>
     </div>
-    <p class="asb-slot-hint">Diese Slots vergehen täglich — handle sichern solange möglich.</p>
+    <p class="asb-slot-hint" data-i18n="slot.urgency">Diese Slots vergehen täglich — handle sichern solange möglich.</p>
   </div>
 
   <!-- 5) Sticky CTA -->
   <div class="asb-cta-wrap">
-    <a href="#ios-card" class="asb-cta-btn" onclick="document.getElementById('ios-card').scrollIntoView({behavior:'smooth'});return false;">
+    <a href="#ios-card" class="asb-cta-btn" data-i18n="slot.cta" onclick="document.getElementById('ios-card').scrollIntoView({behavior:'smooth'});return false;">
       Beta beitreten →
     </a>
   </div>
@@ -2275,14 +2275,14 @@
   <div class="cookie-content">
     <div class="cookie-icon">🍪</div>
     <div class="cookie-text">
-      <strong>Wir respektieren deine Privatsphäre.</strong>
-      <p>
+      <strong data-i18n="cookie.title">Wir respektieren deine Privatsphäre.</strong>
+      <p data-i18n="cookie.text">
         hozd.app nutzt Cloudflare Web Analytics — <strong>komplett ohne Cookies und ohne Tracking</strong>.
         Wir speichern nichts auf deinem Gerät und teilen keine Daten mit Werbenetzwerken.
         Mehr dazu in unserer <a href="#privacy" id="privacyLink" style="color:var(--primary-2);text-decoration:underline">Datenschutzerklärung</a>.
       </p>
     </div>
-    <button id="cookieAccept" class="cookie-btn cookie-btn-primary">Verstanden</button>
+    <button id="cookieAccept" class="cookie-btn cookie-btn-primary" data-i18n="cookie.accept">Verstanden</button>
   </div>
 </div>
 
@@ -2544,23 +2544,13 @@
           var pods = typeof d.podcasters === 'number' ? d.podcasters : 0;
           var lis  = typeof d.listeners === 'number' ? d.listeners
                    : Math.max(0, (d.users || 0) - pods);
-          var parts = [];
-          if (isEn2) {
-            if (pods > 0) parts.push('<strong>' + pods + '</strong> podcasters');
-            if (lis > 0)  parts.push('<strong>' + lis + '</strong> listeners');
-            if (d.episodes) parts.push('<strong>' + d.episodes + '</strong> episodes connected');
-            var joined = parts.length === 0 ? '' : parts.length === 1 ? parts[0]
-              : parts.length === 2 ? parts.join(' and ')
-              : parts.slice(0, -1).join(', ') + ' and ' + parts[parts.length - 1];
-            botMsg.innerHTML = 'Right now <strong>' + (d.users || 0) + '</strong> people are here — ' + joined + '. Fresh numbers, straight from the DB. 🤘';
-          } else {
-            if (pods > 0) parts.push('<strong>' + pods + '</strong> Podcaster:innen');
-            if (lis > 0)  parts.push('<strong>' + lis + '</strong> Hörer:innen');
-            if (d.episodes) parts.push('<strong>' + d.episodes + '</strong> Folgen schon vernetzt');
-            var joined = parts.length === 0 ? '' : parts.length === 1 ? parts[0]
-              : parts.length === 2 ? parts.join(' und ')
-              : parts.slice(0, -1).join(', ') + ' und ' + parts[parts.length - 1];
-            botMsg.innerHTML = 'Grad sind <strong>' + (d.users || 0) + '</strong> Menschen mit dabei — ' + joined + '. Frische Zahlen, direkt aus der DB. 🤘';
+          var tpl = (DICT[isEn2 ? 'en' : 'de'] || {})['bot.status'] || '';
+          if (tpl) {
+            botMsg.innerHTML = tpl
+              .replace('{X}', d.users || 0)
+              .replace('{Y}', pods)
+              .replace('{Z}', lis)
+              .replace('{W}', d.episodes || 0);
           }
         }
       })
@@ -2908,7 +2898,19 @@
       "footer.imprint": "Impressum",
       "footer.privacy": "Datenschutz",
       "footer.transparency": "Transparenz",
-      "sticky.text": "↑ Jetzt downloaden"
+      "footer.agb": "AGB",
+      "footer.impressum-card": "Impressum & Kontakt",
+      "footer.bot-loading": "Hozd ist gerade … <em style=\"opacity: 0.6;\">lade Live-Zahlen</em>",
+      "cookie.title": "Wir respektieren deine Privatsphäre.",
+      "cookie.text": "hozd.app nutzt Cloudflare Web Analytics — <strong>komplett ohne Cookies und ohne Tracking</strong>. Wir speichern nichts auf deinem Gerät und teilen keine Daten mit Werbenetzwerken. Mehr dazu in unserer <a href=\"#privacy\" id=\"privacyLink\" style=\"color:var(--primary-2);text-decoration:underline\">Datenschutzerklärung</a>.",
+      "cookie.accept": "Verstanden",
+      "sticky.text": "↑ Jetzt downloaden",
+      "slot.label": "Dein Beta-Slot",
+      "slot.your": "DEIN SLOT",
+      "slot.urgency": "Diese Slots vergehen täglich — handle sichern solange möglich.",
+      "slot.cta": "Beta beitreten →",
+      "bot.label": "🤖 hozd-Bot · Live",
+      "bot.status": "Grad sind <strong>{X}</strong> Menschen mit dabei — {Y} Podcaster:innen, {Z} Hörer:innen und {W} Folgen schon vernetzt. Frische Zahlen, direkt aus der DB. 🤘"
     },
     en: {
       "hero.title": "hozd",
@@ -3023,10 +3025,22 @@
       "footer.imprint": "Imprint",
       "footer.privacy": "Privacy",
       "footer.transparency": "Transparency",
-      "sticky.text": "↑ Download now"
+      "footer.agb": "Terms",
+      "footer.impressum-card": "Imprint & Contact",
+      "footer.bot-loading": "hozd is … <em style=\"opacity: 0.6;\">loading live numbers</em>",
+      "cookie.title": "We respect your privacy.",
+      "cookie.text": "hozd.app uses Cloudflare Web Analytics — <strong>completely cookie-free and without tracking</strong>. We don't store anything on your device and don't share data with ad networks. More in our <a href=\"#privacy\" id=\"privacyLink\" style=\"color:var(--primary-2);text-decoration:underline\">privacy policy</a>.",
+      "cookie.accept": "Got it",
+      "sticky.text": "↑ Download now",
+      "slot.label": "Your Beta Slot",
+      "slot.your": "YOUR SLOT",
+      "slot.urgency": "Slots fill up daily — grab yours while you can.",
+      "slot.cta": "Join beta →",
+      "bot.label": "🤖 hozd-Bot · Live",
+      "bot.status": "Right now <strong>{X}</strong> people are here — {Y} podcasters, {Z} listeners and {W} episodes connected. Fresh numbers, straight from the DB. 🤘"
     }
   };
-  var HTML_KEYS = { "hero.tagline": 1, "hero.sub": 1, "hero.ios.hint": 1, "hero.ios.note": 1, "hero.android.hint": 1, "hero.android.note": 1, "hero.open-for-all": 1, "faq.a1": 1, "faq.a2": 1, "faq.a3": 1, "faq.a4": 1, "faq.a5": 1, "faq.a6": 1, "faq.a7": 1, "faq.a8": 1, "footer.contact": 1, "feat.rss.desc": 1, "feat.5.title": 1, "feat.9.title": 1 };
+  var HTML_KEYS = { "hero.tagline": 1, "hero.sub": 1, "hero.ios.hint": 1, "hero.ios.note": 1, "hero.android.hint": 1, "hero.android.note": 1, "hero.open-for-all": 1, "faq.a1": 1, "faq.a2": 1, "faq.a3": 1, "faq.a4": 1, "faq.a5": 1, "faq.a6": 1, "faq.a7": 1, "faq.a8": 1, "footer.contact": 1, "footer.bot-loading": 1, "cookie.text": 1, "feat.rss.desc": 1, "feat.5.title": 1, "feat.9.title": 1 };
   var stored = null;
   try { stored = localStorage.getItem('lang'); } catch(e) {}
   var lang = stored || ((navigator.language || 'de').toLowerCase().indexOf('en') === 0 ? 'en' : 'de');
