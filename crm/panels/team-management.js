@@ -1,9 +1,9 @@
-import { sb } from '/lib/supabase.js?v=20260608n'
-import { toast, confirmDialog, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608n'
-import { openModal } from '/crm/lib/modal.js?v=20260608n'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608n'
-import { countUp, fadeIn } from '/lib/animations.js?v=20260608n'
-import { drawer, glassCard } from '/lib/layout-extras.js?v=20260608n'
+import { sb } from '/lib/supabase.js?v=20260608o'
+import { toast, confirmDialog, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608o'
+import { openModal } from '/crm/lib/modal.js?v=20260608o'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608o'
+import { countUp, fadeIn } from '/lib/animations.js?v=20260608o'
+import { drawer, glassCard } from '/lib/layout-extras.js?v=20260608o'
 
 // Rollen-Definition: key -> { label, color, description, rank }
 // rank steuert: höher = mehr Macht. Owner = read-only für Nicht-Owner.

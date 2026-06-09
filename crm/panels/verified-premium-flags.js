@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608n'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608n'
-import { makeDonutChart, makeBarChart } from '/lib/charts.js?v=20260608n'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608n'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608n'
-import { drawer, statHero, segmentedControl } from '/lib/layout-extras.js?v=20260608n'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608n'
+import { sb } from '/lib/supabase.js?v=20260608o'
+import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608o'
+import { makeDonutChart, makeBarChart } from '/lib/charts.js?v=20260608o'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608o'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608o'
+import { drawer, statHero, segmentedControl } from '/lib/layout-extras.js?v=20260608o'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608o'
 
 async function fetchUsers() {
   const { data, error } = await sb.rpc('admin_users_list_full', { p_limit: 5000, p_offset: 0, p_search: '' })

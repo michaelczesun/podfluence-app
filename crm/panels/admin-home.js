@@ -1,9 +1,9 @@
-import { sb } from '/lib/supabase.js?v=20260608n'
-import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, confirmDialog } from '/lib/ui.js?v=20260608n'
-import { makeSparkline, makeAreaChart } from '/lib/charts.js?v=20260608n'
-import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260608n'
-import { glassCard } from '/lib/layout-extras.js?v=20260608n'
-import { skeletonCard, skeletonGrid, skeletonChart } from '/crm/lib/skeleton.js?v=20260608n'
+import { sb } from '/lib/supabase.js?v=20260608o'
+import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, confirmDialog } from '/lib/ui.js?v=20260608o'
+import { makeSparkline, makeAreaChart } from '/lib/charts.js?v=20260608o'
+import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260608o'
+import { glassCard } from '/lib/layout-extras.js?v=20260608o'
+import { skeletonCard, skeletonGrid, skeletonChart } from '/crm/lib/skeleton.js?v=20260608o'
 
 // Schema-Truth: siehe CLAUDE-Memory. Diese Datei nutzt NUR existierende Tabellen/Felder:
 //  - users(id,email,is_premium,is_verified,is_admin,created_at,full_name,username,avatar_url,is_banned)

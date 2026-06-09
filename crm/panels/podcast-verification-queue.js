@@ -1,9 +1,9 @@
-import { sb } from '/lib/supabase.js?v=20260608n'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js?v=20260608n'
-import { makeDonutChart, makeBarChart, makeAreaChart } from '/lib/charts.js?v=20260608n'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608n'
-import { countUp, fadeIn } from '/lib/animations.js?v=20260608n'
-import { drawer, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js?v=20260608n'
+import { sb } from '/lib/supabase.js?v=20260608o'
+import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js?v=20260608o'
+import { makeDonutChart, makeBarChart, makeAreaChart } from '/lib/charts.js?v=20260608o'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608o'
+import { countUp, fadeIn } from '/lib/animations.js?v=20260608o'
+import { drawer, segmentedControl, statHero, glassCard } from '/lib/layout-extras.js?v=20260608o'
 
 const STATUS_LABELS = {
   pending: 'Ausstehend',
