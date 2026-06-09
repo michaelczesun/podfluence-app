@@ -5,7 +5,7 @@ import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608k'
 import { countUp, fadeIn, skeletonLoader, slideInRight } from '/lib/animations.js?v=20260608k'
 import { drawer, glassCard, statHero } from '/lib/layout-extras.js?v=20260608k'
 import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608k'
-import { emptyState } from '/crm/lib/empty.js?v=20260608a'
+import { emptyState } from '/crm/lib/empty.js?v=20260608k'
 
 // priority/category are NOT in the DB schema — UI-only mapping based on description keywords
 const STATUS_COLORS = {
