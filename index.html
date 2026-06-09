@@ -961,6 +961,7 @@
   @keyframes lv-float-slow { 0%, 100% { transform: translate(0,0) scale(1); } 33% { transform: translate(40px,-60px) scale(1.08); } 66% { transform: translate(-30px,40px) scale(0.95); } }
   @keyframes lv-float-blob { 0%, 100% { transform: translate(0,0) rotate(0deg); } 50% { transform: translate(-80px,-50px) rotate(180deg); } }
   @media (prefers-reduced-motion: reduce) { .lv-aurora__blob { animation: none; } }
+  .lv-scroll-progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 200; background: linear-gradient(90deg, #8B5CF6, #EC4899, #06B6D4); transform: scaleX(0); transform-origin: 0 0; transition: transform 0.1s linear; pointer-events: none; }
 </style>
 <!-- Cloudflare Web Analytics -->
 <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "2dfb866f44454ecca8d7deb02bf8de60"}'></script>
@@ -1006,6 +1007,7 @@
 </script>
 </head>
 <body>
+<div class="lv-scroll-progress" id="lv-scroll-progress" aria-hidden="true"></div>
 <div class="lv-aurora" aria-hidden="true">
   <div class="lv-aurora__blob lv-aurora__blob--1"></div>
   <div class="lv-aurora__blob lv-aurora__blob--2"></div>
@@ -2894,6 +2896,30 @@
       build();
     }
   } catch(e) {}
+})();
+</script>
+<script>
+(function(){
+  var bar = document.getElementById('lv-scroll-progress');
+  if (!bar) return;
+  var ticking = false;
+  function update(){
+    var doc = document.documentElement;
+    var scrollTop = window.scrollY || doc.scrollTop || 0;
+    var height = (doc.scrollHeight || 0) - (window.innerHeight || 0);
+    var progress = height > 0 ? scrollTop / height : 0;
+    if (progress < 0) progress = 0;
+    if (progress > 1) progress = 1;
+    bar.style.transform = 'scaleX(' + progress + ')';
+    ticking = false;
+  }
+  window.addEventListener('scroll', function(){
+    if (!ticking){
+      window.requestAnimationFrame(update);
+      ticking = true;
+    }
+  }, { passive: true });
+  update();
 })();
 </script>
 </body>
