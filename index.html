@@ -974,6 +974,19 @@
   @keyframes lv-float-blob { 0%, 100% { transform: translate(0,0) rotate(0deg); } 50% { transform: translate(-80px,-50px) rotate(180deg); } }
   @media (prefers-reduced-motion: reduce) { .lv-aurora__blob { animation: none; } }
   .lv-scroll-progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 200; background: linear-gradient(90deg, #8B5CF6, #EC4899, #06B6D4); transform: scaleX(0); transform-origin: 0 0; transition: transform 0.1s linear; pointer-events: none; }
+
+  /* ============ Reveal (scroll-triggered) ============ */
+  .reveal { opacity: 0; transform: translateY(40px); transition: opacity 0.9s cubic-bezier(.22,1,.36,1), transform 0.9s cubic-bezier(.22,1,.36,1); }
+  .reveal.in { opacity: 1; transform: none; }
+
+  /* ============ Typography Polish (additiv) ============ */
+  body { font-feature-settings: "cv11", "ss01", "ss03"; }
+  h1, .section-title, .sp-section-title { letter-spacing: -0.025em !important; font-weight: 800; background: linear-gradient(180deg, #FFFFFF 0%, #C4B5FD 100%); -webkit-background-clip: text; background-clip: text; -webkit-text-fill-color: transparent; color: transparent; }
+  .section-label, .sp-section-label { letter-spacing: 0.2em !important; text-transform: uppercase; color: #A78BFA; font-weight: 700; }
+  .tagline { letter-spacing: -0.015em; line-height: 1.45; }
+  html { scroll-behavior: smooth; }
+  ::selection { background: rgba(139,92,246,0.4); color: #fff; }
+  *:focus-visible { outline: 2px solid #A78BFA; outline-offset: 4px; border-radius: 4px; }
 </style>
 <!-- Cloudflare Web Analytics -->
 <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "2dfb866f44454ecca8d7deb02bf8de60"}'></script>
@@ -3010,6 +3023,37 @@
     }
   }, { passive: true });
   update();
+})();
+</script>
+<script>
+(function(){
+  /* Smooth anchor scroll */
+  document.querySelectorAll('a[href^="#"]').forEach(function(a){
+    a.addEventListener('click', function(e){
+      var id = a.getAttribute('href').slice(1);
+      var target = id ? document.getElementById(id) : null;
+      if (!target) return;
+      e.preventDefault();
+      target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  });
+
+  /* Reveal on scroll */
+  var reveals = document.querySelectorAll('.reveal');
+  if (reveals.length && 'IntersectionObserver' in window) {
+    var io = new IntersectionObserver(function(entries){
+      entries.forEach(function(entry){
+        if (entry.isIntersecting) {
+          entry.target.classList.add('in');
+          io.unobserve(entry.target);
+        }
+      });
+    }, { threshold: 0.12 });
+    reveals.forEach(function(el){ io.observe(el); });
+  } else {
+    /* Fallback: show all immediately */
+    reveals.forEach(function(el){ el.classList.add('in'); });
+  }
 })();
 </script>
 </body>
