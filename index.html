@@ -2165,7 +2165,7 @@
     var feed = document.getElementById('asb-feed');
     if (!feed) return;
     if (!users || !users.length) {
-      feed.innerHTML = '<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:8px 0">Noch keine Daten</div>';
+      feed.innerHTML = '<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:8px 0">' + asbT('asb.joins.empty') + '</div>';
       return;
     }
     feed.innerHTML = users.map(function(u, idx) {
@@ -2173,13 +2173,14 @@
       var handle = u.username ? ' <span style="color:var(--text-dim);font-weight:500">@' + esc(u.username) + '</span>' : '';
       var init   = (name[0] || '?').toUpperCase();
       var time   = u.created_at ? relTime(u.created_at) : '';
+      var timeLabel = asbT('asb.joins.row').replace('{time}', time);
       return '<div class="asb-entry" style="animation-delay:' + (idx*55) + 'ms">'
         + '<div class="asb-avatar" style="background:' + avatarGrad(name) + '">' + esc(init) + '</div>'
         + '<div class="asb-entry-body">'
         + '<div class="asb-entry-name">' + esc(name) + handle + '</div>'
-        + '<div class="asb-entry-time">' + time + ' beigetreten</div>'
+        + '<div class="asb-entry-time">' + esc(timeLabel) + '</div>'
         + '</div>'
-        + '<div class="asb-entry-badge">Beta</div>'
+        + '<div class="asb-entry-badge">' + asbT('asb.joins.badge') + '</div>'
         + '</div>';
     }).join('');
   }
@@ -2236,7 +2237,7 @@
     .then(renderFeed)
     .catch(function() {
       var f = document.getElementById('asb-feed');
-      if (f) f.innerHTML = '<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:8px 0">Feed lädt gleich…</div>';
+      if (f) f.innerHTML = '<div style="font-size:12px;color:var(--text-dim);text-align:center;padding:8px 0">' + asbT('asb.joins.loading') + '</div>';
     });
   }
 
@@ -2251,8 +2252,8 @@
     qEl.classList.add('asb-testimonial-fade');
     aEl && aEl.classList.add('asb-testimonial-fade');
     setTimeout(function() {
-      qEl.textContent = t.text;
-      if (aEl) aEl.textContent = '— ' + t.author;
+      qEl.textContent = asbT(t.textKey);
+      if (aEl) aEl.textContent = '— ' + asbT(t.authorKey);
       qEl.classList.remove('asb-testimonial-fade');
       aEl && aEl.classList.remove('asb-testimonial-fade');
     }, 340);
@@ -2306,6 +2307,14 @@
     fetchActivity();
     setInterval(function() { fetchCount(); fetchActivity(); }, 30000);
   }
+
+  /* Expose a lang-refresh hook for the main i18n applyLang callback */
+  window._asbRefreshLang = function() {
+    /* Re-render testimonial with new lang */
+    showTestimonial(currentTestimonial);
+    /* Re-render feed (uses asbT at render time) */
+    fetchActivity();
+  };
 
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
   else init();
@@ -2960,7 +2969,11 @@
       "slot.urgency": "Diese Slots vergehen täglich — handle sichern solange möglich.",
       "slot.cta": "Beta beitreten →",
       "bot.label": "🤖 hozd-Bot · Live",
-      "bot.status": "Grad sind <strong>{X}</strong> Menschen mit dabei — {Y} Podcaster:innen, {Z} Hörer:innen und {W} Folgen schon vernetzt. Frische Zahlen, direkt aus der DB. 🤘"
+      "bot.status": "Grad sind <strong>{X}</strong> Menschen mit dabei — {Y} Podcaster:innen, {Z} Hörer:innen und {W} Folgen schon vernetzt. Frische Zahlen, direkt aus der DB. 🤘",
+      "asb.live":               "LIVE",
+      "asb.count.label":        "User in der Beta",
+      "asb.joins.title":        "Letzte Joins",
+      "asb.testimonials.title": "Was Beta-User sagen"
     },
     en: {
       "hero.title": "hozd",
@@ -3087,7 +3100,11 @@
       "slot.urgency": "Slots fill up daily — grab yours while you can.",
       "slot.cta": "Join beta →",
       "bot.label": "🤖 hozd-Bot · Live",
-      "bot.status": "Right now <strong>{X}</strong> people are here — {Y} podcasters, {Z} listeners and {W} episodes connected. Fresh numbers, straight from the DB. 🤘"
+      "bot.status": "Right now <strong>{X}</strong> people are here — {Y} podcasters, {Z} listeners and {W} episodes connected. Fresh numbers, straight from the DB. 🤘",
+      "asb.live":               "LIVE",
+      "asb.count.label":        "Beta users",
+      "asb.joins.title":        "Recent joins",
+      "asb.testimonials.title": "What beta users say"
     }
   };
   var HTML_KEYS = { "hero.tagline": 1, "hero.sub": 1, "hero.ios.hint": 1, "hero.ios.note": 1, "hero.android.hint": 1, "hero.android.note": 1, "hero.open-for-all": 1, "faq.a1": 1, "faq.a2": 1, "faq.a3": 1, "faq.a4": 1, "faq.a5": 1, "faq.a6": 1, "faq.a7": 1, "faq.a8": 1, "footer.contact": 1, "footer.bot-loading": 1, "cookie.text": 1, "feat.rss.desc": 1, "feat.5.title": 1, "feat.9.title": 1 };
@@ -3111,6 +3128,7 @@
       btn.textContent = (l === 'de' ? 'DE / EN' : 'EN / DE');
       btn.setAttribute('aria-pressed', l === 'en' ? 'true' : 'false');
     }
+    if (typeof window._asbRefreshLang === 'function') { try { window._asbRefreshLang(); } catch(e) {} }
   }
 
   function ready(fn){
