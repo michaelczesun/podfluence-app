@@ -30,11 +30,15 @@ const GROWTH_DAYS = 14
 // ---------- DATA ----------
 
 function pctChange(curr, prev) {
+  if (curr == null || prev == null) return 0
   if (!prev || prev === 0) return curr > 0 ? 100 : 0
   return ((curr - prev) / prev) * 100
 }
 
 function formatValue(val, fmt) {
+  // null/undefined → em-dash (Wert unbekannt). 0 ist ein valider Wert (echt 0h)
+  // und wird normal mit Suffix gerendert.
+  if (val == null) return '—'
   if (fmt === 'hours') return fmtNumber(val) + ' h'
   return fmtNumber(val)
 }
@@ -60,13 +64,20 @@ async function fetchHeroStats() {
       if (r && (r.total_users != null || r.active_24h != null)) {
         const norm = {}
         for (const def of KPI_DEFS) {
-          const v = r[def.key]
+          // RPC kann das Feld unter `<key>` oder `<key>_24h` zurückgeben.
+          const rawKey = r[def.key] !== undefined ? def.key : (r[`${def.key}_24h`] !== undefined ? `${def.key}_24h` : def.key)
+          const v = r[rawKey]
           if (v && typeof v === 'object' && 'value' in v) {
-            norm[def.key] = { value: Number(v.value) || 0, prev: Number(v.prev) || 0 }
-          } else {
             norm[def.key] = {
-              value: Number(r[def.key]) || 0,
-              prev: Number(r[`${def.key}_prev`] ?? r[`${def.key}_yday`]) || 0
+              value: v.value == null ? null : Number(v.value),
+              prev:  v.prev  == null ? null : Number(v.prev)
+            }
+          } else {
+            // null/undefined bewahren — sonst zeigt das Tile fälschlich "0" wenn RPC keinen Wert liefert.
+            const rawPrev = r[`${def.key}_prev`] ?? r[`${def.key}_yday`] ?? r[`${rawKey}_prev`] ?? r[`${rawKey}_yday`]
+            norm[def.key] = {
+              value: v == null ? null : Number(v),
+              prev:  rawPrev == null ? null : Number(rawPrev)
             }
           }
         }
@@ -124,6 +135,9 @@ async function fetchSpark(def) {
       return bucketByDay(data || [], 'created_at', SPARK_DAYS).map(r => r.value)
     }
     if (def.sparkMetric === 'listening_hours') {
+      // Konsistent mit Hörstunden-Tile: SUM(listened_ms) / 3_600_000 = hours.
+      // admin_daily_series wird hier bewusst NICHT verwendet (RPC liefert für
+      // p_metric='listens' nur Event-Count, nicht Stunden — semantisch anders).
       const { data } = await sb.from('listening_activity').select('created_at,listened_ms').gte('created_at', since).limit(5000)
       return bucketByDay(data || [], 'created_at', SPARK_DAYS, r => Number(r.listened_ms || 0) / 3600000).map(r => r.value)
     }
@@ -296,7 +310,12 @@ function actionOpenPanel(id) {
 function zeroInfoBadge(def, t) {
   // Bug #10: bei Hörstunden = 0h Info-Tooltip — sagt User ob es echt (keine Events)
   // oder Datenbug (Events ohne listened_ms) ist.
-  if (def.key !== 'listening_hours' || t.value !== 0) return ''
+  if (def.key !== 'listening_hours') return ''
+  if (t.value == null) {
+    const lbl = 'Hörstunden-Wert nicht verfügbar (RPC hat kein Feld geliefert).'
+    return `<span class="kpi-zero-info" title="${htmlEscape(lbl)}" aria-label="${htmlEscape(lbl)}">ⓘ</span>`
+  }
+  if (t.value !== 0) return ''
   const basis = t.basisEvents
   const label = basis == null
     ? 'Keine Listening-Events in den letzten 24h registriert.'
@@ -309,11 +328,13 @@ function zeroInfoBadge(def, t) {
 function renderHeroGrid(totals) {
   return `<div class="hero-grid" id="hero-grid">
     ${KPI_DEFS.map(def => {
-      const t = totals[def.key] || { value: 0, prev: 0 }
+      const t = totals[def.key] || { value: null, prev: null }
+      const unknown = t.value == null
       const change = pctChange(t.value, t.prev)
-      const dir = change > 0 ? 'up' : change < 0 ? 'down' : 'flat'
+      const dir = unknown ? 'flat' : (change > 0 ? 'up' : change < 0 ? 'down' : 'flat')
       const arrowIcon = dir === 'up' ? 'trending-up' : dir === 'down' ? 'trending-down' : 'minus'
       const sign = change > 0 ? '+' : ''
+      const changeLabel = unknown ? '—' : `${sign}${change.toFixed(1)}%`
       return `
       <div class="stat-hero glass-card kpi-card" data-kpi="${def.key}" role="button" tabindex="0" style="--accent:${def.color}">
         <div class="kpi-card-head">
@@ -325,7 +346,7 @@ function renderHeroGrid(totals) {
         <div class="kpi-spark" id="ah-spark-${def.key}"></div>
         <div class="kpi-change ${dir}">
           ${iconHtml(arrowIcon)}
-          <span>${sign}${change.toFixed(1)}%</span>
+          <span>${changeLabel}</span>
           <span class="kpi-change-sub">vs gestern</span>
         </div>
       </div>`
@@ -672,8 +693,13 @@ export default {
           KPI_DEFS.forEach(def => {
             const el = container.querySelector(`#ah-val-${def.key}`)
             if (el) {
-              try { countUp(el, { from: 0, to: totals[def.key].value, duration: 1100, format: n => formatValue(Math.round(n), def.fmt) }) }
-              catch (_) { el.textContent = formatValue(totals[def.key].value, def.fmt) }
+              const v = totals[def.key]?.value
+              if (v == null) {
+                el.textContent = formatValue(null, def.fmt) // "—"
+              } else {
+                try { countUp(el, { from: 0, to: v, duration: 1100, format: n => formatValue(Math.round(n), def.fmt) }) }
+                catch (_) { el.textContent = formatValue(v, def.fmt) }
+              }
             }
           })
           // Sparklines
@@ -698,11 +724,16 @@ export default {
         } else {
           for (const def of KPI_DEFS) {
             const el = container.querySelector(`#ah-val-${def.key}`)
-            const t = totals[def.key]
-            const p = prev?.[def.key] || { value: 0 }
+            const t = totals[def.key] || { value: null, prev: null }
+            const p = prev?.[def.key] || { value: null }
             if (el && p.value !== t.value) {
-              try { countUp(el, { from: p.value, to: t.value, duration: 800, format: n => formatValue(Math.round(n), def.fmt) }) }
-              catch (_) { el.textContent = formatValue(t.value, def.fmt) }
+              if (t.value == null) {
+                el.textContent = formatValue(null, def.fmt) // "—"
+              } else {
+                const from = p.value == null ? 0 : p.value
+                try { countUp(el, { from, to: t.value, duration: 800, format: n => formatValue(Math.round(n), def.fmt) }) }
+                catch (_) { el.textContent = formatValue(t.value, def.fmt) }
+              }
               const card = container.querySelector(`.kpi-card[data-kpi="${def.key}"]`)
               if (card) { card.classList.add('pulsing'); setTimeout(()=>card.classList.remove('pulsing'), 1300); try { pulse(card) } catch(_){} }
             }
@@ -716,14 +747,16 @@ export default {
                 const badge = zeroInfoBadge(def, t)
                 if (badge) head.insertAdjacentHTML('beforeend', badge)
               }
+              const unknown = t.value == null
               const change = pctChange(t.value, t.prev)
-              const dir = change > 0 ? 'up' : change < 0 ? 'down' : 'flat'
+              const dir = unknown ? 'flat' : (change > 0 ? 'up' : change < 0 ? 'down' : 'flat')
               const arrowIcon = dir === 'up' ? 'trending-up' : dir === 'down' ? 'trending-down' : 'minus'
               const sign = change > 0 ? '+' : ''
+              const changeLabel = unknown ? '—' : `${sign}${change.toFixed(1)}%`
               const ch = card.querySelector('.kpi-change')
               if (ch) {
                 ch.className = `kpi-change ${dir}`
-                ch.innerHTML = `${iconHtml(arrowIcon)}<span>${sign}${change.toFixed(1)}%</span><span class="kpi-change-sub">vs gestern</span>`
+                ch.innerHTML = `${iconHtml(arrowIcon)}<span>${changeLabel}</span><span class="kpi-change-sub">vs gestern</span>`
               }
             }
           }
