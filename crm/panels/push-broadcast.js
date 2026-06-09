@@ -1,102 +1,205 @@
-import { sb } from '/lib/supabase.js?v=20260608l'
-import { toast, confirmDialog, fmtNumber, fmtDateTime, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608l'
-import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260608l'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608l'
-import { drawer, statHero, glassCard } from '/lib/layout-extras.js?v=20260608l'
+import { sb } from '/lib/supabase.js?v=20260609a'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260609a'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260609a'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260609a'
+import { drawer, statHero } from '/lib/layout-extras.js?v=20260609a'
 
-// Audiences supported by send_broadcast_push RPC
+// ─── Audience-Segmente ────────────────────────────────────────────────────────
+//
+// Neue Segmente (Stand 9.6.26):
+//   all          → komplette User-Basis
+//   verified     → users.is_verified = true
+//   podcaster    → user_type IN ('podcaster','both')
+//   active_7d    → users.last_seen_at >= now() - 7d
+//   custom       → explizite User-IDs aus Custom-Search
+//
+// Backend-Mapping (mit graceful Fallback):
+//   1. admin_push_to_segment(segment, title, body, deep_link)  ← bevorzugt
+//   2. admin_push_to_users(user_ids, title, body, deep_link)   ← für custom + test-an-mich
+//   3. send_broadcast_push(title, body, audience, deep_link)   ← Legacy-Fallback
+//      (Legacy kennt nur 'all'/'podcaster'/'listener'/'beta' — verified/active_7d
+//       fallen dort auf 'all' zurück.)
 const AUDIENCES = [
-  { value: 'all',       label: 'Alle User' },
+  { value: 'all',       label: 'Alle' },
+  { value: 'verified',  label: 'Verifizierte' },
   { value: 'podcaster', label: 'Podcaster' },
-  { value: 'listener',  label: 'Hörer' },
-  { value: 'beta',      label: 'Beta-User' }
+  { value: 'active_7d', label: 'Aktive 7d' },
+  { value: 'custom',    label: 'Custom' }
 ]
+
+// Mapping audience → Legacy-Audience für send_broadcast_push-Fallback.
+// verified/active_7d kennt das Legacy-RPC nicht → 'all'.
+const LEGACY_AUDIENCE_MAP = {
+  all:       'all',
+  verified:  'all',
+  podcaster: 'podcaster',
+  active_7d: 'all',
+  custom:    'all'  // wird nur als Fallback verwendet, wenn admin_push_to_users fehlt
+}
 
 function audienceLabel(v) {
   return AUDIENCES.find(a => a.value === v)?.label || v || '—'
 }
 
-// Map audience value → count from admin_user_type_split result.
-// admin_user_type_split may return keys: podcaster, listener, both, beta_user, premium, unknown.
-// We use all plausible key names defensively.
-function countForAudience(audience, splitData, statsData) {
-  const sp = splitData || {}
-  const st = statsData || {}
-  if (audience === 'all')       return st.total_users || 0
-  if (audience === 'podcaster') return (sp.podcaster || 0) + (sp.both || 0)
-  if (audience === 'listener')  return (sp.listener  || 0) + (sp.both || 0)
-  // accept 'beta_user', 'beta', or 'premium' — whatever key the RPC returns
-  // Only accept real beta keys — premium != beta
-  if (audience === 'beta')      return sp.beta_user || sp.beta || 0
-  return 0
-}
+// ─── Audience-Counts ──────────────────────────────────────────────────────────
 
 async function fetchAudienceCounts() {
-  const [statsRes, splitRes] = await Promise.all([
-    sb.rpc('admin_db_live_stats'),
-    sb.rpc('admin_user_type_split')
+  const sevenDaysAgo = new Date(Date.now() - 7 * 864e5).toISOString()
+  const [totalRes, verifiedRes, podcasterRes, active7Res] = await Promise.all([
+    sb.from('users').select('id', { count: 'exact', head: true }),
+    sb.from('users').select('id', { count: 'exact', head: true }).eq('is_verified', true),
+    sb.from('users').select('id', { count: 'exact', head: true }).in('user_type', ['podcaster', 'both']),
+    sb.from('users').select('id', { count: 'exact', head: true }).gte('last_seen_at', sevenDaysAgo)
   ])
-  const statsData = (statsRes.data && !Array.isArray(statsRes.data))
-    ? statsRes.data
-    : (Array.isArray(statsRes.data) ? (statsRes.data[0] || {}) : {})
-  const splitData = (splitRes.data && !Array.isArray(splitRes.data))
-    ? splitRes.data
-    : (Array.isArray(splitRes.data) ? (splitRes.data[0] || {}) : {})
-  const counts = {}
-  for (const a of AUDIENCES) {
-    counts[a.value] = countForAudience(a.value, splitData, statsData)
+  return {
+    all:       totalRes.count     || 0,
+    verified:  verifiedRes.count  || 0,
+    podcaster: podcasterRes.count || 0,
+    active_7d: active7Res.count   || 0,
+    custom:    0
   }
-  return { counts, statsData, splitData }
 }
 
-// History is read from email_broadcasts (broadcast_push_log does not exist).
-// email_broadcasts columns expected: id, subject (title), body, audience, sent_at,
-// recipient_count (= recipients), delivered_count (= delivered), opened_count (= opened),
-// deep_link. We normalise to a consistent shape so the rest of the UI can use
-// h.title / h.body / h.recipients / h.delivered / h.opened / h.deep_link / h.audience.
-function normaliseBroadcast(row) {
+// ─── User-Search für Custom-Audience ──────────────────────────────────────────
+
+async function searchUsers(q) {
+  if (!q || q.trim().length < 2) return []
+  // Bevorzugt RPC, sonst direkte Tabellenabfrage als Fallback.
+  try {
+    const { data, error } = await sb.rpc('crm_search_users', { q: q.trim(), limit: 20 })
+    if (!error && Array.isArray(data)) {
+      return data.map(u => ({
+        id: u.id,
+        username: u.username || '',
+        full_name: u.full_name || u.display_name || '',
+        avatar_url: u.avatar_url || null
+      }))
+    }
+  } catch (_) { /* RPC nicht vorhanden → Fallback */ }
+  try {
+    const term = `%${q.trim()}%`
+    const { data, error } = await sb
+      .from('users')
+      .select('id, username, full_name, avatar_url')
+      .or(`username.ilike.${term},full_name.ilike.${term},email.ilike.${term}`)
+      .limit(20)
+    if (error) return []
+    return data || []
+  } catch (_) { return [] }
+}
+
+// ─── History aus admin_audit_log ──────────────────────────────────────────────
+//
+// Quelle laut Spec: admin_audit_log WHERE action='admin_broadcast'.
+// Da RLS direktes SELECT auf admin_audit_log meist blockt, lesen wir via
+// admin_audit_recent-RPC und filtern client-side. Fallback: email_broadcasts.
+
+function normaliseAuditRow(row) {
+  const meta = row.meta || row.payload || {}
   return {
     id:         row.id,
-    title:      row.subject       || row.title            || '',
-    body:       row.body          || row.message          || '',
-    audience:   row.audience      || row.segment          || 'all',
-    deep_link:  row.deep_link     || row.deeplink         || '',
-    sent_at:    row.sent_at       || row.created_at       || null,
-    recipients: row.recipient_count ?? row.recipients     ?? 0,
-    delivered:  row.delivered_count ?? row.delivered      ?? 0,
-    opened:     row.opened_count    ?? row.opened         ?? 0
+    title:      meta.title       || meta.subject || '(ohne Titel)',
+    body:       meta.body        || meta.message || '',
+    audience:   meta.audience    || meta.segment || (Array.isArray(meta.user_ids) ? 'custom' : 'all'),
+    deep_link:  meta.deep_link   || meta.deeplink || '',
+    sent_at:    row.created_at,
+    actor_id:   row.actor_id     || row.admin_id || null,
+    actor_name: row.admin_full_name || row.admin_username || '',
+    recipients: meta.recipient_count ?? meta.recipients ?? (Array.isArray(meta.user_ids) ? meta.user_ids.length : 0),
+    delivered:  meta.delivered_count ?? meta.delivered ?? 0,
+    opened:     meta.opened_count    ?? meta.opened    ?? 0,
+    source:     'audit_log'
+  }
+}
+
+function normaliseEmailBroadcast(row) {
+  return {
+    id:         row.id,
+    title:      row.subject || row.title || '(ohne Titel)',
+    body:       row.body || row.message || '',
+    audience:   row.audience || row.segment || 'all',
+    deep_link:  row.deep_link || row.deeplink || '',
+    sent_at:    row.sent_at || row.created_at,
+    actor_id:   null,
+    actor_name: '',
+    recipients: row.recipient_count ?? row.recipients ?? 0,
+    delivered:  row.delivered_count ?? row.delivered ?? 0,
+    opened:     row.opened_count    ?? row.opened    ?? 0,
+    source:     'email_broadcasts'
   }
 }
 
 async function fetchHistory() {
+  // Versuch 1: admin_audit_log via RPC.
+  try {
+    const { data, error } = await sb.rpc('admin_audit_recent', { p_limit: 200, p_offset: 0 })
+    if (!error && Array.isArray(data)) {
+      const broadcasts = data
+        .filter(r => r.action === 'admin_broadcast' || r.action === 'broadcast_push' || r.action === 'push_broadcast')
+        .slice(0, 10)
+        .map(normaliseAuditRow)
+      if (broadcasts.length) return broadcasts
+    }
+  } catch (err) {
+    console.warn('[push-broadcast] audit RPC error:', err)
+  }
+  // Versuch 2: email_broadcasts (Legacy-Fallback).
   try {
     const { data, error } = await sb
       .from('email_broadcasts')
       .select('*')
       .order('sent_at', { ascending: false })
       .limit(10)
-    if (error) {
-      console.warn('[push-broadcast] fetchHistory error:', error.message)
-      return []
-    }
-    return (data || []).map(normaliseBroadcast)
+    if (!error && data) return data.map(normaliseEmailBroadcast)
   } catch (err) {
-    console.warn('[push-broadcast] fetchHistory exception:', err)
-    return []
+    console.warn('[push-broadcast] email_broadcasts fallback error:', err)
   }
+  return []
 }
 
-// Call send_broadcast_push RPC.
-// Bare param names (no p_ prefix) as per RPC signature: send_broadcast_push(title,body,audience,deep_link?)
-async function doSendBroadcast({ title, body, audience, deepLink }) {
-  const params = { title, body, audience }
+// ─── Send-Wrapper mit RPC-Fallback ────────────────────────────────────────────
+
+async function sendToSegment({ segment, title, body, deepLink }) {
+  // 1. admin_push_to_segment
+  try {
+    const params = { segment, title, body }
+    if (deepLink && deepLink.trim()) params.deep_link = deepLink.trim()
+    const { data, error } = await sb.rpc('admin_push_to_segment', params)
+    if (!error) return { data, via: 'admin_push_to_segment' }
+    if (error.code !== '42883' && !/does not exist|not found|could not find/i.test(error.message || '')) {
+      throw new Error(error.message || 'admin_push_to_segment fehlgeschlagen')
+    }
+  } catch (e) {
+    if (e.message && !/does not exist|not found|could not find/i.test(e.message)) throw e
+  }
+  // 2. Legacy: send_broadcast_push
+  const legacyAudience = LEGACY_AUDIENCE_MAP[segment] || 'all'
+  const params = { title, body, audience: legacyAudience }
   if (deepLink && deepLink.trim()) params.deep_link = deepLink.trim()
   const { data, error } = await sb.rpc('send_broadcast_push', params)
-  if (error) throw new Error(error.message || JSON.stringify(error))
-  return data
+  if (error) throw new Error(error.message || 'send_broadcast_push fehlgeschlagen')
+  return { data, via: 'send_broadcast_push' }
 }
 
-// ─── Render helpers ───────────────────────────────────────────────────────────
+async function sendToUsers({ userIds, title, body, deepLink }) {
+  if (!userIds || !userIds.length) throw new Error('Keine Ziel-User')
+  // 1. admin_push_to_users
+  try {
+    const params = { user_ids: userIds, title, body }
+    if (deepLink && deepLink.trim()) params.deep_link = deepLink.trim()
+    const { data, error } = await sb.rpc('admin_push_to_users', params)
+    if (!error) return { data, via: 'admin_push_to_users' }
+    if (error.code !== '42883' && !/does not exist|not found|could not find/i.test(error.message || '')) {
+      throw new Error(error.message || 'admin_push_to_users fehlgeschlagen')
+    }
+  } catch (e) {
+    if (e.message && !/does not exist|not found|could not find/i.test(e.message)) throw e
+  }
+  // Kein Fallback möglich: send_broadcast_push kennt keine User-IDs.
+  throw new Error('Backend-RPC admin_push_to_users existiert nicht — Custom/Test-Sends nicht möglich.')
+}
+
+// ─── Render-Helper ────────────────────────────────────────────────────────────
 
 function renderHero(history, totalUsers) {
   const cutoff = Date.now() - 7 * 864e5
@@ -106,10 +209,10 @@ function renderHero(history, totalUsers) {
   const openRate = totalDelivered ? (totalOpened / totalDelivered * 100) : 0
 
   return `<div class="hero-row">
-    ${statHero({ label: 'Erreichbare User',   value: fmtNumber(totalUsers),              icon: iconHtml('users') })}
-    ${statHero({ label: 'Broadcasts (7T)',     value: fmtNumber(last7.length),            icon: iconHtml('send') })}
-    ${statHero({ label: 'Zugestellt gesamt',  value: fmtNumber(totalDelivered),          icon: iconHtml('check') })}
-    ${statHero({ label: 'Open-Rate',          value: openRate.toFixed(1) + '%',          icon: iconHtml('eye') })}
+    ${statHero({ label: 'Erreichbare User',  value: fmtNumber(totalUsers),     icon: iconHtml('users') })}
+    ${statHero({ label: 'Broadcasts (7T)',   value: fmtNumber(last7.length),   icon: iconHtml('send') })}
+    ${statHero({ label: 'Zugestellt gesamt', value: fmtNumber(totalDelivered), icon: iconHtml('check') })}
+    ${statHero({ label: 'Open-Rate',         value: openRate.toFixed(1) + '%', icon: iconHtml('eye') })}
   </div>`
 }
 
@@ -126,7 +229,7 @@ function renderForm(counts) {
           ${AUDIENCES.map((a, i) => `
             <button class="seg-btn${i === 0 ? ' active' : ''}" data-v="${a.value}">
               ${htmlEscape(a.label)}
-              <span class="seg-count">${fmtNumber(counts[a.value] || 0)}</span>
+              <span class="seg-count">${a.value === 'custom' ? '0' : fmtNumber(counts[a.value] || 0)}</span>
             </button>`).join('')}
         </div>
         <div class="audience-count">
@@ -135,6 +238,13 @@ function renderForm(counts) {
             User werden erreicht
           </span>
         </div>
+      </div>
+
+      <div class="form-row custom-row" id="custom-row" style="display:none;">
+        <label class="form-label" for="bc-user-search">Custom User-Auswahl</label>
+        <input id="bc-user-search" class="input" type="text" placeholder="User suchen (Name oder @handle)…" />
+        <div id="bc-user-suggest" class="user-suggest"></div>
+        <div id="bc-user-chips" class="user-chips"></div>
       </div>
 
       <div class="form-row">
@@ -158,20 +268,28 @@ function renderForm(counts) {
       </div>
 
       <div class="preview-block">
-        <div class="form-label">Vorschau</div>
-        <div class="push-preview">
-          <div class="push-preview-icon">${iconHtml('bell')}</div>
-          <div class="push-preview-body">
-            <div class="pp-app">PODFLUENCE · jetzt</div>
-            <div class="pp-title" id="pp-title">Titel deiner Push</div>
-            <div class="pp-text"  id="pp-text">Hier erscheint dein Nachrichtentext.</div>
+        <div class="form-label">Live-Preview</div>
+        <div class="push-preview-wrap">
+          <div class="push-preview ios-look">
+            <div class="push-preview-icon">
+              <img src="/i/icon-180.png" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='grid';" />
+              <div class="icon-fallback" style="display:none;">${iconHtml('bell')}</div>
+            </div>
+            <div class="push-preview-body">
+              <div class="pp-app">
+                <span>PODFLUENCE</span>
+                <span class="pp-time">jetzt</span>
+              </div>
+              <div class="pp-title" id="pp-title">Titel deiner Push</div>
+              <div class="pp-text"  id="pp-text">Hier erscheint dein Nachrichtentext.</div>
+            </div>
           </div>
         </div>
       </div>
 
       <div class="form-actions">
-        <button class="btn btn-ghost" id="btn-test">
-          ${iconHtml('users')} Test an Beta-User
+        <button class="btn btn-ghost" id="btn-test" title="Sendet einen Test-Push nur an dein eigenes Konto.">
+          ${iconHtml('user')} Test an mich
         </button>
         <button class="btn btn-primary btn-lg" id="btn-send" disabled>
           ${iconHtml('send')} An <span id="send-count">${fmtNumber(counts['all'] || 0)}</span> User senden
@@ -192,34 +310,38 @@ function historyRow(h) {
     <td><span class="chip chip-soft">${htmlEscape(audienceLabel(h.audience))}</span></td>
     <td class="num">${fmtNumber(h.recipients || 0)}</td>
     <td class="num">
-      <div class="bar-cell">
+      ${h.delivered ? `<div class="bar-cell">
         <div class="bar-cell-fill" style="width:${deliveryRate}%;background:#34d399"></div>
-        <span>${fmtNumber(h.delivered || 0)} · ${deliveryRate}%</span>
-      </div>
+        <span>${fmtNumber(h.delivered)} · ${deliveryRate}%</span>
+      </div>` : `<span class="muted">—</span>`}
     </td>
     <td class="num">
-      <div class="bar-cell">
+      ${h.opened ? `<div class="bar-cell">
         <div class="bar-cell-fill" style="width:${openRate}%;background:#fbbf24"></div>
-        <span>${fmtNumber(h.opened || 0)} · ${openRate}%</span>
-      </div>
+        <span>${fmtNumber(h.opened)} · ${openRate}%</span>
+      </div>` : `<span class="muted">—</span>`}
     </td>
-    <td class="muted">${fmtDateTime(h.sent_at)}</td>
+    <td class="muted" title="${htmlEscape(fmtDateTime(h.sent_at))}">${htmlEscape(fmtRelativeTime(h.sent_at))}</td>
   </tr>`
 }
 
 function renderHistory(history) {
   if (!history.length) {
     return `<div class="glass-card">
-      <h3 class="card-head-h3">${iconHtml('clock')} Verlauf</h3>
+      <h3 class="card-head-h3">${iconHtml('clock')} Letzte Broadcasts</h3>
       <div class="history-empty">
-        ${iconHtml('info')} Push-Verlauf nicht verfügbar — es existiert noch kein dediziertes <code>broadcast_push_log</code>.
-        Versendete Pushes erscheinen erst, sobald ein RPC dafür angelegt wurde.
+        ${iconHtml('info')} Noch keine Broadcasts versendet.
       </div>
     </div>`
   }
+  const sourceNote = history[0]?.source === 'audit_log'
+    ? 'admin_audit_log · action=admin_broadcast'
+    : 'email_broadcasts (Fallback)'
   return `<div class="glass-card">
     <div class="card-head">
-      <h3>${iconHtml('clock')} Verlauf — letzte 10 Broadcasts <span class="muted" style="font-size:11px;font-weight:400;">(Quelle: email_broadcasts — Fallback bis push_log existiert)</span></h3>
+      <h3>${iconHtml('clock')} Letzte ${history.length} Broadcasts
+        <span class="muted" style="font-size:11px;font-weight:400;">(Quelle: ${htmlEscape(sourceNote)})</span>
+      </h3>
     </div>
     <div class="table-wrap">
       <table class="data-table data-table-hover">
@@ -243,11 +365,12 @@ function renderCharts(history) {
   const byDay = {}
   for (let i = 13; i >= 0; i--) {
     const d = new Date(Date.now() - i * 864e5)
-    byDay[d.toISOString().slice(0, 10)] = { delivered: 0, opened: 0 }
+    byDay[d.toISOString().slice(0, 10)] = { sent: 0, delivered: 0, opened: 0 }
   }
   for (const h of history) {
     const k = (h.sent_at || '').slice(0, 10)
     if (byDay[k]) {
+      byDay[k].sent      += 1
       byDay[k].delivered += h.delivered || 0
       byDay[k].opened    += h.opened    || 0
     }
@@ -289,7 +412,6 @@ function styles() {
 
     .hero-row { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:14px; }
 
-    /* broadcast form */
     .broadcast-form .form-head h3 { margin:0 0 4px; font-size:18px; font-weight:600; display:flex; align-items:center; gap:8px; }
     .broadcast-form { padding:24px; }
     .form-sub  { margin:4px 0 0; color:var(--text-muted,#8a8a93); font-size:13px; }
@@ -303,7 +425,6 @@ function styles() {
     .textarea { resize:vertical; min-height:80px; line-height:1.5; }
     .char-counter { position:absolute; right:4px; bottom:-18px; font-size:11px; color:var(--text-muted,#8a8a93); }
 
-    /* segmented audience picker */
     .seg-control { display:inline-flex; flex-wrap:wrap; background:rgba(255,255,255,0.04); border:1px solid var(--border,rgba(255,255,255,0.08)); border-radius:10px; padding:3px; gap:2px; }
     .seg-btn { background:transparent; border:none; color:var(--text-secondary,#c0c0c8); padding:7px 13px; border-radius:7px; font-size:13px; cursor:pointer; transition:all .15s; font-family:inherit; display:inline-flex; align-items:center; gap:5px; }
     .seg-btn:hover { color:#fff; background:rgba(255,255,255,0.04); }
@@ -314,19 +435,38 @@ function styles() {
     .count-pill { background:rgba(124,92,255,0.12); border:1px solid rgba(124,92,255,0.25); color:var(--accent,#a48dff); padding:6px 14px; border-radius:999px; font-size:13px; display:inline-flex; align-items:center; gap:4px; }
     .count-pill strong { font-weight:600; color:#fff; }
 
-    /* live preview */
+    /* user search */
+    .user-suggest { position:relative; background:rgba(15,15,20,0.96); border:1px solid var(--border,rgba(255,255,255,0.08)); border-radius:10px; margin-top:-2px; max-height:240px; overflow-y:auto; display:none; }
+    .user-suggest.open { display:block; }
+    .user-suggest-item { display:flex; align-items:center; gap:10px; padding:8px 12px; cursor:pointer; border-bottom:1px solid rgba(255,255,255,0.04); }
+    .user-suggest-item:hover { background:rgba(255,255,255,0.05); }
+    .user-suggest-item:last-child { border-bottom:none; }
+    .user-suggest-avatar { width:28px; height:28px; border-radius:50%; background:rgba(255,255,255,0.06); display:grid; place-items:center; color:#c0c0c8; font-size:11px; overflow:hidden; flex-shrink:0; }
+    .user-suggest-avatar img { width:100%; height:100%; object-fit:cover; }
+    .user-suggest-name { font-size:13px; color:#fff; }
+    .user-suggest-handle { font-size:12px; color:var(--text-muted,#8a8a93); }
+    .user-suggest-empty { padding:14px; text-align:center; color:var(--text-muted,#8a8a93); font-size:12px; }
+
+    .user-chips { display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; min-height:8px; }
+    .user-chip { display:inline-flex; align-items:center; gap:6px; background:rgba(124,92,255,0.15); border:1px solid rgba(124,92,255,0.35); color:#fff; padding:4px 10px; border-radius:999px; font-size:12px; }
+    .user-chip-x { cursor:pointer; opacity:0.6; font-weight:700; padding:0 2px; }
+    .user-chip-x:hover { opacity:1; }
+
+    /* iOS-style live preview */
     .preview-block { margin-top:4px; }
-    .push-preview { background:linear-gradient(180deg,rgba(255,255,255,0.06),rgba(255,255,255,0.03)); border:1px solid var(--border,rgba(255,255,255,0.08)); border-radius:14px; padding:14px 16px; display:flex; gap:12px; align-items:flex-start; max-width:440px; }
-    .push-preview-icon { width:36px; height:36px; border-radius:9px; background:linear-gradient(135deg,#7c5cff,#ff5cc8); display:grid; place-items:center; flex-shrink:0; color:white; }
+    .push-preview-wrap { display:flex; justify-content:center; padding:8px 0; }
+    .push-preview { background:rgba(40,40,46,0.92); backdrop-filter:blur(20px); border:1px solid rgba(255,255,255,0.08); border-radius:18px; padding:12px 14px; display:flex; gap:11px; align-items:flex-start; max-width:380px; width:100%; box-shadow:0 12px 36px rgba(0,0,0,0.45); }
+    .push-preview-icon { width:38px; height:38px; border-radius:9px; background:linear-gradient(135deg,#7c5cff,#ff5cc8); display:grid; place-items:center; flex-shrink:0; color:white; overflow:hidden; position:relative; }
+    .push-preview-icon img { width:100%; height:100%; object-fit:cover; }
+    .push-preview-icon .icon-fallback { position:absolute; inset:0; display:grid; place-items:center; }
     .push-preview-body { flex:1; min-width:0; }
-    .pp-app   { font-size:10px; letter-spacing:0.06em; text-transform:uppercase; color:var(--text-muted,#8a8a93); margin-bottom:2px; }
-    .pp-title { font-size:14px; font-weight:600; color:#fff; margin-bottom:2px; word-break:break-word; }
-    .pp-text  { font-size:13px; color:var(--text-secondary,#c0c0c8); line-height:1.35; word-break:break-word; }
+    .pp-app   { font-size:11px; font-weight:500; color:rgba(255,255,255,0.7); display:flex; justify-content:space-between; gap:8px; margin-bottom:2px; }
+    .pp-time  { font-weight:400; color:rgba(255,255,255,0.55); }
+    .pp-title { font-size:14px; font-weight:600; color:#fff; margin-bottom:2px; word-break:break-word; line-height:1.25; }
+    .pp-text  { font-size:13px; color:rgba(255,255,255,0.78); line-height:1.35; word-break:break-word; }
 
-    /* action row */
-    .form-actions { display:flex; gap:10px; justify-content:flex-end; padding-top:12px; border-top:1px solid var(--border,rgba(255,255,255,0.06)); }
+    .form-actions { display:flex; gap:10px; justify-content:flex-end; padding-top:12px; border-top:1px solid var(--border,rgba(255,255,255,0.06)); flex-wrap:wrap; }
 
-    /* buttons */
     .btn { display:inline-flex; align-items:center; gap:6px; border-radius:10px; padding:9px 16px; font-size:14px; font-weight:500; cursor:pointer; border:1px solid transparent; transition:all .15s; font-family:inherit; }
     .btn:disabled { opacity:0.45; cursor:not-allowed; pointer-events:none; }
     .btn-ghost   { background:transparent; border-color:var(--border,rgba(255,255,255,0.1)); color:var(--text,#fff); }
@@ -335,14 +475,12 @@ function styles() {
     .btn-primary:hover:not([disabled]) { transform:translateY(-1px); box-shadow:0 6px 20px rgba(124,92,255,0.45); }
     .btn-lg { padding:11px 22px; font-size:15px; }
 
-    /* charts */
     .chart-row { display:grid; grid-template-columns:2fr 1fr; gap:16px; }
     @media (max-width:900px) { .chart-row { grid-template-columns:1fr; } }
     .chart-card { padding:20px; }
     .chart-box  { height:220px; }
     .card-head h3, .card-head-h3 { margin:0 0 14px; font-size:15px; font-weight:600; display:flex; align-items:center; gap:8px; }
 
-    /* table */
     .table-wrap   { overflow-x:auto; }
     .data-table   { width:100%; border-collapse:collapse; font-size:13px; }
     .data-table th { text-align:left; font-weight:500; color:var(--text-muted,#8a8a93); padding:10px 12px; border-bottom:1px solid var(--border,rgba(255,255,255,0.08)); font-size:12px; text-transform:uppercase; letter-spacing:0.04em; }
@@ -368,14 +506,14 @@ function styles() {
 
 export default {
   id:       'push-broadcast',
-  title:    'Push-Broadcast senden',
+  title:    'Push-Broadcast Composer',
   category: 'admin_actions',
 
   async mount(container) {
     container.innerHTML = `${styles()}
       <div class="panel-shell">
         <div class="panel-head">
-          <h2>${iconHtml('send')} Push-Broadcast senden</h2>
+          <h2>${iconHtml('send')} Push-Broadcast Composer</h2>
           <div class="toolbar">
             <button class="btn btn-ghost" id="btn-refresh">${iconHtml('refresh-cw')} Aktualisieren</button>
             <button class="btn btn-ghost" id="btn-pdf">${iconHtml('file-text')} PDF</button>
@@ -392,12 +530,9 @@ export default {
 
       let counts, history
       try {
-        const [audienceResult, hist] = await Promise.all([
-          fetchAudienceCounts(),
-          fetchHistory()
-        ])
-        counts  = audienceResult.counts
-        history = hist
+        const [c, h] = await Promise.all([fetchAudienceCounts(), fetchHistory()])
+        counts  = c
+        history = h
       } catch (e) {
         bodyEl.innerHTML = `<div class="glass-card error-state">
           ${iconHtml('alert-triangle')} Daten konnten nicht geladen werden: ${htmlEscape(e?.message || 'Unbekannter Fehler')}
@@ -435,23 +570,25 @@ export default {
             })
           } else {
             bodyEl.querySelector('#chart-audience').innerHTML =
-              `<div class="history-empty" style="text-align:center;padding:24px 16px;color:var(--text-muted)">
+              `<div class="history-empty" style="padding:24px 16px;">
                 <div style="font-size:24px;opacity:.45;margin-bottom:6px">${iconHtml('pie-chart')}</div>
                 <div style="font-weight:600;color:var(--text);margin-bottom:2px">Noch keine Audience-Verteilung</div>
-                <div style="font-size:12px;line-height:1.4">Sobald Broadcasts mit Audience-Filter versendet wurden, erscheint hier die Aufteilung.</div>
+                <div style="font-size:12px;line-height:1.4">Sobald Broadcasts versendet wurden, erscheint hier die Aufteilung.</div>
               </div>`
           }
         }
       } catch (chartErr) {
         console.warn('[push-broadcast] chart init error:', chartErr)
-        const deliverBox  = bodyEl.querySelector('#chart-deliver')
-        const audienceBox = bodyEl.querySelector('#chart-audience')
-        if (deliverBox)  deliverBox.innerHTML  = `<div class="history-empty">${iconHtml('alert-triangle')} Chart konnte nicht geladen werden.</div>`
-        if (audienceBox) audienceBox.innerHTML = `<div class="history-empty">${iconHtml('alert-triangle')} Chart konnte nicht geladen werden.</div>`
       }
 
       // ── form state ──
-      const state = { audience: 'all', title: '', body: '', deepLink: '' }
+      const state = {
+        audience:    'all',
+        title:       '',
+        body:        '',
+        deepLink:    '',
+        customUsers: []   // [{id, username, full_name, avatar_url}]
+      }
 
       const titleInput    = bodyEl.querySelector('#bc-title')
       const bodyInput     = bodyEl.querySelector('#bc-body')
@@ -464,18 +601,40 @@ export default {
       const sendCountEl   = bodyEl.querySelector('#send-count')
       const btnSend       = bodyEl.querySelector('#btn-send')
       const btnTest       = bodyEl.querySelector('#btn-test')
+      const customRow     = bodyEl.querySelector('#custom-row')
+      const userSearch    = bodyEl.querySelector('#bc-user-search')
+      const userSuggest   = bodyEl.querySelector('#bc-user-suggest')
+      const userChipsEl   = bodyEl.querySelector('#bc-user-chips')
+
+      const currentCount = () => state.audience === 'custom' ? state.customUsers.length : (counts[state.audience] || 0)
 
       const updateUI = () => {
-        const ok = state.title.trim().length > 0 && state.body.trim().length > 0
+        const hasContent = state.title.trim().length > 0 && state.body.trim().length > 0
+        const target = currentCount()
+        const ok = hasContent && (state.audience !== 'custom' || target > 0)
         btnSend.disabled = !ok
         ppTitleEl.textContent = state.title || 'Titel deiner Push'
         ppTextEl.textContent  = state.body  || 'Hier erscheint dein Nachrichtentext.'
+        audienceCount.textContent = fmtNumber(target)
+        sendCountEl.textContent   = fmtNumber(target)
       }
 
-      const refreshAudienceCount = () => {
-        const c = counts[state.audience] || 0
-        audienceCount.textContent = fmtNumber(c)
-        sendCountEl.textContent   = fmtNumber(c)
+      const renderChips = () => {
+        userChipsEl.innerHTML = state.customUsers.map(u => `
+          <span class="user-chip" data-uid="${htmlEscape(u.id)}">
+            ${htmlEscape(u.full_name || u.username || '?')}
+            <span class="user-chip-x" data-uid="${htmlEscape(u.id)}">×</span>
+          </span>`).join('')
+        userChipsEl.querySelectorAll('.user-chip-x').forEach(x => {
+          x.onclick = () => {
+            state.customUsers = state.customUsers.filter(u => u.id !== x.dataset.uid)
+            renderChips()
+            // Auch Counter im Audience-Tab updaten
+            const customBtn = bodyEl.querySelector('.seg-btn[data-v="custom"] .seg-count')
+            if (customBtn) customBtn.textContent = fmtNumber(state.customUsers.length)
+            updateUI()
+          }
+        })
       }
 
       // Audience segmented control
@@ -484,10 +643,10 @@ export default {
           bodyEl.querySelectorAll('.seg-btn').forEach(b => b.classList.remove('active'))
           btn.classList.add('active')
           state.audience = btn.dataset.v
-          refreshAudienceCount()
+          customRow.style.display = state.audience === 'custom' ? 'flex' : 'none'
+          updateUI()
         }
       })
-      refreshAudienceCount()
 
       titleInput.oninput = () => {
         state.title = titleInput.value
@@ -501,24 +660,76 @@ export default {
       }
       linkInput.oninput = () => { state.deepLink = linkInput.value }
 
-      // ── Test an Beta-User ──
-      // The RPC has no single-user mode; beta is the smallest real audience segment.
+      // ── User-Search (Custom) ──
+      const doSearch = debounce(async () => {
+        const q = userSearch.value.trim()
+        if (q.length < 2) { userSuggest.classList.remove('open'); userSuggest.innerHTML = ''; return }
+        userSuggest.innerHTML = `<div class="user-suggest-empty">${iconHtml('loader')} Suche…</div>`
+        userSuggest.classList.add('open')
+        const results = await searchUsers(q)
+        if (!results.length) {
+          userSuggest.innerHTML = `<div class="user-suggest-empty">Keine Treffer für "${htmlEscape(q)}"</div>`
+          return
+        }
+        userSuggest.innerHTML = results.map(u => {
+          const already = state.customUsers.some(c => c.id === u.id)
+          const initials = (u.full_name || u.username || '?').slice(0, 2).toUpperCase()
+          return `<div class="user-suggest-item" data-uid="${htmlEscape(u.id)}" data-name="${htmlEscape(u.full_name || '')}" data-handle="${htmlEscape(u.username || '')}" data-avatar="${htmlEscape(u.avatar_url || '')}" style="${already ? 'opacity:0.4;pointer-events:none;' : ''}">
+            <div class="user-suggest-avatar">${u.avatar_url ? `<img src="${htmlEscape(u.avatar_url)}" alt="">` : htmlEscape(initials)}</div>
+            <div style="flex:1;min-width:0;">
+              <div class="user-suggest-name">${htmlEscape(u.full_name || u.username || '?')}</div>
+              ${u.username ? `<div class="user-suggest-handle">@${htmlEscape(u.username)}</div>` : ''}
+            </div>
+            ${already ? `<span class="muted" style="font-size:11px;">bereits gewählt</span>` : `<span style="font-size:11px;color:var(--accent,#a48dff);">+ hinzufügen</span>`}
+          </div>`
+        }).join('')
+        userSuggest.querySelectorAll('.user-suggest-item').forEach(it => {
+          it.onclick = () => {
+            const uid = it.dataset.uid
+            if (state.customUsers.some(c => c.id === uid)) return
+            state.customUsers.push({
+              id: uid,
+              username: it.dataset.handle,
+              full_name: it.dataset.name,
+              avatar_url: it.dataset.avatar || null
+            })
+            userSearch.value = ''
+            userSuggest.classList.remove('open')
+            userSuggest.innerHTML = ''
+            renderChips()
+            const customBtn = bodyEl.querySelector('.seg-btn[data-v="custom"] .seg-count')
+            if (customBtn) customBtn.textContent = fmtNumber(state.customUsers.length)
+            updateUI()
+          }
+        })
+      }, 250)
+      userSearch.oninput = doSearch
+      document.addEventListener('click', (e) => {
+        if (!customRow.contains(e.target)) userSuggest.classList.remove('open')
+      })
+
+      updateUI()
+
+      // ── Test an mich ──
       btnTest.onclick = async () => {
         if (!state.title.trim() || !state.body.trim()) {
           toast('Titel und Nachricht ausfüllen', 'warn')
           return
         }
+        const { data: { session } } = await sb.auth.getSession()
+        const myUid = session?.user?.id
+        if (!myUid) { toast('Nicht eingeloggt', 'error'); return }
         btnTest.disabled = true
         const origLabel = btnTest.innerHTML
         btnTest.innerHTML = `${iconHtml('loader')} Sende…`
         try {
-          await doSendBroadcast({
+          await sendToUsers({
+            userIds:  [myUid],
             title:    '[TEST] ' + state.title,
             body:     state.body,
-            audience: 'beta',
             deepLink: state.deepLink
           })
-          toast('Test-Push an Beta-Audience versendet', 'success')
+          toast('Test-Push an dich versendet', 'success')
         } catch (e) {
           toast('Fehler: ' + (e.message || 'unbekannt'), 'error')
         }
@@ -526,18 +737,25 @@ export default {
         btnTest.innerHTML = origLabel
       }
 
-      // ── An N User senden ──
+      // ── Echter Broadcast ──
       btnSend.onclick = async () => {
-        const target = counts[state.audience] || 0
+        const target = currentCount()
         if (!state.title.trim() || !state.body.trim()) {
           toast('Titel und Nachricht sind Pflichtfelder', 'warn')
           return
         }
+        if (state.audience === 'custom' && !state.customUsers.length) {
+          toast('Mindestens einen User auswählen', 'warn')
+          return
+        }
+        const audienceText = state.audience === 'custom'
+          ? `${state.customUsers.length} ausgewählte User`
+          : `${fmtNumber(target)} User (Audience „${audienceLabel(state.audience)}")`
         const ok = await confirmDialog({
           title: 'Broadcast versenden?',
-          body: `Push wird an ${fmtNumber(target)} User (Audience: „${audienceLabel(state.audience)}") zugestellt. Diese Aktion lässt sich nicht rückgängig machen.`,
-          confirmLabel: 'Jetzt senden',
-          danger: false
+          body: `Push wird an ${audienceText} zugestellt.\n\nTitel: „${state.title}"\n\nDiese Aktion lässt sich nicht rückgängig machen.`,
+          confirmLabel: `An ${fmtNumber(target)} senden`,
+          danger: true
         })
         if (!ok) return
 
@@ -546,20 +764,29 @@ export default {
         btnSend.innerHTML = `${iconHtml('loader')} Wird versendet…`
 
         try {
-          await doSendBroadcast({
-            title:    state.title,
-            body:     state.body,
-            audience: state.audience,
-            deepLink: state.deepLink
-          })
+          if (state.audience === 'custom') {
+            await sendToUsers({
+              userIds:  state.customUsers.map(u => u.id),
+              title:    state.title,
+              body:     state.body,
+              deepLink: state.deepLink
+            })
+          } else {
+            await sendToSegment({
+              segment:  state.audience,
+              title:    state.title,
+              body:     state.body,
+              deepLink: state.deepLink
+            })
+          }
           toast(`Broadcast an ${fmtNumber(target)} User gestartet`, 'success')
-          // Reset form
           titleInput.value = ''
           bodyInput.value  = ''
           linkInput.value  = ''
           state.title = ''; state.body = ''; state.deepLink = ''
-          // Reload panel after short delay so history can update
-          setTimeout(renderAll, 1200)
+          state.customUsers = []
+          renderChips()
+          setTimeout(renderAll, 1500)
         } catch (e) {
           toast('Fehler beim Versenden: ' + (e.message || 'unbekannt'), 'error')
           btnSend.disabled = false
@@ -612,6 +839,10 @@ export default {
                   <div class="form-label">Audience</div>
                   <div style="margin-top:6px;"><span class="chip chip-soft">${htmlEscape(audienceLabel(h.audience))}</span></div>
                 </div>
+                ${h.actor_name ? `<div>
+                  <div class="form-label">Versendet von</div>
+                  <div style="margin-top:4px;">${htmlEscape(h.actor_name)}</div>
+                </div>` : ''}
                 <div>
                   <div class="form-label">Gesendet</div>
                   <div style="margin-top:4px;">${fmtDateTime(h.sent_at)}</div>
@@ -637,7 +868,8 @@ export default {
         deep_link:  h.deep_link || '',
         recipients: h.recipients || 0,
         delivered:  h.delivered  || 0,
-        opened:     h.opened     || 0
+        opened:     h.opened     || 0,
+        actor:      h.actor_name || ''
       })))
     }
 
