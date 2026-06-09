@@ -1024,7 +1024,7 @@
       </span>
     </div>
     <p class="tagline" data-i18n="hero.tagline">Die <strong>soziale Podcast-App</strong>.<br/>Hör, kommentier, vernetz dich.</p>
-    <div style="margin-top: 24px; font-size: 14px; color: var(--text-soft); line-height: 1.5;">
+    <div data-i18n="hero.sub" style="margin-top: 24px; font-size: 14px; color: var(--text-soft); line-height: 1.5;">
       Beta-Phase, jeder Slot zählt. Du bist <strong>nicht der 1000te User</strong> — du bist einer der ersten.
       Deine Show, dein Profil, dein Handle: alles wandert mit in den App-Store-Release. 🚀
     </div>
@@ -1051,18 +1051,18 @@
       <span class="card-arrow">→</span>
     </a>
 
-    <div id="ios-hint" class="platform-hint" style="display:none">
+    <div id="ios-hint" data-i18n="hero.ios.hint" class="platform-hint" style="display:none">
       Du bist auf iOS — tap auf <strong>iPhone &amp; iPad</strong>.
       <br/><br/>
       <strong>Wichtig wenn TestFlight noch nicht installiert ist:</strong> iOS öffnet zuerst den App Store und lädt TestFlight. <strong>Nach der TestFlight-Installation kommt iOS aber NICHT von alleine zurück</strong> — komm einfach auf diese Seite zurück und tap nochmal auf <em>iPhone &amp; iPad</em>. Dann landet die Einladung in TestFlight und du kannst hozd laden.
     </div>
-    <div id="ios-testflight-note" class="install-note ios-note" style="display:none">
+    <div id="ios-testflight-note" data-i18n="hero.ios.note" class="install-note ios-note" style="display:none">
       💡 <strong>Tipp:</strong> Schon TestFlight installiert? Dann öffnet sich die Einladung direkt. Sonst: <strong>App-Store-Tab schließen nach TestFlight-Install → hier nochmal antippen</strong>.
     </div>
-    <div id="android-hint" class="platform-hint" style="display:none">
+    <div id="android-hint" data-i18n="hero.android.hint" class="platform-hint" style="display:none">
       Du bist auf Android — tap auf <strong>Android</strong>. Falls dein Browser warnt: das ist normal beim Sideload, du installierst direkt von uns ohne Play Store.
     </div>
-    <div id="android-install-note" class="install-note" style="display:none">
+    <div id="android-install-note" data-i18n="hero.android.note" class="install-note" style="display:none">
       <strong>So installierst du:</strong> APK öffnen → falls "Installation blockiert" kommt, Einstellungen öffnen → "Aus dieser Quelle erlauben" → zurück → installieren. Einmaliger Schritt pro Browser.
     </div>
   </section>
@@ -1074,7 +1074,7 @@
       <div class="phone-screen">
         <div class="mock-bubbles-strip">
           <span class="mock-live-dot"></span>
-          <span class="mock-live-label">Live</span>
+          <span class="mock-live-label" data-i18n="mock.live">Live</span>
           <div class="mock-bubble-row">
             <div class="mock-bubble"></div>
             <div class="mock-bubble"></div>
@@ -1086,8 +1086,8 @@
         <div class="mock-card mock-player">
           <div class="mock-cover"></div>
           <div class="mock-player-info">
-            <div class="mock-player-title">Folge 47 — Burnout</div>
-            <div class="mock-player-sub">Machmal Richtig · 32:14</div>
+            <div class="mock-player-title" data-i18n="mock.player.title">Folge 47 — Burnout</div>
+            <div class="mock-player-sub" data-i18n="mock.player.sub">Machmal Richtig · 32:14</div>
             <div class="mock-progress"><div class="mock-progress-bar"></div></div>
           </div>
           <div class="mock-play">▶</div>
@@ -1096,14 +1096,14 @@
           <div class="mock-row">
             <div class="mock-avatar"></div>
             <div>
-              <div class="mock-name">Sebastian</div>
-              <div class="mock-handle">@machmalrichtig · 2h</div>
+              <div class="mock-name" data-i18n="mock.name1">Sebastian</div>
+              <div class="mock-handle" data-i18n="mock.handle1">@machmalrichtig · 2h</div>
             </div>
           </div>
-          <div class="mock-text">Folge 47 ist live. Schreibt mir wie&apos;s euch geht.</div>
+          <div class="mock-text" data-i18n="mock.text1">Folge 47 ist live. Schreibt mir wie&apos;s euch geht.</div>
           <div class="mock-vibes">
-            <span class="mock-vibe">🔥 Inspirierend</span>
-            <span class="mock-vibe v2">❤️ Emotional</span>
+            <span class="mock-vibe" data-i18n="mock.vibe1">🔥 Inspirierend</span>
+            <span class="mock-vibe v2" data-i18n="mock.vibe2">❤️ Emotional</span>
           </div>
           <div class="mock-actions">
             <div class="mock-action">♥ 47</div>
@@ -1115,8 +1115,8 @@
           <div class="mock-row">
             <div class="mock-avatar a4"></div>
             <div>
-              <div class="mock-name">Nele</div>
-              <div class="mock-handle">Voice-Reply · 1h</div>
+              <div class="mock-name" data-i18n="mock.name2">Nele</div>
+              <div class="mock-handle" data-i18n="mock.handle2">Voice-Reply · 1h</div>
             </div>
           </div>
           <div class="mock-voice">
@@ -2646,6 +2646,21 @@
     de: {
       "hero.title": "hozd",
       "hero.tagline": "Die <strong>soziale Podcast-App</strong>.<br/>Hör, kommentier, vernetz dich.",
+      "hero.sub": "Beta-Phase, jeder Slot zählt. Du bist <strong>nicht der 1000te User</strong> — du bist einer der ersten. Deine Show, dein Profil, dein Handle: alles wandert mit in den App-Store-Release. 🚀",
+      "hero.ios.hint": "Du bist auf iOS — tap auf <strong>iPhone &amp; iPad</strong>.<br/><br/><strong>Wichtig wenn TestFlight noch nicht installiert ist:</strong> iOS öffnet zuerst den App Store und lädt TestFlight. <strong>Nach der TestFlight-Installation kommt iOS aber NICHT von alleine zurück</strong> — komm einfach auf diese Seite zurück und tap nochmal auf <em>iPhone &amp; iPad</em>. Dann landet die Einladung in TestFlight und du kannst hozd laden.",
+      "hero.ios.note": "💡 <strong>Tipp:</strong> Schon TestFlight installiert? Dann öffnet sich die Einladung direkt. Sonst: <strong>App-Store-Tab schließen nach TestFlight-Install → hier nochmal antippen</strong>.",
+      "hero.android.hint": "Du bist auf Android — tap auf <strong>Android</strong>. Falls dein Browser warnt: das ist normal beim Sideload, du installierst direkt von uns ohne Play Store.",
+      "hero.android.note": "<strong>So installierst du:</strong> APK öffnen → falls \"Installation blockiert\" kommt, Einstellungen öffnen → \"Aus dieser Quelle erlauben\" → zurück → installieren. Einmaliger Schritt pro Browser.",
+      "mock.live": "Live",
+      "mock.player.title": "Folge 47 — Burnout",
+      "mock.player.sub": "Machmal Richtig · 32:14",
+      "mock.name1": "Sebastian",
+      "mock.handle1": "@machmalrichtig · 2h",
+      "mock.text1": "Folge 47 ist live. Schreibt mir wie's euch geht.",
+      "mock.vibe1": "🔥 Inspirierend",
+      "mock.vibe2": "❤️ Emotional",
+      "mock.name2": "Nele",
+      "mock.handle2": "Voice-Reply · 1h",
       "card.ios.title": "iPhone & iPad",
       "card.ios.sub1": "Via TestFlight · App Store kommt bald",
       "card.ios.sub2": "Ohne TestFlight? Nach Install hier nochmal antippen",
@@ -2671,6 +2686,21 @@
     en: {
       "hero.title": "hozd",
       "hero.tagline": "The <strong>social podcast app</strong>.<br/>Listen, comment, connect.",
+      "hero.sub": "Beta phase — every slot counts. You're <strong>not the 1,000th user</strong>, you're one of the first. Your show, your profile, your handle: all of it carries over to the App Store release. 🚀",
+      "hero.ios.hint": "You're on iOS — tap <strong>iPhone &amp; iPad</strong>.<br/><br/><strong>Important if you don't have TestFlight yet:</strong> iOS will open the App Store first to install TestFlight. <strong>After installing TestFlight, iOS will NOT bring you back automatically</strong> — just return to this page and tap <em>iPhone &amp; iPad</em> again. The invite will then open in TestFlight and you can download hozd.",
+      "hero.ios.note": "💡 <strong>Tip:</strong> Already have TestFlight? The invite opens straight away. Otherwise: <strong>close the App Store tab after installing TestFlight, then tap here again</strong>.",
+      "hero.android.hint": "You're on Android — tap <strong>Android</strong>. If your browser warns you, that's normal for a sideload — you're installing directly from us, no Play Store needed.",
+      "hero.android.note": "<strong>How to install:</strong> open the APK → if \"Install blocked\" shows, open Settings → \"Allow from this source\" → back → install. One-time step per browser.",
+      "mock.live": "Live",
+      "mock.player.title": "Episode 47 — Burnout",
+      "mock.player.sub": "Machmal Richtig · 32:14",
+      "mock.name1": "Sebastian",
+      "mock.handle1": "@machmalrichtig · 2h",
+      "mock.text1": "Episode 47 is live. Tell me how you're doing.",
+      "mock.vibe1": "🔥 Inspiring",
+      "mock.vibe2": "❤️ Emotional",
+      "mock.name2": "Nele",
+      "mock.handle2": "Voice reply · 1h",
       "card.ios.title": "iPhone & iPad",
       "card.ios.sub1": "Via TestFlight · App Store coming soon",
       "card.ios.sub2": "No TestFlight yet? Tap again here after install",
@@ -2694,7 +2724,7 @@
       "feat.8.title": "Co-hosts built in"
     }
   };
-  var HTML_KEYS = { "hero.tagline": 1 };
+  var HTML_KEYS = { "hero.tagline": 1, "hero.sub": 1, "hero.ios.hint": 1, "hero.ios.note": 1, "hero.android.hint": 1, "hero.android.note": 1 };
   var stored = null;
   try { stored = localStorage.getItem('lang'); } catch(e) {}
   var lang = stored || ((navigator.language || 'de').toLowerCase().indexOf('en') === 0 ? 'en' : 'de');
