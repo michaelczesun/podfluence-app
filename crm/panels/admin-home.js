@@ -1,9 +1,9 @@
-import { sb } from '/lib/supabase.js?v=20260608o'
-import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, confirmDialog } from '/lib/ui.js?v=20260608o'
-import { makeSparkline, makeAreaChart } from '/lib/charts.js?v=20260608o'
-import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260608o'
-import { glassCard } from '/lib/layout-extras.js?v=20260608o'
-import { skeletonCard, skeletonGrid, skeletonChart } from '/crm/lib/skeleton.js?v=20260608o'
+import { sb } from '/lib/supabase.js?v=20260608p'
+import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, confirmDialog } from '/lib/ui.js?v=20260608p'
+import { makeSparkline, makeAreaChart } from '/lib/charts.js?v=20260608p'
+import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260608p'
+import { glassCard } from '/lib/layout-extras.js?v=20260608p'
+import { skeletonCard, skeletonGrid, skeletonChart } from '/crm/lib/skeleton.js?v=20260608p'
 
 // Schema-Truth: siehe CLAUDE-Memory. Diese Datei nutzt NUR existierende Tabellen/Felder:
 //  - users(id,email,is_premium,is_verified,is_admin,created_at,full_name,username,avatar_url,is_banned)
@@ -61,11 +61,18 @@ async function fetchHeroStats() {
     const { data, error } = await sb.rpc('admin_db_live_stats')
     if (!error && data) {
       const r = Array.isArray(data) ? data[0] : data
-      if (r && (r.total_users != null || r.active_24h != null)) {
+      if (r && (r.total_users != null || r.users_total != null || r.active_24h != null)) {
         const norm = {}
+        // RPC kann Feldnamen-Aliase haben: total_users vs users_total, listening_hours vs listening_hours_24h
+        const ALIAS = {
+          total_users:     ['total_users', 'users_total'],
+          active_24h:      ['active_24h'],
+          posts_24h:       ['posts_24h'],
+          listening_hours: ['listening_hours', 'listening_hours_24h'],
+        }
         for (const def of KPI_DEFS) {
-          // RPC kann das Feld unter `<key>` oder `<key>_24h` zurückgeben.
-          const rawKey = r[def.key] !== undefined ? def.key : (r[`${def.key}_24h`] !== undefined ? `${def.key}_24h` : def.key)
+          const candidates = ALIAS[def.key] || [def.key, `${def.key}_24h`]
+          const rawKey = candidates.find(k => r[k] !== undefined) || def.key
           const v = r[rawKey]
           if (v && typeof v === 'object' && 'value' in v) {
             norm[def.key] = {

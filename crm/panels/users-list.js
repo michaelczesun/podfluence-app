@@ -1,13 +1,13 @@
-import { sb } from '/lib/supabase.js?v=20260608o'
-import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608o'
-import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260608o'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608o'
-import { countUp, fadeIn } from '/lib/animations.js?v=20260608o'
-import { drawer, statHero } from '/lib/layout-extras.js?v=20260608o'
+import { sb } from '/lib/supabase.js?v=20260608p'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608p'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260608p'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608p'
+import { countUp, fadeIn } from '/lib/animations.js?v=20260608p'
+import { drawer, statHero } from '/lib/layout-extras.js?v=20260608p'
 // FIX #6: added unverifyUser import; FIX #7: added unbanUser import
-import { showUserDetailModal, verifyUser, unverifyUser, banUser, unbanUser, grantPremium } from '/lib/panel-actions.js?v=20260608o'
-import { openModal } from '/crm/lib/modal.js?v=20260608o'
-import { skeletonRow, skeletonGrid, skeletonChart, skeletonCard } from '/crm/lib/skeleton.js?v=20260608o'
+import { showUserDetailModal, verifyUser, unverifyUser, banUser, unbanUser, grantPremium } from '/lib/panel-actions.js?v=20260608p'
+import { openModal } from '/crm/lib/modal.js?v=20260608p'
+import { skeletonRow, skeletonGrid, skeletonChart, skeletonCard } from '/crm/lib/skeleton.js?v=20260608p'
 
 const PAGE_SIZE = 50
 

@@ -1,9 +1,9 @@
-import { sb } from '/lib/supabase.js?v=20260608o'
-import { toast, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608o'
-import { makeBarChart } from '/lib/charts.js?v=20260608o'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608o'
-import { countUp, fadeIn } from '/lib/animations.js?v=20260608o'
-import { drawer } from '/lib/layout-extras.js?v=20260608o'
+import { sb } from '/lib/supabase.js?v=20260608p'
+import { toast, htmlEscape, iconHtml } from '/lib/ui.js?v=20260608p'
+import { makeBarChart } from '/lib/charts.js?v=20260608p'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608p'
+import { countUp, fadeIn } from '/lib/animations.js?v=20260608p'
+import { drawer } from '/lib/layout-extras.js?v=20260608p'
 
 const DAYS = 30
 

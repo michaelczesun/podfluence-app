@@ -1,9 +1,9 @@
-import { sb } from '/lib/supabase.js?v=20260608o'
-import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608o'
-import { makeAreaChart, makeLineChart, makeSparkline } from '/lib/charts.js?v=20260608o'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608o'
-import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260608o'
-import { drawer } from '/lib/layout-extras.js?v=20260608o'
+import { sb } from '/lib/supabase.js?v=20260608p'
+import { toast, fmtNumber, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608p'
+import { makeAreaChart, makeLineChart, makeSparkline } from '/lib/charts.js?v=20260608p'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608p'
+import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260608p'
+import { drawer } from '/lib/layout-extras.js?v=20260608p'
 
 const REFRESH_MS = 60_000
 
@@ -43,7 +43,7 @@ async function fetchTotals() {
     const { data, error } = await sb.rpc('admin_db_live_stats')
     if (!error && data) {
       const r = Array.isArray(data) ? data[0] : data
-      if (r && (r.total_users != null || r.active_24h != null)) return normalize(r)
+      if (r && (r.total_users != null || r.users_total != null || r.active_24h != null)) return normalize(r)
     }
   } catch (_) {}
 
@@ -111,17 +111,31 @@ async function fetchTotals() {
 }
 
 function normalize(raw) {
+  // Map RPC-Schema (users_total, listening_hours_24h, posts_24h) zu KPI-Keys
+  // (total_users, listening_hours, posts_24h) damit beide Pfade konsistent sind.
+  const ALIAS = {
+    total_users:     ['total_users', 'users_total'],
+    active_24h:      ['active_24h'],
+    posts_24h:       ['posts_24h'],
+    listening_hours: ['listening_hours', 'listening_hours_24h'],
+  }
   const out = {}
   for (const def of KPI_DEFS) {
-    const v = raw[def.key]
-    if (v && typeof v === 'object' && 'value' in v) {
-      out[def.key] = { value: Number(v.value) || 0, prev: Number(v.prev) || 0 }
-    } else {
-      out[def.key] = {
-        value: Number(raw[def.key]) || 0,
-        prev: Number(raw[`${def.key}_prev`] ?? raw[`${def.key}_yday`]) || 0
+    const aliases = ALIAS[def.key] || [def.key]
+    let val = 0, prev = 0
+    for (const k of aliases) {
+      const v = raw[k]
+      if (v && typeof v === 'object' && 'value' in v) {
+        val = Number(v.value) || 0
+        prev = Number(v.prev) || 0
+        break
+      } else if (v != null) {
+        val = Number(v) || 0
+        prev = Number(raw[`${k}_prev`] ?? raw[`${k}_yday`]) || 0
+        break
       }
     }
+    out[def.key] = { value: val, prev: prev }
   }
   return out
 }

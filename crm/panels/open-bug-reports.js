@@ -1,11 +1,11 @@
-import { sb } from '/lib/supabase.js?v=20260608o'
-import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js?v=20260608o'
-import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608o'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608o'
-import { countUp, fadeIn, skeletonLoader, slideInRight } from '/lib/animations.js?v=20260608o'
-import { drawer, glassCard, statHero } from '/lib/layout-extras.js?v=20260608o'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608o'
-import { emptyState } from '/crm/lib/empty.js?v=20260608o'
+import { sb } from '/lib/supabase.js?v=20260608p'
+import { toast, modal, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js?v=20260608p'
+import { makeAreaChart, makeBarChart, makeDonutChart } from '/lib/charts.js?v=20260608p'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608p'
+import { countUp, fadeIn, skeletonLoader, slideInRight } from '/lib/animations.js?v=20260608p'
+import { drawer, glassCard, statHero } from '/lib/layout-extras.js?v=20260608p'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608p'
+import { emptyState } from '/crm/lib/empty.js?v=20260608p'
 
 // priority/category are NOT in the DB schema — UI-only mapping based on description keywords
 const STATUS_COLORS = {
