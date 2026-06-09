@@ -42,13 +42,26 @@ function formatDateShort(key) {
   return d.toLocaleDateString('de-DE', { day: '2-digit', month: 'short' })
 }
 
+// Defensive: race RPC against a hard timeout so a hung request doesn't freeze the panel forever.
+const FETCH_TIMEOUT_MS = 15000
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) => setTimeout(() => reject(new Error((label || 'RPC') + ' timeout (' + ms + 'ms)')), ms))
+  ])
+}
+
 async function fetchDau(days) {
   // Try admin_daily_series RPC first (SECURITY DEFINER, bypasses RLS).
   // Parameters are metric/days (no p_ prefix) per RPC signature.
   try {
-    const { data, error } = await sb.rpc('admin_daily_series', { p_metric: 'dau', p_days: Number(days) })
-    if (!error && data && data.length > 0) {
-      return data.map(d => ({ date: d.date, users: Number(d.value) || 0 }))
+    const { data, error } = await withTimeout(
+      sb.rpc('admin_daily_series', { p_metric: 'dau', p_days: Number(days) }),
+      FETCH_TIMEOUT_MS,
+      'admin_daily_series'
+    )
+    if (!error && Array.isArray(data) && data.length > 0) {
+      return data.map(d => ({ date: d?.date, users: Number(d?.value) || 0 })).filter(r => r.date)
     }
     if (error) console.warn('[dau-trend] admin_daily_series RPC error, falling back:', error.message)
   } catch (e) {
@@ -60,10 +73,11 @@ async function fetchDau(days) {
   since.setDate(since.getDate() - (Number(days) - 1))
   since.setHours(0, 0, 0, 0)
 
-  const { data, error } = await sb
-    .from('app_opens')
-    .select('device_fp, created_at')
-    .gte('created_at', since.toISOString())
+  const { data, error } = await withTimeout(
+    sb.from('app_opens').select('device_fp, created_at').gte('created_at', since.toISOString()),
+    FETCH_TIMEOUT_MS,
+    'app_opens'
+  )
   if (error) throw error
   const buckets = new Map()
   for (let i = 0; i < Number(days); i++) {
@@ -71,10 +85,16 @@ async function fetchDau(days) {
     d.setDate(d.getDate() + i)
     buckets.set(formatDateKey(d), new Set())
   }
-  ;(data || []).forEach(row => {
-    const key = formatDateKey(row.created_at)
-    if (buckets.has(key)) buckets.get(key).add(row.device_fp)
-  })
+  const rows = Array.isArray(data) ? data : []
+  try {
+    rows.forEach(row => {
+      if (!row || !row.created_at) return
+      const key = formatDateKey(row.created_at)
+      if (buckets.has(key)) buckets.get(key).add(row.device_fp)
+    })
+  } catch (e) {
+    console.warn('[dau-trend] bucket aggregation failed:', e.message)
+  }
   return Array.from(buckets.entries()).map(([date, set]) => ({
     date,
     users: set.size
