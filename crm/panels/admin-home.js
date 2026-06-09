@@ -6,7 +6,7 @@ import { glassCard } from '/lib/layout-extras.js?v=20260608k'
 import { skeletonCard, skeletonGrid, skeletonChart } from '/crm/lib/skeleton.js?v=20260608m'
 
 // Schema-Truth: siehe CLAUDE-Memory. Diese Datei nutzt NUR existierende Tabellen/Felder:
-//  - users(id,email,is_premium,is_verified,is_admin,created_at,display_name,avatar_url,is_banned)
+//  - users(id,email,is_premium,is_verified,is_admin,created_at,full_name,username,avatar_url,is_banned)
 //  - updates(id,user_id,created_at) — author_id meist NULL, user_id ist echter Author
 //  - podcasts(id,title,cover_image,author_id,is_owner_verified,is_featured,created_at)
 //  - listening_activity(listener_id,podcaster_id,listened_ms,created_at)
@@ -182,7 +182,7 @@ async function fetchAlerts() {
 
     // 4) Neue Anmeldungen letzte Stunde
     safe(sb.from('users')
-      .select('id,display_name,email,avatar_url,created_at', { count: 'exact' })
+      .select('id,full_name,username,email,avatar_url,created_at', { count: 'exact' })
       .gte('created_at', since1h)
       .order('created_at', { ascending: false })
       .limit(10))
@@ -210,12 +210,12 @@ async function fetchAlerts() {
       spamDetails = spamSuspects.map(([uid, count]) => ({
         id: uid,
         count,
-        display_name: byId.get(uid)?.full_name || byId.get(uid)?.username || '(unbekannt)',
+        full_name: byId.get(uid)?.full_name || byId.get(uid)?.username || '(unbekannt)',
         email: byId.get(uid)?.email || '',
         avatar_url: byId.get(uid)?.avatar_url || null
       }))
     } catch (_) {
-      spamDetails = spamSuspects.map(([uid, count]) => ({ id: uid, count, display_name: '(unbekannt)', email: '' }))
+      spamDetails = spamSuspects.map(([uid, count]) => ({ id: uid, count, full_name: '(unbekannt)', email: '' }))
     }
   }
 
@@ -353,7 +353,7 @@ function renderAlertsFeed(alerts) {
       icon: 'alert',
       color: '#F59E0B',
       title: `${alerts.spam.count} User mit 10+ Posts in 24h (Spam-Verdacht)`,
-      sub: alerts.spam.items.slice(0,3).map(s => `${htmlEscape(s.display_name)} (${s.count})`).join(' · '),
+      sub: alerts.spam.items.slice(0,3).map(s => `${htmlEscape(s.full_name)} (${s.count})`).join(' · '),
       action: 'open-users',
       actionLabel: 'User prüfen'
     })
@@ -375,7 +375,7 @@ function renderAlertsFeed(alerts) {
       icon: 'user-plus',
       color: '#10B981',
       title: `${alerts.signups.count} neue Anmeldungen letzte Stunde`,
-      sub: alerts.signups.items.slice(0,3).map(u => htmlEscape(u.display_name || u.email || '?')).join(' · '),
+      sub: alerts.signups.items.slice(0,3).map(u => htmlEscape(u.full_name || u.username || u.email || '?')).join(' · '),
       action: 'open-signups',
       actionLabel: 'Neue User'
     })
