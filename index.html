@@ -950,6 +950,17 @@
     main { max-width: 760px; }
     .hero-text h1 { font-size: 76px; }
   }
+
+  /* ============ Aurora Background (additiv) ============ */
+  .lv-aurora { position: fixed; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
+  .lv-aurora__blob { position: absolute; border-radius: 50%; filter: blur(80px); opacity: 0.4; mix-blend-mode: screen; will-change: transform; }
+  .lv-aurora__blob--1 { width: 600px; height: 600px; top: 10%; left: -200px; background: radial-gradient(circle, rgba(139,92,246,.6), transparent); animation: lv-float-slow 22s ease-in-out infinite; }
+  .lv-aurora__blob--2 { width: 500px; height: 500px; bottom: 5%; right: -150px; background: radial-gradient(circle, rgba(236,72,153,.5), transparent); animation: lv-float-blob 28s ease-in-out infinite; }
+  .lv-aurora__blob--3 { width: 700px; height: 700px; top: 50%; left: 30%; background: radial-gradient(circle, rgba(59,130,246,.4), transparent); animation: lv-float-slow 35s ease-in-out infinite reverse; }
+  .lv-aurora__grid { position: absolute; inset: 0; background-image: linear-gradient(to right, rgba(255,255,255,.02) 1px, transparent 1px), linear-gradient(to bottom, rgba(255,255,255,.02) 1px, transparent 1px); background-size: 48px 48px; }
+  @keyframes lv-float-slow { 0%, 100% { transform: translate(0,0) scale(1); } 33% { transform: translate(40px,-60px) scale(1.08); } 66% { transform: translate(-30px,40px) scale(0.95); } }
+  @keyframes lv-float-blob { 0%, 100% { transform: translate(0,0) rotate(0deg); } 50% { transform: translate(-80px,-50px) rotate(180deg); } }
+  @media (prefers-reduced-motion: reduce) { .lv-aurora__blob { animation: none; } }
 </style>
 <!-- Cloudflare Web Analytics -->
 <script defer src='https://static.cloudflareinsights.com/beacon.min.js' data-cf-beacon='{"token": "2dfb866f44454ecca8d7deb02bf8de60"}'></script>
@@ -995,6 +1006,12 @@
 </script>
 </head>
 <body>
+<div class="lv-aurora" aria-hidden="true">
+  <div class="lv-aurora__blob lv-aurora__blob--1"></div>
+  <div class="lv-aurora__blob lv-aurora__blob--2"></div>
+  <div class="lv-aurora__blob lv-aurora__blob--3"></div>
+  <div class="lv-aurora__grid"></div>
+</div>
 <button id="langToggle" type="button" aria-label="Switch language" aria-pressed="false" style="position:fixed;top:12px;right:12px;z-index:100;padding:6px 12px;font-size:12px;font-weight:600;color:#fff;background:rgba(22,22,29,0.72);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);border:1px solid rgba(255,255,255,0.12);border-radius:999px;cursor:pointer;letter-spacing:0.04em;font-family:inherit;">DE / EN</button>
 <div class="bubbles" aria-hidden="true">
   <div class="bubble b1 glow"></div>
@@ -2201,6 +2218,18 @@
   .cookie-icon { align-self: center; }
   .cookie-btn { width: 100%; }
 }
+/* Particle Dust — additive (lv- prefix) */
+.lv-particles { position: fixed; inset: 0; pointer-events: none; z-index: 1; overflow: hidden; }
+.lv-particle { position: absolute; border-radius: 50%; will-change: transform, opacity; animation-name: lv-particle-float; animation-iteration-count: infinite; animation-timing-function: ease-in-out; }
+@keyframes lv-particle-float {
+  0%, 100% { transform: translate(0,0); opacity: 0.4; }
+  25% { transform: translate(60px,-80px); opacity: 0.9; }
+  50% { transform: translate(-40px,-160px); opacity: 0.3; }
+  75% { transform: translate(80px,-100px); opacity: 0.7; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .lv-particles { display: none !important; }
+}
 /* Scroll-Reveal — added by Worker C */
 .reveal { opacity: 0; transform: translateY(24px); transition: opacity .8s, transform .8s cubic-bezier(.22,1,.36,1); will-change: opacity, transform; }
 .reveal.in { opacity: 1; transform: none; }
@@ -2818,6 +2847,53 @@
       });
     }
   });
+})();
+</script>
+<script>
+/* Particle Dust System — additive, vanilla DOM */
+(function(){
+  try {
+    if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    var isMobile = (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) || window.innerWidth < 768;
+    var count = isMobile ? 18 : 35;
+    var colors = ['rgba(167,139,250,', 'rgba(236,72,153,', 'rgba(96,165,250,', 'rgba(52,211,153,'];
+    function build(){
+      if (document.querySelector('.lv-particles')) return;
+      var container = document.createElement('div');
+      container.className = 'lv-particles';
+      container.setAttribute('aria-hidden', 'true');
+      for (var i = 0; i < count; i++) {
+        var p = document.createElement('div');
+        p.className = 'lv-particle';
+        var size = 2 + Math.random() * 4;
+        var top = Math.random() * 100;
+        var left = Math.random() * 100;
+        var color = colors[Math.floor(Math.random() * colors.length)];
+        var opacity = 0.3 + Math.random() * 0.5;
+        var duration = 12 + Math.random() * 18;
+        var delay = -Math.random() * duration;
+        p.style.width = size + 'px';
+        p.style.height = size + 'px';
+        p.style.top = top + '%';
+        p.style.left = left + '%';
+        p.style.background = color + opacity + ')';
+        p.style.opacity = opacity;
+        p.style.boxShadow = '0 0 ' + (size * 2) + 'px ' + color + (opacity * 0.6) + ')';
+        p.style.animationDuration = duration + 's';
+        p.style.animationDelay = delay + 's';
+        container.appendChild(p);
+      }
+      document.body.appendChild(container);
+      document.addEventListener('visibilitychange', function(){
+        container.style.display = document.hidden ? 'none' : 'block';
+      });
+    }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', build);
+    } else {
+      build();
+    }
+  } catch(e) {}
 })();
 </script>
 </body>
