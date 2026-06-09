@@ -1,9 +1,9 @@
-import { sb } from '/lib/supabase.js?v=20260608l'
-import { toast, confirmDialog, fmtNumber, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js?v=20260608l'
-import { makeBarChart, makeDonutChart, makeRadialBar } from '/lib/charts.js?v=20260608l'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608l'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608l'
-import { drawer } from '/lib/layout-extras.js?v=20260608l'
+import { sb } from '/lib/supabase.js?v=20260608m'
+import { toast, confirmDialog, fmtNumber, fmtRelativeTime, htmlEscape, iconHtml, spinnerHtml } from '/lib/ui.js?v=20260608m'
+import { makeBarChart, makeDonutChart, makeRadialBar } from '/lib/charts.js?v=20260608m'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608m'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608m'
+import { drawer } from '/lib/layout-extras.js?v=20260608m'
 
 const TOTAL_BYTES = 1024 * 1024 * 1024 // 1 GB Free-Tier
 const WARN_THRESHOLD = 0.7

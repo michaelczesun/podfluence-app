@@ -1,10 +1,10 @@
-import { sb } from '/lib/supabase.js?v=20260608l'
-import { toast, modal, confirmDialog, fmtNumber, fmtRelativeTime, fmtDateTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js?v=20260608l'
-import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260608l'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608l'
-import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608l'
-import { drawer, statHero } from '/lib/layout-extras.js?v=20260608l'
-import { showUserDetailModal, deletePost } from '/lib/panel-actions.js?v=20260608l'
+import { sb } from '/lib/supabase.js?v=20260608m'
+import { toast, modal, confirmDialog, fmtNumber, fmtRelativeTime, fmtDateTime, htmlEscape, iconHtml, debounce, spinnerHtml } from '/lib/ui.js?v=20260608m'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260608m'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260608m'
+import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608m'
+import { drawer, statHero } from '/lib/layout-extras.js?v=20260608m'
+import { showUserDetailModal, deletePost } from '/lib/panel-actions.js?v=20260608m'
 
 const REFRESH_MS = 20000
 
