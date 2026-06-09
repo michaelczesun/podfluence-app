@@ -205,12 +205,12 @@ async function fetchAlerts() {
   if (spamSuspects.length) {
     try {
       const ids = spamSuspects.map(([uid]) => uid)
-      const { data } = await sb.from('users').select('id,display_name,email,avatar_url').in('id', ids)
+      const { data } = await sb.from('users').select('id,full_name,username,email,avatar_url').in('id', ids)
       const byId = new Map((data || []).map(u => [u.id, u]))
       spamDetails = spamSuspects.map(([uid, count]) => ({
         id: uid,
         count,
-        display_name: byId.get(uid)?.display_name || '(unbekannt)',
+        display_name: byId.get(uid)?.full_name || byId.get(uid)?.username || '(unbekannt)',
         email: byId.get(uid)?.email || '',
         avatar_url: byId.get(uid)?.avatar_url || null
       }))
