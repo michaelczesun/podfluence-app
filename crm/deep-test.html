@@ -36,7 +36,7 @@
 <div id="hidden"></div>
 
 <script type="module">
-import { sb, currentUserContext } from '/lib/supabase.js?v=20260608h';
+import { sb, currentUserContext } from '/lib/supabase.js?v=20260608k';
 
 // Alle Panel-IDs die wir testen (aus permissions.json struktur, plus admin-home + audit-log)
 const PANELS = [
@@ -106,7 +106,7 @@ document.getElementById('run').addEventListener('click', async () => {
     hidden.innerHTML = '';
     hidden.appendChild(cont);
     try {
-      const mod = await import(`/crm/panels/${id}.js?v=20260608h&t=${Date.now()}`);
+      const mod = await import(`/crm/panels/${id}.js?v=20260608k&t=${Date.now()}`);
       const panel = mod.default || mod;
       if (panel && typeof panel.mount === 'function') {
         await panel.mount(cont);
