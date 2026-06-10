@@ -6,7 +6,7 @@
 // Sticky Quick-Actions: 5 pinned items aus cmdk-actions.js bleiben IMMER sichtbar wenn der
 // Input leer ist. Reihenfolge per pinnedOrder. Sortiert vor allen Panels.
 
-import { searchActions, getActionById } from '/crm/lib/cmdk-actions.js?v=20260608-sticky1'
+import { searchActions, getActionById } from '/crm/lib/cmdk-actions.js?v=20260610q-sticky1'
 
 let _sb = null
 let _panels = []

@@ -1,8 +1,8 @@
-import { sb } from '/lib/supabase.js?v=20260609a'
-import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260609a'
-import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260609a'
-import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260609a'
-import { drawer, statHero } from '/lib/layout-extras.js?v=20260609a'
+import { sb } from '/lib/supabase.js?v=20260610q'
+import { toast, confirmDialog, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260610q'
+import { makeAreaChart, makeDonutChart } from '/lib/charts.js?v=20260610q'
+import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260610q'
+import { drawer, statHero } from '/lib/layout-extras.js?v=20260610q'
 
 // ─── Audience-Segmente ────────────────────────────────────────────────────────
 //
