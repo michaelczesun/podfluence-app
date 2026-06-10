@@ -363,8 +363,8 @@ export default {
         )
         if (!ok) return
         try {
-          // FIX H1: Use podcast_id as parameter key (SECURITY DEFINER RPC admin_force_verify_podcast).
-          const { error } = await sb.rpc('admin_force_verify_podcast', { podcast_id: id })
+          // DB param is p_podcast_id — fixed.
+          const { error } = await sb.rpc('admin_force_verify_podcast', { p_podcast_id: id })
           if (error) throw error
           toast('Podcast verifiziert', 'success')
           loadAll()

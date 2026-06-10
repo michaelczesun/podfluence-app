@@ -161,8 +161,8 @@ async function revokeVerified(userId) {
     danger: true,
   })
   if (!ok) return false
-  // FIX(med): admin_unverify_user param name confirmed as uid (not target_user_id)
-  const { error } = await sb.rpc('admin_unverify_user', { uid: userId })
+  // DB param is p_user_id — fixed.
+  const { error } = await sb.rpc('admin_unverify_user', { p_user_id: userId })
   if (error) { toast(`Fehler: ${error.message}`, 'error'); return false }
   toast('Verifizierung entzogen', 'success')
   return true
@@ -176,8 +176,8 @@ async function revokePremium(userId) {
     danger: true,
   })
   if (!ok) return false
-  // FIX(med): admin_set_premium params are uid + bool (not user_id + premium)
-  const { error } = await sb.rpc('admin_set_premium', { uid: userId, bool: false })
+  // DB params are p_user_id + p_premium — fixed.
+  const { error } = await sb.rpc('admin_set_premium', { p_user_id: userId, p_premium: false })
   if (error) { toast(`Fehler: ${error.message}`, 'error'); return false }
   toast('Premium entzogen', 'success')
   return true
@@ -248,9 +248,9 @@ function openBulkGrantModal(onDone) {
     onConfirm: async () => {
       if (selected.size === 0) { toast('Bitte mindestens einen Nutzer wählen', 'warn'); return false }
       const userIds = Array.from(selected.keys())
-      // FIX(med): admin_set_premium params are uid + bool
+      // DB params are p_user_id + p_premium — fixed.
       const results = await Promise.all(
-        userIds.map(uid => sb.rpc('admin_set_premium', { uid, bool: true }))
+        userIds.map(uid => sb.rpc('admin_set_premium', { p_user_id: uid, p_premium: true }))
       )
       const failed = results.filter(r => r.error)
       if (failed.length > 0) { toast(`Fehler bei ${failed.length} Nutzer(n)`, 'error'); return false }

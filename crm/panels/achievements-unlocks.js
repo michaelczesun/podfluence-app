@@ -86,7 +86,7 @@ async function manualGrant(type, userIdentifier) {
     if (!uRows || !uRows.length) {
       // Fallback: admin_users_list_full RPC mit search
       const { data: rpcData, error: rpcErr } = await sb
-        .rpc('admin_users_list_full', { limit: 1, offset: 0, search: identifier })
+        .rpc('admin_users_list_full', { p_limit: 1, p_offset: 0, p_search: identifier })
       if (rpcErr) throw rpcErr
       const first = Array.isArray(rpcData) ? rpcData[0] : null
       if (!first || !first.id) throw new Error('User nicht gefunden')

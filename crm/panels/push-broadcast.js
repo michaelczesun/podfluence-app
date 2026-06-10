@@ -174,8 +174,8 @@ async function sendToSegment({ segment, title, body, deepLink }) {
   }
   // 2. Legacy: send_broadcast_push
   const legacyAudience = LEGACY_AUDIENCE_MAP[segment] || 'all'
-  const params = { title, body, audience: legacyAudience }
-  if (deepLink && deepLink.trim()) params.deep_link = deepLink.trim()
+  const params = { p_title: title, p_body: body, p_audience: legacyAudience }
+  if (deepLink && deepLink.trim()) params.p_deep_link = deepLink.trim()
   const { data, error } = await sb.rpc('send_broadcast_push', params)
   if (error) throw new Error(error.message || 'send_broadcast_push fehlgeschlagen')
   return { data, via: 'send_broadcast_push' }

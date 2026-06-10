@@ -9,20 +9,79 @@ const REFRESH_MS = 60_000
 
 const KPI_DEFS = [
   { key: 'total_users',      label: 'User gesamt',        icon: 'users',     color: '#7C5CFF', fmt: 'int',   sparkMetric: 'signups',          warnBelow: null, alertChangePct: 50, alertMinPrev: 5 },
-  { key: 'active_24h',       label: 'Aktiv (24h)',        icon: 'activity',  color: '#22D3EE', fmt: 'int',   sparkMetric: 'app_opens',        warnBelow: 3,    alertChangePct: 50, alertMinPrev: 5 },
+  { key: 'active_24h',       label: 'Aktiv (24h)',        icon: 'activity',  color: '#22D3EE', fmt: 'int',   sparkMetric: 'active_users',     warnBelow: 3,    alertChangePct: 50, alertMinPrev: 5 },
   { key: 'posts_24h',        label: 'Beiträge (24h)',     icon: 'message',   color: '#F59E0B', fmt: 'int',   sparkMetric: 'posts',            warnBelow: null, alertChangePct: 50, alertMinPrev: 5 },
   { key: 'listening_hours',  label: 'Hörstunden (24h)',   icon: 'headphones',color: '#10B981', fmt: 'hours', sparkMetric: 'listening_hours',  warnBelow: null, alertChangePct: 50, alertMinPrev: 5 }
 ]
 
 const SPARK_DAYS = 7
 
+// Schema-Truth: app_opens hat KEIN user_id (nur device_fp) und ist tot für aktive-User.
+// "Aktiv" = DISTINCT User die in einem Zeitfenster gepostet/kommentiert/geliked/gehört haben.
+// Quellen: updates(user_id) + comments(user_id) + likes(user_id) + listening_activity(listener_id).
+const ACTIVE_FETCH_LIMIT = 2000
+
+// Holt die User-ID-Spalten für ein Zeitfenster aus allen Aktivitäts-Tabellen und
+// dedupiert in ein Set → echte Anzahl aktiver User. Funktioniert auch wenn die RPC
+// im Browser scheitert (nutzt nur direkte Tabellen-Reads via RLS-erlaubte Spalten).
+async function countActiveUsers(sinceIso, untilIso) {
+  const safe = (p) => p.then(r => r).catch(() => ({ data: null }))
+  const range = (q) => {
+    let qq = q.gte('created_at', sinceIso)
+    if (untilIso) qq = qq.lt('created_at', untilIso)
+    return qq.limit(ACTIVE_FETCH_LIMIT)
+  }
+  const [u, c, l, la] = await Promise.all([
+    safe(range(sb.from('updates').select('user_id'))),
+    safe(range(sb.from('comments').select('user_id'))),
+    safe(range(sb.from('likes').select('user_id'))),
+    safe(range(sb.from('listening_activity').select('listener_id')))
+  ])
+  const set = new Set()
+  for (const r of (u.data || []))  { if (r.user_id) set.add(r.user_id) }
+  for (const r of (c.data || []))  { if (r.user_id) set.add(r.user_id) }
+  for (const r of (l.data || []))  { if (r.user_id) set.add(r.user_id) }
+  for (const r of (la.data || [])) { if (r.listener_id) set.add(r.listener_id) }
+  return set.size
+}
+
+// Clientseitige per-Tag DISTINCT-User-Reihe (Fallback wenn RPC nicht erreichbar).
+// Bucketet user_ids/listener_ids je Kalendertag in ein Set und gibt die Set-Größe zurück.
+async function activeUsersSeriesClient(days) {
+  const since = new Date(Date.now() - days * 86_400_000).toISOString()
+  const safe = (p) => p.then(r => r).catch(() => ({ data: null }))
+  const [u, c, l, la] = await Promise.all([
+    safe(sb.from('updates').select('user_id,created_at').gte('created_at', since).limit(5000)),
+    safe(sb.from('comments').select('user_id,created_at').gte('created_at', since).limit(5000)),
+    safe(sb.from('likes').select('user_id,created_at').gte('created_at', since).limit(5000)),
+    safe(sb.from('listening_activity').select('listener_id,created_at').gte('created_at', since).limit(5000))
+  ])
+  const buckets = new Map()
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today.getTime() - i * 86_400_000)
+    buckets.set(d.toISOString().slice(0, 10), new Set())
+  }
+  const add = (rows, idField) => {
+    for (const r of (rows || [])) {
+      const k = (r.created_at || '').slice(0, 10)
+      const id = r[idField]
+      if (id && buckets.has(k)) buckets.get(k).add(id)
+    }
+  }
+  add(u.data, 'user_id'); add(c.data, 'user_id'); add(l.data, 'user_id'); add(la.data, 'listener_id')
+  return [...buckets.values()].map(s => s.size)
+}
+
 async function fetchSparkData(def) {
   const since = new Date(Date.now() - SPARK_DAYS * 86_400_000).toISOString()
   try {
-    if (def.sparkMetric === 'app_opens') {
-      const { data } = await sb.from('app_opens').select('created_at').gte('created_at', since).limit(5000)
-      const rows = bucketByDay(data || [], 'created_at', SPARK_DAYS, false)
-      return rows.map(r => r.value)
+    if (def.sparkMetric === 'active_users') {
+      // Bevorzugt SECURITY-DEFINER RPC (zählt DISTINCT User pro Tag serverseitig).
+      const { data, error } = await sb.rpc('admin_active_users_series', { p_days: SPARK_DAYS })
+      if (!error && Array.isArray(data)) return data.map(d => Number(d.value) || 0)
+      // Fallback: per-Tag DISTINCT-User clientseitig aus den Aktivitäts-Tabellen.
+      return await activeUsersSeriesClient(SPARK_DAYS)
     }
     if (def.sparkMetric === 'listening_hours') {
       const { data } = await sb.from('listening_activity').select('created_at,listened_ms').gte('created_at', since).limit(5000)
@@ -54,11 +113,11 @@ async function fetchTotals() {
 
   const safe = (p) => p.then(r => r).catch(() => ({ count: 0, data: null }))
 
-  // Schema-Truth: app_opens hat KEIN user_id (nur device_fp) → reine event-counts.
-  // listening_activity.listened_ms ist die echte Hör-Quelle.
+  // Schema-Truth: app_opens ist tot (kein user_id, RLS-401). "Aktiv" = DISTINCT User
+  // über updates+comments+likes+listening_activity, clientseitig dedupliziert.
   const [active24, activeYday, listenRows, listenRowsYday] = await Promise.all([
-    safe(sb.from('app_opens').select('id', { count: 'exact', head: true }).gte('created_at', since24h)),
-    safe(sb.from('app_opens').select('id', { count: 'exact', head: true }).gte('created_at', since48h).lt('created_at', since24h)),
+    countActiveUsers(since24h, null),
+    countActiveUsers(since48h, since24h),
     safe(sb.from('listening_activity').select('listened_ms,created_at').gte('created_at', since24h).limit(5000)),
     safe(sb.from('listening_activity').select('listened_ms,created_at').gte('created_at', since48h).lt('created_at', since24h).limit(5000))
   ])
@@ -104,7 +163,7 @@ async function fetchTotals() {
 
   return {
     total_users:      { value: totalUsers, prev: ydayUsers },
-    active_24h:       { value: active24.count ?? 0, prev: activeYday.count ?? 0 },
+    active_24h:       { value: active24 ?? 0, prev: activeYday ?? 0 },
     posts_24h:        { value: totalPosts, prev: ydayPosts },
     listening_hours:  { value: Math.round(totalListenSec / 3600), prev: Math.round(ydayListenSec / 3600) }
   }
@@ -148,8 +207,18 @@ async function fetchTimeSeries(kpiKey, days = 30) {
   let rows = []
   try {
     if (kpiKey === 'active_24h') {
-      const { data } = await sb.from('app_opens').select('created_at').gte('created_at', since).limit(SERIES_LIMIT)
-      rows = bucketByDay(data || [], 'created_at', days, false)
+      // DISTINCT aktive User pro Tag: bevorzugt RPC, sonst clientseitig (kein app_opens).
+      const { data, error } = await sb.rpc('admin_active_users_series', { p_days: days })
+      if (!error && Array.isArray(data)) {
+        rows = data.map(d => ({ date: String(d.date), value: Number(d.value) || 0 }))
+      } else {
+        const vals = await activeUsersSeriesClient(days)
+        const today = new Date(); today.setHours(0, 0, 0, 0)
+        rows = vals.map((value, i) => {
+          const d = new Date(today.getTime() - (days - 1 - i) * 86_400_000)
+          return { date: d.toISOString().slice(0, 10), value }
+        })
+      }
     } else if (kpiKey === 'listening_hours') {
       const { data } = await sb.from('listening_activity').select('created_at,listened_ms').gte('created_at', since).limit(SERIES_LIMIT)
       rows = bucketByDay(data || [], 'created_at', days, false, r => Number(r.listened_ms || 0) / 3600000)

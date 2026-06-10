@@ -333,8 +333,15 @@ export async function showUserDetailV2(userId) {
   // ----- Daten laden -----
   let u
   try {
-    const res = await rpc('admin_get_user_full', { p_user_id: userId })
+    // DB-Funktion heißt admin_get_user_full(p_id uuid) — NICHT p_user_id.
+    // Falscher Param-Name = PGRST202 → Modal bricht für ALLE (auch Owner) ab.
+    const res = await rpc('admin_get_user_full', { p_id: userId })
     u = Array.isArray(res) ? res[0] : res
+    if (u) {
+      // Fallback-Normalisierung falls role/ban nicht direkt geliefert werden.
+      if (u.role == null) u.role = u.admin_role || (u.is_app_admin ? 'admin' : 'none')
+      if (u.is_banned == null) u.is_banned = !!(u.banned_at || u.banned_until)
+    }
   } catch (e) {
     toast(`User konnte nicht geladen werden: ${e.message || e}`, 'error')
     close()
@@ -519,7 +526,7 @@ export async function showUserDetailV2(userId) {
         if (!untilStr) {
           toast('Kein Datum gesetzt — gewähre 30 Tage Premium.', 'info')
         }
-        await rpc('admin_grant_premium', { p_user_id: userId, p_days: days })
+        await rpc('admin_grant_premium', { p_user_id: userId, p_duration_days: days })
         toast(`Premium gewährt (${days} Tage).`, 'success')
         u.is_premium = true
         u.premium_until = new Date(Date.now() + days * 86400000).toISOString()

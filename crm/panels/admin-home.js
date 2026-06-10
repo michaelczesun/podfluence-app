@@ -19,7 +19,7 @@ const REALTIME_DEBOUNCE_MS = 800
 
 const KPI_DEFS = [
   { key: 'total_users',      label: 'User gesamt',     icon: 'users',      color: '#7C5CFF', fmt: 'int',   sparkMetric: 'signups' },
-  { key: 'active_24h',       label: 'Aktiv (24h)',     icon: 'activity',   color: '#22D3EE', fmt: 'int',   sparkMetric: 'app_opens' },
+  { key: 'active_24h',       label: 'Aktiv (24h)',     icon: 'activity',   color: '#22D3EE', fmt: 'int',   sparkMetric: 'active_users' },
   { key: 'posts_24h',        label: 'Beiträge (24h)',  icon: 'message',    color: '#F59E0B', fmt: 'int',   sparkMetric: 'posts' },
   { key: 'listening_hours',  label: 'Hörstunden (24h)',icon: 'headphones', color: '#10B981', fmt: 'hours', sparkMetric: 'listening_hours' }
 ]
@@ -57,6 +57,58 @@ async function fetchListeningEventCount24h() {
       .gte('created_at', since24h)
     return { events: Number(count) || 0 }
   } catch (_) { return { events: null } }
+}
+
+// Schema-Truth: app_opens hat KEIN user_id (nur device_fp) + RLS-401 → tot für aktive-User.
+// "Aktiv" = DISTINCT User über updates+comments+likes(user_id) + listening_activity(listener_id).
+const ACTIVE_FETCH_LIMIT = 2000
+
+async function countActiveUsers(sinceIso, untilIso) {
+  const safe = (p) => p.then(r => r).catch(() => ({ data: null }))
+  const range = (q) => {
+    let qq = q.gte('created_at', sinceIso)
+    if (untilIso) qq = qq.lt('created_at', untilIso)
+    return qq.limit(ACTIVE_FETCH_LIMIT)
+  }
+  const [u, c, l, la] = await Promise.all([
+    safe(range(sb.from('updates').select('user_id'))),
+    safe(range(sb.from('comments').select('user_id'))),
+    safe(range(sb.from('likes').select('user_id'))),
+    safe(range(sb.from('listening_activity').select('listener_id')))
+  ])
+  const set = new Set()
+  for (const r of (u.data || []))  { if (r.user_id) set.add(r.user_id) }
+  for (const r of (c.data || []))  { if (r.user_id) set.add(r.user_id) }
+  for (const r of (l.data || []))  { if (r.user_id) set.add(r.user_id) }
+  for (const r of (la.data || [])) { if (r.listener_id) set.add(r.listener_id) }
+  return set.size
+}
+
+// Clientseitige per-Tag DISTINCT-User-Reihe (Fallback wenn admin_active_users_series-RPC fehlt).
+async function activeUsersSeriesClient(days) {
+  const since = new Date(Date.now() - days * 86_400_000).toISOString()
+  const safe = (p) => p.then(r => r).catch(() => ({ data: null }))
+  const [u, c, l, la] = await Promise.all([
+    safe(sb.from('updates').select('user_id,created_at').gte('created_at', since).limit(5000)),
+    safe(sb.from('comments').select('user_id,created_at').gte('created_at', since).limit(5000)),
+    safe(sb.from('likes').select('user_id,created_at').gte('created_at', since).limit(5000)),
+    safe(sb.from('listening_activity').select('listener_id,created_at').gte('created_at', since).limit(5000))
+  ])
+  const buckets = new Map()
+  const today = new Date(); today.setHours(0, 0, 0, 0)
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today.getTime() - i * 86_400_000)
+    buckets.set(d.toISOString().slice(0, 10), new Set())
+  }
+  const add = (rows, idField) => {
+    for (const r of (rows || [])) {
+      const k = (r.created_at || '').slice(0, 10)
+      const id = r[idField]
+      if (id && buckets.has(k)) buckets.get(k).add(id)
+    }
+  }
+  add(u.data, 'user_id'); add(c.data, 'user_id'); add(l.data, 'user_id'); add(la.data, 'listener_id')
+  return [...buckets.values()].map(s => s.size)
 }
 
 async function fetchHeroStats() {
@@ -109,12 +161,13 @@ async function fetchHeroStats() {
   const since24h = new Date(Date.now() - 86_400_000).toISOString()
   const since48h = new Date(Date.now() - 2 * 86_400_000).toISOString()
   const safe = (p) => p.then(r => r).catch(() => ({ count: 0, data: null }))
-  const [usersC, postsT, postsY, openT, openY, listenT, listenY] = await Promise.all([
+  const [usersC, postsT, postsY, active24, activeYday, listenT, listenY] = await Promise.all([
     safe(sb.from('users').select('id', { count: 'exact', head: true })),
     safe(sb.from('updates').select('id', { count: 'exact', head: true }).gte('created_at', since24h)),
     safe(sb.from('updates').select('id', { count: 'exact', head: true }).gte('created_at', since48h).lt('created_at', since24h)),
-    safe(sb.from('app_opens').select('id', { count: 'exact', head: true }).gte('created_at', since24h)),
-    safe(sb.from('app_opens').select('id', { count: 'exact', head: true }).gte('created_at', since48h).lt('created_at', since24h)),
+    // Aktiv = DISTINCT User über updates+comments+likes+listening_activity (kein app_opens)
+    countActiveUsers(since24h, null),
+    countActiveUsers(since48h, since24h),
     safe(sb.from('listening_activity').select('listened_ms,created_at').gte('created_at', since24h).limit(5000)),
     safe(sb.from('listening_activity').select('listened_ms,created_at').gte('created_at', since48h).lt('created_at', since24h).limit(5000))
   ])
@@ -122,7 +175,7 @@ async function fetchHeroStats() {
   const listenHours = sumMs(listenT?.data) / 3600000
   const result = {
     total_users:     { value: usersC.count ?? 0, prev: usersC.count ?? 0 },
-    active_24h:      { value: openT.count ?? 0,  prev: openY.count ?? 0 },
+    active_24h:      { value: active24 ?? 0,  prev: activeYday ?? 0 },
     posts_24h:       { value: postsT.count ?? 0, prev: postsY.count ?? 0 },
     listening_hours: {
       value: listenHours,
@@ -141,9 +194,11 @@ async function fetchHeroStats() {
 async function fetchSpark(def) {
   const since = new Date(Date.now() - SPARK_DAYS * 86_400_000).toISOString()
   try {
-    if (def.sparkMetric === 'app_opens') {
-      const { data } = await sb.from('app_opens').select('created_at').gte('created_at', since).limit(5000)
-      return bucketByDay(data || [], 'created_at', SPARK_DAYS).map(r => r.value)
+    if (def.sparkMetric === 'active_users') {
+      // DISTINCT aktive User pro Tag — kein app_opens (tot). RPC bevorzugt, sonst Client.
+      const { data, error } = await sb.rpc('admin_active_users_series', { p_days: SPARK_DAYS })
+      if (!error && Array.isArray(data)) return data.map(d => Number(d.value) || 0)
+      return await activeUsersSeriesClient(SPARK_DAYS)
     }
     if (def.sparkMetric === 'listening_hours') {
       // Konsistent mit Hörstunden-Tile: SUM(listened_ms) / 3_600_000 = hours.

@@ -22,12 +22,33 @@ function rangeToDays(range) {
   return 90
 }
 
+// FIX (math/empty-chart): die Signups-Sparkline IMMER aus admin_daily_series
+// holen — egal ob der Funnel via RPC oder Fallback gebaut wird. Vorher wurde
+// die Serie nur im Fallback-Pfad gefüllt; wenn das RPC erfolgreich war (Normalfall
+// für Admins) blieb series=[] → Chart zeigte fälschlich "Keine Signups".
+async function fetchSignupSeries(days) {
+  const seriesDays = Math.min(Math.max(days, 30), 365)
+  try {
+    const { data, error } = await sb.rpc('admin_daily_series', { p_metric: 'signups', p_days: seriesDays })
+    if (error || !Array.isArray(data)) return []
+    return data.map(p => ({ x: p.date, y: Number(p.value) || 0 }))
+  } catch (_) {
+    return []
+  }
+}
+
 async function fetchFunnel(range = '90d') {
   const days = rangeToDays(range)
   // Try dedicated RPC first
   try {
     const { data, error } = await sb.rpc('onboarding_funnel_stats', { p_days: days })
-    if (!error && data) return normalizeRpc(data)
+    if (!error && data) {
+      const norm = normalizeRpc(data)
+      if (!norm.series || !norm.series.length) {
+        norm.series = await fetchSignupSeries(days)
+      }
+      return norm
+    }
     // RPC not available — fall through to manual build
     console.warn('[onboarding-funnel] onboarding_funnel_stats nicht verfügbar, nutze Fallback')
   } catch (_) {
