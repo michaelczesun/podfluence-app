@@ -9,9 +9,9 @@
 // (Memory-Regel: TextInputs in Modals niemals hinter Tastatur).
 // Close: X-Button, Escape, Backdrop-Click.
 
-import { sb } from '/lib/supabase.js?v=20260608p'
-import { toast, htmlEscape } from '/lib/ui.js?v=20260608p'
-import { openModal } from '/crm/lib/modal.js?v=20260608p'
+import { sb } from '/lib/supabase.js?v=20260610q'
+import { toast, htmlEscape } from '/lib/ui.js?v=20260610q'
+import { openModal } from '/crm/lib/modal.js?v=20260610q'
 
 // ---------------------------------------------------------------------------
 // One-time style injection

@@ -1,9 +1,9 @@
-import { sb } from '/lib/supabase.js?v=20260608p'
-import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, confirmDialog } from '/lib/ui.js?v=20260608p'
-import { makeSparkline, makeAreaChart } from '/lib/charts.js?v=20260608p'
-import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260608p'
-import { glassCard } from '/lib/layout-extras.js?v=20260608p'
-import { skeletonCard, skeletonGrid, skeletonChart } from '/crm/lib/skeleton.js?v=20260608p'
+import { sb } from '/lib/supabase.js?v=20260610q'
+import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce, confirmDialog } from '/lib/ui.js?v=20260610q'
+import { makeSparkline, makeAreaChart } from '/lib/charts.js?v=20260610q'
+import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260610q'
+import { glassCard } from '/lib/layout-extras.js?v=20260610q'
+import { skeletonCard, skeletonGrid, skeletonChart } from '/crm/lib/skeleton.js?v=20260610q'
 
 // Schema-Truth: siehe CLAUDE-Memory. Diese Datei nutzt NUR existierende Tabellen/Felder:
 //  - users(id,email,is_premium,is_verified,is_admin,created_at,full_name,username,avatar_url,is_banned)
@@ -39,7 +39,11 @@ function formatValue(val, fmt) {
   // null/undefined → em-dash (Wert unbekannt). 0 ist ein valider Wert (echt 0h)
   // und wird normal mit Suffix gerendert.
   if (val == null) return '—'
-  if (fmt === 'hours') return fmtNumber(val) + ' h'
+  if (fmt === 'hours') {
+    // <1h → Minuten anzeigen (sonst zeigt es "0 h" obwohl z.B. 5 Min gehört).
+    if (val > 0 && val < 1) return Math.round(val * 60) + ' Min'
+    return fmtNumber(Math.round(val * 10) / 10) + ' h'
+  }
   return fmtNumber(val)
 }
 
@@ -115,18 +119,18 @@ async function fetchHeroStats() {
     safe(sb.from('listening_activity').select('listened_ms,created_at').gte('created_at', since48h).lt('created_at', since24h).limit(5000))
   ])
   const sumMs = (rows) => (rows || []).reduce((a, r) => a + Number(r.listened_ms || 0), 0)
-  const listenHours = Math.round(sumMs(listenT?.data) / 3600000)
+  const listenHours = sumMs(listenT?.data) / 3600000
   const result = {
     total_users:     { value: usersC.count ?? 0, prev: usersC.count ?? 0 },
     active_24h:      { value: openT.count ?? 0,  prev: openY.count ?? 0 },
     posts_24h:       { value: postsT.count ?? 0, prev: postsY.count ?? 0 },
     listening_hours: {
       value: listenHours,
-      prev:  Math.round(sumMs(listenY?.data) / 3600000)
+      prev:  sumMs(listenY?.data) / 3600000
     }
   }
   // Bug #10: bei 0h Event-Basis loggen (basisEvents = Anzahl Roh-Events)
-  if (listenHours === 0) {
+  if (listenHours < 1) {
     const events = (listenT?.data || []).length
     result.listening_hours.basisEvents = events
     try { console.info(`[admin-home] Hörstunden=0h (basis: ${events} listening_activity events 24h, fallback)`) } catch (_) {}
@@ -704,7 +708,7 @@ export default {
               if (v == null) {
                 el.textContent = formatValue(null, def.fmt) // "—"
               } else {
-                try { countUp(el, { from: 0, to: v, duration: 1100, format: n => formatValue(Math.round(n), def.fmt) }) }
+                try { countUp(el, { from: 0, to: v, duration: 1100, format: n => formatValue(def.fmt === 'hours' ? n : Math.round(n), def.fmt) }) }
                 catch (_) { el.textContent = formatValue(v, def.fmt) }
               }
             }
@@ -738,7 +742,7 @@ export default {
                 el.textContent = formatValue(null, def.fmt) // "—"
               } else {
                 const from = p.value == null ? 0 : p.value
-                try { countUp(el, { from, to: t.value, duration: 800, format: n => formatValue(Math.round(n), def.fmt) }) }
+                try { countUp(el, { from, to: t.value, duration: 800, format: n => formatValue(def.fmt === 'hours' ? n : Math.round(n), def.fmt) }) }
                 catch (_) { el.textContent = formatValue(t.value, def.fmt) }
               }
               const card = container.querySelector(`.kpi-card[data-kpi="${def.key}"]`)

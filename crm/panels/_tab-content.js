@@ -3,15 +3,15 @@
 // Each sub-tab can contain 1..n existing child-panels (split-tiles),
 // dynamically imported and mounted into sandboxed child containers.
 //
-// CACHE-BUST: ?v=20260608p
+// CACHE-BUST: ?v=20260610q
 
-import { sb } from '/lib/supabase.js?v=20260608p'
-import { emptyState } from '/crm/lib/empty.js?v=20260608p'
+import { sb } from '/lib/supabase.js?v=20260610q'
+import { emptyState } from '/crm/lib/empty.js?v=20260610q'
 import {
   toast, htmlEscape, fmtRelativeTime, fmtNumber, iconHtml, spinnerHtml
-} from '/lib/ui.js?v=20260608p'
-import { fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608p'
-import { showUserDetailModal } from '/lib/panel-actions.js?v=20260608p'
+} from '/lib/ui.js?v=20260610q'
+import { fadeIn, skeletonLoader } from '/lib/animations.js?v=20260610q'
+import { showUserDetailModal } from '/lib/panel-actions.js?v=20260610q'
 
 // ------------ Sub-Tab config ------------
 // Each entry maps to an array of "tiles". A tile either references an existing

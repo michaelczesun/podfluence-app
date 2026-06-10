@@ -1,8 +1,8 @@
-import { sb } from '/lib/supabase.js?v=20260608p'
-import { toast, fmtNumber, fmtRelativeTime, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260608p'
-import { exportCsv } from '/lib/export.js?v=20260608p'
-import { fadeIn, skeletonLoader } from '/lib/animations.js?v=20260608p'
-import { emptyState } from '/crm/lib/empty.js?v=20260608p'
+import { sb } from '/lib/supabase.js?v=20260610q'
+import { toast, fmtNumber, fmtRelativeTime, fmtDateTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260610q'
+import { exportCsv } from '/lib/export.js?v=20260610q'
+import { fadeIn, skeletonLoader } from '/lib/animations.js?v=20260610q'
+import { emptyState } from '/crm/lib/empty.js?v=20260610q'
 
 const PAGE_SIZE = 100
 
