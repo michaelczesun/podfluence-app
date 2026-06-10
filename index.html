@@ -1627,8 +1627,8 @@
     <p style="margin: 0 0 6px; font-size: 12px; font-weight: 700; color: var(--primary-2); text-transform: uppercase; letter-spacing: 0.6px;" data-i18n="bot.label">
       🤖 hozd-Bot · Live
     </p>
-    <p id="footer-bot-msg" data-i18n="footer.bot-loading" style="margin: 0; font-size: 14px; line-height: 1.5; color: var(--text);">
-      Hozd ist gerade … <em style="opacity: 0.6;">lade Live-Zahlen</em>
+    <p id="footer-bot-msg" style="margin: 0; font-size: 14px; line-height: 1.5; color: var(--text);">
+      <span data-i18n="footer.bot-loading">Hozd ist gerade … <em style="opacity: 0.6;">lade Live-Zahlen</em></span>
     </p>
   </div>
 
@@ -2597,20 +2597,18 @@
 
         // Footer-Bot mit Live-Zahlen — bevorzugt podcasters/listeners
         // separat, fallback auf users-Summe.
-        var botMsg = document.getElementById('footer-bot-msg');
-        if (botMsg && (d.users || d.podcasts)) {
-          var isEn2 = (typeof lang !== 'undefined' && lang === 'en');
+        if (d.users || d.podcasts) {
           var pods = typeof d.podcasters === 'number' ? d.podcasters : 0;
           var lis  = typeof d.listeners === 'number' ? d.listeners
                    : Math.max(0, (d.users || 0) - pods);
-          var tpl = (DICT[isEn2 ? 'en' : 'de'] || {})['bot.status'] || '';
-          if (tpl) {
-            botMsg.innerHTML = tpl
-              .replace('{X}', d.users || 0)
-              .replace('{Y}', pods)
-              .replace('{Z}', lis)
-              .replace('{W}', d.episodes || 0);
-          }
+          // Cache live data global damit lang-toggle re-rendern kann
+          window._botLiveData = {
+            users: d.users || 0,
+            podcasters: pods,
+            listeners: lis,
+            episodes: d.episodes || 0
+          };
+          window._renderBotStatus && window._renderBotStatus();
         }
       })
       .catch(function() { /* silent — Fallback bleiben die statischen data-count Werte */ });
@@ -3129,7 +3127,23 @@
       btn.setAttribute('aria-pressed', l === 'en' ? 'true' : 'false');
     }
     if (typeof window._asbRefreshLang === 'function') { try { window._asbRefreshLang(); } catch(e) {} }
+    if (typeof window._renderBotStatus === 'function') { try { window._renderBotStatus(); } catch(e) {} }
   }
+
+  // Bot-Status Re-Render bei Lang-Toggle (greift gecachte Live-Daten ab).
+  // Verhindert Flackern zwischen Lade-Text und Live-Zahlen.
+  window._renderBotStatus = function() {
+    var el = document.getElementById('footer-bot-msg');
+    var data = window._botLiveData;
+    if (!el || !data) return;
+    var tpl = (DICT[lang] || {})['bot.status'] || '';
+    if (!tpl) return;
+    el.innerHTML = tpl
+      .replace('{X}', data.users)
+      .replace('{Y}', data.podcasters)
+      .replace('{Z}', data.listeners)
+      .replace('{W}', data.episodes);
+  };
 
   function ready(fn){
     if (document.readyState === 'loading') { document.addEventListener('DOMContentLoaded', fn); }
