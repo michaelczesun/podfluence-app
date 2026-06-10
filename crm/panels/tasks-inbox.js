@@ -115,7 +115,7 @@ async function updateTaskStatus(id, status) {
   const patch = { status, updated_at: new Date().toISOString() }
   const { error } = await sb.from('admin_tasks').update(patch).eq('id', id)
   if (error) throw error
-  try { await sb.rpc('admin_log_action', { action: 'task_status', target_type: 'admin_tasks', target_id: String(id), meta: { status } }) } catch (_) {}
+  try { await sb.rpc('admin_log_action', { p_action: 'task_status', p_target_type: 'admin_tasks', p_target_id: String(id), p_meta: { status } }) } catch (_) {}
 }
 
 async function createTask(payload) {
@@ -130,7 +130,7 @@ async function createTask(payload) {
   }
   const { data, error } = await sb.from('admin_tasks').insert(row).select().single()
   if (error) throw error
-  try { await sb.rpc('admin_log_action', { action: 'task_create', target_type: 'admin_tasks', target_id: String(data?.id ?? ''), meta: { title: row.title } }) } catch (_) {}
+  try { await sb.rpc('admin_log_action', { p_action: 'task_create', p_target_type: 'admin_tasks', p_target_id: String(data?.id ?? ''), p_meta: { title: row.title } }) } catch (_) {}
   return data
 }
 

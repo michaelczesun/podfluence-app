@@ -43,7 +43,7 @@ const ADMIN_RPCS = [
   { name: 'admin_ban_user',              args: { p_user_id: '00000000-0000-0000-0000-000000000000', p_reason: 'probe' }, group: 'Actions', expectsError: true },
   { name: 'admin_set_premium',           args: { p_user_id: '00000000-0000-0000-0000-000000000000', p_days: 0 }, group: 'Actions', expectsError: true },
   { name: 'admin_bulk_verify',           args: { p_user_ids: [] },              group: 'Actions' },
-  { name: 'admin_log_action',            args: { action: 'probe', target_type: 'system', target_id: 'health', meta: {} }, group: 'Actions' },
+  { name: 'admin_log_action',            args: { p_action: 'probe', p_target_type: 'system', p_target_id: 'health', p_meta: {} }, group: 'Actions' },
   { name: 'admin_set_podcast_featured',  args: { p_podcast_id: '00000000-0000-0000-0000-000000000000', p_value: false }, group: 'Actions', expectsError: true },
   // Audit / Logs
   { name: 'admin_audit_recent',          args: { p_limit: 1 },                  group: 'Audit' },

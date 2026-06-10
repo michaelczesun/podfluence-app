@@ -428,7 +428,7 @@ export default {
         b.setAttribute('aria-selected', on ? 'true' : 'false')
       })
       // Audit-Log (fire & forget)
-      try { sb.rpc('admin_log_action', { p_action: 'people_subtab_switch', p_target: key }) } catch {}
+      try { sb.rpc('admin_log_action', { p_action: 'people_subtab_switch', p_target_id: key }) } catch {}
       await mountSubPanel(host, sub)
     }
 
