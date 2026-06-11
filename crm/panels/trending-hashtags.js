@@ -414,7 +414,7 @@ export default {
             return
           }
           try {
-            exportCsv('trending-hashtags', currentItems.map((t, i) => ({
+            exportCsv(currentItems.map((t, i) => ({
               rang: i + 1,
               tag: t.tag,
               verwendungen: t.usage_count,
@@ -422,7 +422,7 @@ export default {
               posts_7d: t.posts_7d || 0,
               trend: t.trend || 'flat',
               zuletzt: t.last_used_at ? fmtDateTime(t.last_used_at) : ''
-            })))
+            })), null, 'trending-hashtags.csv')
             toast('CSV exportiert', 'success')
           } catch (e) {
             toast('CSV-Export fehlgeschlagen: ' + (e.message || ''), 'error')

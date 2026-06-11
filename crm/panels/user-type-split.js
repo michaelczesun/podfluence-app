@@ -38,11 +38,11 @@ export default {
         this._load(container)
       })
       container.querySelector('[data-act="pdf"]').addEventListener('click', () => {
-        exportPanelAsPdf(container, { title: 'Listener vs. Podcaster' })
+        exportPanelAsPdf(container, 'listener-vs-podcaster', { title: 'Listener vs. Podcaster' })
       })
       container.querySelector('[data-act="csv"]').addEventListener('click', () => {
         if (this._lastTrend?.length) {
-          exportCsv(this._lastTrend, { filename: 'listener-podcaster-trend.csv' })
+          exportCsv(this._lastTrend, null, 'listener-podcaster-trend.csv')
         } else {
           toast('Keine Daten zum Exportieren')
         }
@@ -326,7 +326,7 @@ export default {
         search.addEventListener('input', onSearch)
 
         drawerEl.querySelector('[data-act="csv-seg"]').addEventListener('click', () => {
-          exportCsv(filtered, { filename: `${segment}-users.csv` })
+          exportCsv(filtered, null, `${segment}-users.csv`)
         })
 
         allRows.forEach(tr => {

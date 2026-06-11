@@ -419,9 +419,9 @@ export default {
       const rangeHost = container.querySelector('#tl-range')
       segmentedControl(rangeHost, {
         options: [
-          { value: '7d', label: '7T' },
-          { value: '30d', label: '30T' },
-          { value: '90d', label: '90T' },
+          { key: '7d', label: '7T' },
+          { key: '30d', label: '30T' },
+          { key: '90d', label: '90T' },
         ],
         value: currentRange,
         onChange: (v) => {
@@ -501,7 +501,7 @@ export default {
         // Hero-total/avg are now rendered as static strings ("12.3 h" / "—")
         // so countUp would overwrite them with raw numbers; skip animation here.
         const shareEl = body.querySelector('#hero-share')
-        countUp(shareEl, top10Share, { duration: 900, format: (v) => `${v}%` })
+        countUp(shareEl, { from: 0, to: top10Share, duration: 900, format: (v) => `${v}%` })
 
         const chartHost = body.querySelector('#hero-chart')
         if (chartHost && totalsByDay.length) {
@@ -592,7 +592,7 @@ export default {
               premium: r.is_premium ? 'yes' : 'no',
               verified: r.is_verified ? 'yes' : 'no',
             })),
-            { filename: `top-listeners-${currentRange}.csv` }
+            null, `top-listeners-${currentRange}.csv`
           )
         } catch (err) {
           toast('CSV-Export fehlgeschlagen: ' + (err?.message || ''), 'error')

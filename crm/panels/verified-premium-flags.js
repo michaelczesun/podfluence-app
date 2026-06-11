@@ -653,7 +653,7 @@ export default {
 
       container.querySelector('#btn-refresh')?.addEventListener('click', () => { toast('Aktualisiere…', 'info'); load() })
       container.querySelector('#btn-pdf')?.addEventListener('click', async () => {
-        try { await exportPanelAsPdf(container, { filename: 'verified-premium.pdf', title: 'Verifiziert & Premium' }); toast('PDF erstellt', 'success') }
+        try { await exportPanelAsPdf(container, 'verified-premium.pdf', { title: 'Verifiziert & Premium' }); toast('PDF erstellt', 'success') }
         catch (e) { toast(`PDF-Export fehlgeschlagen: ${e.message || e}`, 'error') }
       })
       container.querySelector('#btn-csv')?.addEventListener('click', () => {
@@ -661,7 +661,7 @@ export default {
           ...state.verified.map(u => ({ type: 'verified', id: u.id, username: u.username, display_name: u.full_name, since: u.verified_at, premium_expires_at: '' })),
           ...state.premium.map(u  => ({ type: 'premium',  id: u.id, username: u.username, display_name: u.full_name, since: u.premium_granted_at, premium_expires_at: u.premium_expires_at || (typeof u.is_premium === 'string' ? u.is_premium : 'lifetime') })),
         ]
-        exportCsv(rows, 'verified-premium.csv')
+        exportCsv(rows, null, 'verified-premium.csv')
         toast('CSV exportiert', 'success')
       })
       container.querySelector('#btn-bulk')?.addEventListener('click', () => openBulkGrantModal(load))

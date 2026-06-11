@@ -198,7 +198,7 @@ async function openVibeDrawer(vibeKey, data) {
     content,
   })
 
-  const el = dr?.el || dr
+  const el = dr?.root || dr
   const tbody = el?.querySelector?.('tbody')
   if (tbody) {
     tbody.addEventListener('click', (e) => {
@@ -406,7 +406,7 @@ function exportCurrentCsv() {
     anteil_prozent: d.total ? ((d.counts[v.key] / d.total) * 100).toFixed(2) : '0.00',
   }))
   try {
-    exportCsv(`vibe-verteilung-${state.range}-${new Date().toISOString().slice(0,10)}.csv`, rows)
+    exportCsv(rows, null, `vibe-verteilung-${state.range}-${new Date().toISOString().slice(0,10)}.csv`)
     toast('CSV exportiert')
   } catch {
     toast('CSV-Export fehlgeschlagen')
@@ -415,7 +415,7 @@ function exportCurrentCsv() {
 
 async function exportPdf(container) {
   try {
-    await exportPanelAsPdf(container, { title: `Vibe-Verteilung (${state.range === '7d' ? '7 Tage' : '30 Tage'})` })
+    await exportPanelAsPdf(container, 'vibe-verteilung', { title: `Vibe-Verteilung (${state.range === '7d' ? '7 Tage' : '30 Tage'})` })
     toast('PDF erstellt')
   } catch (e) {
     toast('PDF-Export fehlgeschlagen')

@@ -371,12 +371,12 @@ export default {
       if (btn) {
         const act = btn.dataset.act
         if (act === 'refresh') { toast('Aktualisiere…'); await load(); toast('Aktualisiert') }
-        else if (act === 'pdf') { try { await exportPanelAsPdf(container, { title: 'User-Weltkarte' }) } catch(err){ toast('PDF-Export fehlgeschlagen', 'error') } }
+        else if (act === 'pdf') { try { await exportPanelAsPdf(container, 'user-weltkarte', { title: 'User-Weltkarte' }) } catch(err){ toast('PDF-Export fehlgeschlagen', 'error') } }
         else if (act === 'csv') {
           try {
-            exportCsv('users-by-country.csv', state.countries.map(c => ({
+            exportCsv(state.countries.map(c => ({
               code: c.code, land: countryName(c.code), region: regionOf(c.code), user_count: c.count, neu_30d: c.recent
-            })))
+            })), null, 'users-by-country.csv')
           } catch(err){ toast('CSV-Export fehlgeschlagen', 'error') }
         }
         else if (act === 'retry') { await load() }

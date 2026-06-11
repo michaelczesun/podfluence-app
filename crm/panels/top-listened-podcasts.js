@@ -248,7 +248,7 @@ export default {
           accent: 'rose',
           icon: 'star'
         }))
-        const heroValues = heroRow.querySelectorAll('.stat-hero-value')
+        const heroValues = heroRow.querySelectorAll('.lx-hero-value')
         if (heroValues[0]) countUp(heroValues[0], totalMinutes, { duration: 900 })
         if (heroValues[1]) countUp(heroValues[1], totalPlays, { duration: 900 })
         if (heroValues[2]) countUp(heroValues[2], totalPodcasts, { duration: 900 })
@@ -370,7 +370,7 @@ export default {
           content: `<div id="drawerLoading" style="padding:32px;text-align:center">${spinnerHtml()} Details werden geladen…</div>`
         })
         // FIX #2: guard against drawer() returning an object without querySelector
-        const root = d.contentEl || d.body || d.el || d
+        const root = d.root
         if (!root || typeof root.querySelector !== 'function') {
           console.error('[top-listened-podcasts] drawer() did not return an element with querySelector. Received:', d)
           toast('Drawer konnte nicht geöffnet werden.', 'error')
@@ -450,7 +450,7 @@ export default {
       })
       toolbar.querySelector('[data-act="pdf"]').addEventListener('click', () => {
         try {
-          exportPanelAsPdf(container, { title: 'Top gehörte Podcasts', filename: `top-podcasts-7t.pdf` })
+          exportPanelAsPdf(container, 'top-podcasts-7t.pdf', { title: 'Top gehörte Podcasts' })
         } catch (e) {
           toast(`PDF-Export fehlgeschlagen: ${e.message || e}`, 'error')
         }

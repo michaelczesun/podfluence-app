@@ -72,9 +72,11 @@
 
 /* ---------- Card-/Grid-Container ---------- */
 .card-grid, .chart-grid, .charts-row, .panel-grid, .feed-grid, .grid-2col,
-.dau-kpi-grid, .uts-hero-grid, .ul-grid, .post-list {
+.dau-kpi-grid, .uts-hero-grid, .ul-grid, .post-list, .hero-row {
   display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px;
 }
+.hero-row { grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); margin-bottom: 18px; }
+.grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; margin-bottom: 14px; }
 .grid-2col, .charts-row, .chart-grid { grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); }
 .feed-grid, .post-list { grid-template-columns: 1fr; }
 .card-body, .list-card, .overview-card, .table-card, .chart-card__body,
