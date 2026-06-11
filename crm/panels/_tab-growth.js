@@ -293,7 +293,7 @@ async function renderFunnel(host) {
   // 1) admin_funnel_v2 als Hero-Reihe oben — optional, fail-safe
   const v2Host = host.querySelector('#tg-funnel-v2')
   try {
-    const { data, error } = await sb.rpc('admin_funnel_v2', { p_days: 90 })
+    const { data, error } = await sb.rpc('admin_funnel_v2', {})
     if (!error && data) {
       const stages = Array.isArray(data) ? data : (data.stages || [])
       if (stages.length) {
