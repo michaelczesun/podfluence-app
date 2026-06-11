@@ -71,7 +71,7 @@ async function fetchTasks() {
   // Fallback: direct query
   const { data, error } = await sb
     .from('admin_tasks')
-    .select('id, title, description, status, assigned_to, related_user, due_at, created_at, created_by, updated_at')
+    .select('id, title, description, status, assigned_to, related_user_id, due_at, created_at, created_by')
     .order('due_at', { ascending: true, nullsFirst: false })
     .limit(FETCH_LIMIT)
   if (error) throw error
@@ -82,7 +82,7 @@ async function loadUserIndex(tasks) {
   const ids = new Set()
   for (const t of tasks) {
     if (t.assigned_to) ids.add(t.assigned_to)
-    if (t.related_user) ids.add(t.related_user)
+    if (t.related_user_id) ids.add(t.related_user_id)
     if (t.created_by) ids.add(t.created_by)
   }
   // Always include admin users for picker
@@ -112,7 +112,7 @@ async function loadUserIndex(tasks) {
 }
 
 async function updateTaskStatus(id, status) {
-  const patch = { status, updated_at: new Date().toISOString() }
+  const patch = { status }
   const { error } = await sb.from('admin_tasks').update(patch).eq('id', id)
   if (error) throw error
   try { await sb.rpc('admin_log_action', { p_action: 'task_status', p_target_type: 'admin_tasks', p_target_id: String(id), p_meta: { status } }) } catch (_) {}
@@ -123,7 +123,7 @@ async function createTask(payload) {
     title: payload.title,
     description: payload.description || null,
     assigned_to: payload.assigned_to || null,
-    related_user: payload.related_user || null,
+    related_user_id: payload.related_user || null,
     due_at: payload.due_at || null,
     status: 'open',
     created_by: state.meId,
@@ -160,7 +160,7 @@ function cardHtml(t) {
         <h4 class="ti-title">${htmlEscape(t.title || '(ohne Titel)')}</h4>
         <div class="ti-avatars">
           ${t.assigned_to ? avatarHtml(t.assigned_to, 'Zugewiesen') : ''}
-          ${t.related_user ? `<span class="ti-rel">→</span>${avatarHtml(t.related_user, 'Bezug')}` : ''}
+          ${t.related_user_id ? `<span class="ti-rel">→</span>${avatarHtml(t.related_user_id, 'Bezug')}` : ''}
         </div>
       </div>
       ${t.description ? `<p class="ti-desc">${htmlEscape(t.description.slice(0, 130))}${t.description.length > 130 ? '…' : ''}</p>` : ''}

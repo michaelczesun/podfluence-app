@@ -239,7 +239,7 @@ async function fetchAlerts() {
   const [bugsRes, postsBurstRes, podcastsRes, signupsRes] = await Promise.all([
     // 1) Offene Bug-Reports (24h)
     safe(sb.from('bug_reports')
-      .select('id,title,created_at,status', { count: 'exact' })
+      .select('id,description,created_at,status', { count: 'exact' })
       .eq('status', 'open')
       .gte('created_at', since24h)
       .order('created_at', { ascending: false })
@@ -429,7 +429,7 @@ function renderAlertsFeed(alerts) {
       icon: 'alert-triangle',
       color: '#EF4444',
       title: `${alerts.bugs.count} offene Bug-Reports (24h)`,
-      sub: alerts.bugs.items.slice(0,3).map(b => htmlEscape(b.title || '(ohne Titel)')).join(' · ') || 'Keine Details',
+      sub: alerts.bugs.items.slice(0,3).map(b => htmlEscape(b.description || '(ohne Beschreibung)')).join(' · ') || 'Keine Details',
       action: 'open-bugs',
       actionLabel: 'Triage öffnen'
     })

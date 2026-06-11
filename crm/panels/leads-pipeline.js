@@ -91,15 +91,15 @@ function applySearch(rows) {
   const q = (state.search || '').toLowerCase().trim()
   if (!q) return rows
   return rows.filter(r =>
-    (r.name  || '').toLowerCase().includes(q) ||
-    (r.email || '').toLowerCase().includes(q) ||
+    ((r.external_name  ?? r.name)  || '').toLowerCase().includes(q) ||
+    ((r.external_email ?? r.email) || '').toLowerCase().includes(q) ||
     (r.source|| '').toLowerCase().includes(q)
   )
 }
 
 function renderCard(lead) {
   const src = sourceMeta(lead.source)
-  const init = initial(lead.name, lead.email)
+  const init = initial(lead.external_name ?? lead.name, lead.external_email ?? lead.email)
   const avatar = lead.avatar_url
     ? `<img src="${htmlEscape(lead.avatar_url)}" alt="" class="lead-avatar-img"/>`
     : `<div class="lead-avatar-fallback">${htmlEscape(init)}</div>`
@@ -107,8 +107,8 @@ function renderCard(lead) {
     <div class="lead-card-top">
       <div class="lead-avatar">${avatar}</div>
       <div class="lead-card-id">
-        <div class="lead-name">${htmlEscape(lead.name || '— ohne Name —')}</div>
-        <div class="lead-email">${htmlEscape(lead.email || '')}</div>
+        <div class="lead-name">${htmlEscape((lead.external_name ?? lead.name) || '— ohne Name —')}</div>
+        <div class="lead-email">${htmlEscape((lead.external_email ?? lead.email) || '')}</div>
       </div>
     </div>
     <div class="lead-card-mid">
@@ -178,11 +178,14 @@ function wireDnD(board, container) {
       renderBoard(container)
       try {
         const { error } = await sb.rpc('admin_lead_upsert', {
-          p_id:     lead.id,
-          p_email:  lead.email,
-          p_name:   lead.name,
-          p_source: lead.source,
-          p_status: newStatus,
+          p_id:             lead.id,
+          p_external_email: lead.external_email ?? lead.email ?? null,
+          p_external_name:  lead.external_name ?? lead.name ?? null,
+          p_source:         lead.source,
+          p_status:         newStatus,
+          p_user_id:        lead.user_id ?? null,
+          p_assigned_to:    lead.assigned_to ?? null,
+          p_next_action_at: lead.next_action_at ?? null,
         })
         if (error) throw error
         toast(`Lead → ${statusMeta(newStatus).label}`, 'success')
@@ -239,8 +242,12 @@ function openNewLeadModal(container, reload) {
     const note   = (get('#nl-note')  || document.querySelector('#nl-note')).value.trim()
     if (!email || !email.includes('@')) { toast('Gültige Email nötig', 'error'); return }
     try {
+      // p_note existiert NICHT in der DB-Funktion (leads-Tabelle hat keine
+      // note-Spalte) → Notiz-Feld wird aktuell nicht persistiert.
       const { error } = await sb.rpc('admin_lead_upsert', {
-        p_id: null, p_email: email, p_name: name || null, p_source: source, p_status: status, p_note: note || null,
+        p_id: null, p_external_email: email, p_external_name: name || null,
+        p_source: source, p_status: status,
+        p_user_id: null, p_assigned_to: null, p_next_action_at: null,
       })
       if (error) throw error
       toast('Lead angelegt', 'success')
@@ -421,7 +428,7 @@ export default {
       container.querySelector('#lead-csv').addEventListener('click', () => {
         try {
           const rows = state.rows.map(r => ({
-            email: r.email || '', name: r.name || '', source: r.source || '', status: r.status || '',
+            email: (r.external_email ?? r.email) || '', name: (r.external_name ?? r.name) || '', source: r.source || '', status: r.status || '',
             assigned_to: r.assigned_to_name || r.assigned_to || '',
             next_action_at: r.next_action_at || '', created_at: r.created_at || '',
           }))

@@ -87,7 +87,7 @@ async function fetchReferredUsers(inviterId) {
   // FIX: select('*') → konkrete Spalten
   const { data, error } = await sb
     .from('referrals')
-    .select('id, inviter_id, invitee_id, created_at, status, bonus_granted')
+    .select('id, inviter_id, invitee_id, created_at')
     .eq('inviter_id', inviterId)
     .order('created_at', { ascending: false })
     .limit(100)
@@ -235,9 +235,10 @@ async function openInviterDrawer(row) {
         const av = u.avatar_url
           ? `<img src="${htmlEscape(u.avatar_url)}" class="row-avatar sm">`
           : `<div class="row-avatar sm avatar-fallback">${htmlEscape((u.full_name || u.username || '?').slice(0, 1).toUpperCase())}</div>`
-        // status und bonus_granted kommen jetzt sicher aus dem expliziten SELECT
-        const statusText = r.status ? htmlEscape(r.status) : 'aktiv'
-        const bonusText = r.bonus_granted ? ' · 🎁 Bonus' : ''
+        // referrals hat KEINE status/bonus_granted Spalten (nur id/inviter_id/
+        // invitee_id/created_at) → alle Referrals als 'aktiv' anzeigen.
+        const statusText = 'aktiv'
+        const bonusText = ''
         return `
           <div class="referred-row" data-uid="${htmlEscape(r.invitee_id || '')}">
             ${av}

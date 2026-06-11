@@ -295,7 +295,18 @@ async function renderFunnel(host) {
   try {
     const { data, error } = await sb.rpc('admin_funnel_v2', {})
     if (!error && data) {
-      const stages = Array.isArray(data) ? data : (data.stages || [])
+      let stages = Array.isArray(data) ? data : (data.stages || [])
+      // admin_funnel_v2 liefert ein FLACHES Objekt (kein Array, kein .stages):
+      // {signups, profile_filled, first_listened, active_7d, conv_*}. In eine
+      // Stage-Liste übersetzen, sonst bleiben die V2-Hero-Tiles unsichtbar.
+      if (!stages.length && data && data.signups != null) {
+        stages = [
+          { label: 'Signup',       count: data.signups,        conv: null },
+          { label: 'Profil',       count: data.profile_filled, conv: data.conv_signup_to_profile },
+          { label: 'First Listen', count: data.first_listened, conv: data.conv_profile_to_listen },
+          { label: 'Active (7d)',  count: data.active_7d,      conv: data.conv_listen_to_active },
+        ]
+      }
       if (stages.length) {
         v2Host.style.display = 'block'
         v2Host.innerHTML = `

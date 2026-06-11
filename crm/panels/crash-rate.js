@@ -7,6 +7,19 @@ import { drawer } from '/lib/layout-extras.js?v=20260610q'
 
 const SENTRY_URL = 'https://sentry.io/organizations/podfluence/issues/'
 
+// crash_logs hat KEINE component-Spalte. Echte Spalten: error_message,
+// error_stack, component_stack, user_id, platform, app_version, is_fatal.
+// Gruppierungs-Key aus component_stack (erste Zeile) bzw. error_message
+// ableiten — MUSS in Gruppierung UND Drill-Down-Match identisch sein.
+function crashKey(c) {
+  if (c && c.component_stack) {
+    const first = String(c.component_stack).split('\n')[0].trim().slice(0, 60)
+    if (first) return first
+  }
+  if (c && c.error_message) return String(c.error_message).slice(0, 60)
+  return 'Unbekannt'
+}
+
 function fmtRelative(iso) {
   if (!iso) return '—'
   const d = new Date(iso)
@@ -50,7 +63,7 @@ async function fetchData() {
   const sessionsUnavailable = opensErr != null || sessionsCount === 0
 
   const totalCrashes = list.length
-  const crashSessions = new Set(list.map(c => c.session_id).filter(Boolean)).size
+  const crashSessions = new Set(list.map(c => c.user_id).filter(Boolean)).size
   // Hero und Body müssen dieselbe Source-of-Truth haben. Wenn keine Sessions-Zahl
   // verfügbar ist (app_opens != crash_logs Domain — apples vs oranges), zeigen
   // wir keine fake-100%/99% sondern null → UI rendert '—' + Warnung.
@@ -75,7 +88,7 @@ async function fetchData() {
 
   const compMap = new Map()
   for (const c of list) {
-    const k = c.component || 'Unbekannt'
+    const k = crashKey(c)
     const cur = compMap.get(k) || { component: k, count: 0, last: c.created_at }
     cur.count++
     if (new Date(c.created_at) > new Date(cur.last)) cur.last = c.created_at
@@ -107,7 +120,7 @@ async function fetchData() {
   const t48 = Date.now() - 2 * 86400e3
   const compDelta = new Map()
   for (const c of list) {
-    const k = c.component || 'Unbekannt'
+    const k = crashKey(c)
     const ts = new Date(c.created_at).getTime()
     const cur = compDelta.get(k) || { component: k, today: 0, prev: 0 }
     if (ts >= t24) cur.today++
@@ -344,7 +357,7 @@ function renderContent(body, data) {
   })
 
   const openDrill = (component) => {
-    const matches = data.raw.filter(c => (c.component || 'Unbekannt') === component)
+    const matches = data.raw.filter(c => crashKey(c) === component)
     const last10 = matches.slice(0, 10)
     drawer({
       title: `Crash-Details: ${component}`,
@@ -364,9 +377,9 @@ function renderContent(body, data) {
                     <span>${htmlEscape(fmtDateTime(c.created_at))}</span>
                     <span style="font-family:monospace;font-size:11px;color:var(--text-muted)">${htmlEscape(String(c.id).slice(0, 8))}</span>
                   </div>
-                  ${c.message ? `<div style="font-size:12px;color:var(--text-muted);font-family:monospace;white-space:pre-wrap;overflow:hidden;max-height:60px">${htmlEscape(c.message)}</div>` : ''}
-                  ${c.stack ? `<details style="font-size:11px;color:var(--text-muted)"><summary style="cursor:pointer">Stack-Trace</summary><pre style="white-space:pre-wrap;overflow:hidden;max-height:120px;margin:4px 0 0">${htmlEscape(c.stack)}</pre></details>` : ''}
-                  ${!c.message && !c.stack ? `<div style="font-size:11px;color:var(--text-muted)">Kein Stack-Trace — Details in Sentry</div>` : ''}
+                  ${c.error_message ? `<div style="font-size:12px;color:var(--text-muted);font-family:monospace;white-space:pre-wrap;overflow:hidden;max-height:60px">${htmlEscape(c.error_message)}</div>` : ''}
+                  ${c.error_stack ? `<details style="font-size:11px;color:var(--text-muted)"><summary style="cursor:pointer">Stack-Trace</summary><pre style="white-space:pre-wrap;overflow:hidden;max-height:120px;margin:4px 0 0">${htmlEscape(c.error_stack)}</pre></details>` : ''}
+                  ${!c.error_message && !c.error_stack ? `<div style="font-size:11px;color:var(--text-muted)">Kein Stack-Trace — Details in Sentry</div>` : ''}
                 </div>
               `).join('')}
             </div>
@@ -479,11 +492,11 @@ const exported = {
         try {
           exportCsv(currentData.raw.map(c => ({
             id: c.id,
-            component: c.component,
-            session_id: c.session_id,
+            component: crashKey(c),
+            user_id: c.user_id,
             created_at: c.created_at,
-            message: c.message,
-            stack: c.stack,
+            message: c.error_message,
+            stack: c.error_stack,
           })), [], 'crashes-7d.csv')
           toast('Crash-Daten als CSV exportiert', 'success')
         } catch (e) {

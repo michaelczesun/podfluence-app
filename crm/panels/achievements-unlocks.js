@@ -97,7 +97,7 @@ async function manualGrant(type, userIdentifier) {
   }
   const { error: insErr } = await sb
     .from('user_achievements')
-    .insert({ user_id: userId, achievement_key: type, unlocked_at: new Date().toISOString(), granted_by: 'admin' })
+    .insert({ user_id: userId, achievement_key: type, unlocked_at: new Date().toISOString() })
   if (insErr) throw insErr
   return userId
 }

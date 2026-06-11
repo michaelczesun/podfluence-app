@@ -48,13 +48,15 @@ async function fetchAudienceCounts() {
   const [totalRes, verifiedRes, podcasterRes, active7Res] = await Promise.all([
     sb.from('users').select('id', { count: 'exact', head: true }),
     sb.from('users').select('id', { count: 'exact', head: true }).eq('is_verified', true),
-    sb.from('users').select('id', { count: 'exact', head: true }).in('user_type', ['podcaster', 'both']),
+    // users.user_type existiert nicht (nie angelegt). Podcaster = User mit
+    // mind. einem Podcast → distinct author_id aus podcasts (echter Count).
+    sb.from('podcasts').select('author_id'),
     sb.from('users').select('id', { count: 'exact', head: true }).gte('last_seen_at', sevenDaysAgo)
   ])
   return {
     all:       totalRes.count     || 0,
     verified:  verifiedRes.count  || 0,
-    podcaster: podcasterRes.count || 0,
+    podcaster: new Set((podcasterRes.data || []).map(r => r.author_id).filter(Boolean)).size,
     active_7d: active7Res.count   || 0,
     custom:    0
   }

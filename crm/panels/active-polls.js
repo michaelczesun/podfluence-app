@@ -23,7 +23,7 @@ function isMissingTableError(error) {
 
 async function fetchPolls() {
   const { data, error } = await sb.from('polls')
-    .select('*')
+    .select('*, poll_options(id, label, ord, votes_count)')
     .order('created_at', { ascending: false })
     .limit(200)
   if (error) {
@@ -51,17 +51,20 @@ async function fetchVotes(pollIds) {
 }
 
 function normalizePoll(p) {
-  let options = p.options || p.choices || p.answers || []
+  // Optionen liegen in der separaten poll_options-Tabelle (id,label,ord,
+  // votes_count) — NICHT als polls.options-Spalte (existiert nicht).
+  let options = p.poll_options || p.options || p.choices || p.answers || []
   if (typeof options === 'string') {
     try { options = JSON.parse(options) } catch { options = [] }
   }
   if (!Array.isArray(options)) options = []
+  options = options.slice().sort((a, b) => ((a?.ord ?? 0) - (b?.ord ?? 0)))
   const normalized = options.map((o, i) => {
     if (typeof o === 'string') return { id: i, label: o, votes: 0 }
     return {
       id: o.id ?? i,
       label: o.label ?? o.text ?? o.title ?? `Option ${i + 1}`,
-      votes: Number(o.votes ?? o.count ?? 0)
+      votes: Number(o.votes ?? o.count ?? o.votes_count ?? 0)
     }
   })
   const closesAt = p.closes_at || p.ends_at || p.expires_at || null
@@ -158,7 +161,7 @@ async function closePoll(pollId) {
   if (!ok) return false
   try {
     const { data, error } = await sb.from('polls')
-      .update({ is_active: false, closes_at: new Date().toISOString() })
+      .update({ closes_at: new Date().toISOString() })
       .eq('id', pollId)
       .select('id')
     if (error) throw error
