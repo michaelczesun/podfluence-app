@@ -1,0 +1,88 @@
+/* ============================================================
+ * CRM Futuristic Layer — "Glas + Neon-Glow"  (11.6.2026)
+ * Rein additiv + visuell (KEINE Layout-Properties), folgt der
+ * aktiven Tab-Farbe via --tab-accent / --tab-glow auf
+ * body[data-active-tab]. Komplett reversibel: <link> in index.html
+ * entfernen und alles ist wie vorher.
+ * ============================================================ */
+
+/* ---- Aurora-Hintergrund amplifizieren (überschreibt body::before/after) ----
+ * Vorher: zwei statische lila Blobs @ opacity .18.
+ * Jetzt: heller, in Tab-Farbe, additive screen-Blend für echten Neon-Schimmer.
+ * Die bestehende float-Animation (Drift) bleibt erhalten. */
+body::before {
+  background: radial-gradient(circle, var(--tab-accent, #8B5CF6), transparent 68%) !important;
+  opacity: 0.28 !important;
+  filter: blur(90px) saturate(150%) !important;
+  mix-blend-mode: screen;
+}
+body::after {
+  background: radial-gradient(circle, rgba(var(--tab-glow, 139,92,246), 0.95), transparent 70%) !important;
+  opacity: 0.26 !important;
+  filter: blur(95px) saturate(150%) !important;
+  mix-blend-mode: screen;
+}
+
+/* ---- Glas-Karten: echtes Frosted-Glass + Neon-Kante in Tab-Farbe ----
+ * .glass-card war global praktisch ungestylt → Panels wirkten flach.
+ * Nur visuelle Props (bg/border/blur/shadow/radius/transition), kein
+ * padding/display → bricht keine Panel-Layouts. Inline-Styles einzelner
+ * Panels gewinnen weiterhin (Spezifität), also kein Konflikt. */
+.glass-card {
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.045), rgba(255,255,255,0) 42%),
+    var(--surface-glass, rgba(22,22,29,0.72));
+  border: 1px solid var(--border-soft, rgba(255,255,255,0.06));
+  border-radius: 16px;
+  backdrop-filter: blur(16px) saturate(150%);
+  -webkit-backdrop-filter: blur(16px) saturate(150%);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.05),
+    0 10px 30px rgba(0,0,0,0.35);
+  transition: border-color 200ms ease, box-shadow 200ms ease, transform 200ms ease;
+}
+.glass-card:hover {
+  border-color: rgba(var(--tab-glow, 139,92,246), 0.42);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.06),
+    0 14px 38px rgba(0,0,0,0.42),
+    0 0 22px rgba(var(--tab-glow, 139,92,246), 0.16);
+}
+
+/* ---- Topbar + Sidebar: dezente glühende Akzentkante in Tab-Farbe ---- */
+.topbar { box-shadow: 0 1px 0 rgba(var(--tab-glow, 139,92,246), 0.12), 0 8px 30px rgba(0,0,0,0.35); }
+aside   { box-shadow: 1px 0 0 rgba(var(--tab-glow, 139,92,246), 0.10); }
+
+/* ---- Buttons: Neon-Glow auf primären Aktionen ---- */
+.btn--primary, button.btn-primary, .btn-primary, #run {
+  box-shadow: 0 0 0 1px rgba(var(--tab-glow, 139,92,246), 0.38),
+              0 6px 20px rgba(var(--tab-glow, 139,92,246), 0.26);
+  transition: box-shadow 180ms ease, transform 120ms ease;
+}
+.btn--primary:hover, button.btn-primary:hover, .btn-primary:hover, #run:hover {
+  box-shadow: 0 0 0 1px rgba(var(--tab-glow, 139,92,246), 0.6),
+              0 8px 28px rgba(var(--tab-glow, 139,92,246), 0.42);
+  transform: translateY(-1px);
+}
+
+/* ---- Große KPI-Zahlen: dezenter Text-Glow in Tab-Farbe ---- */
+.kpi-value { text-shadow: 0 0 26px rgba(var(--tab-glow, 139,92,246), 0.32); }
+
+/* ---- Dünne Neon-Scrollbar ---- */
+*::-webkit-scrollbar { width: 10px; height: 10px; }
+*::-webkit-scrollbar-track { background: transparent; }
+*::-webkit-scrollbar-thumb {
+  background: rgba(var(--tab-glow, 139,92,246), 0.32);
+  border-radius: 8px;
+  border: 2px solid transparent;
+  background-clip: padding-box;
+}
+*::-webkit-scrollbar-thumb:hover {
+  background: rgba(var(--tab-glow, 139,92,246), 0.58);
+  background-clip: padding-box;
+}
+
+/* ---- Sanfte Microinteraktion auf klickbaren Tiles ---- */
+.hero-tile, .tile, .card-tile, .kpi-card {
+  transition: transform 160ms ease, box-shadow 160ms ease, border-color 160ms ease;
+}
