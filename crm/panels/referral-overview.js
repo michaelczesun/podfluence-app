@@ -376,7 +376,7 @@ function renderBody(body, data) {
   if (data.trend.length) {
     try {
       // FIX(high): korrekte Chart-Sig {categories, series:[{name,data}], colors, height}
-      const chart = makeAreaChart({
+      const chart = makeAreaChart(trendEl, {
         categories: data.trend.map(t => t.date),
         series: [{ name: 'Conversion-Rate (%)', data: data.trend.map(t => Number(t.rate.toFixed(2))) }],
         colors: ['#10b981'],
@@ -401,7 +401,7 @@ function renderBody(body, data) {
   const donutTotal = unused + usedNoSignup + signedUp
   if (donutTotal > 0) {
     try {
-      const chart = makeDonutChart({
+      const chart = makeDonutChart(donutEl, {
         labels: ['Nicht verwendet', 'Verwendet (kein Signup)', 'Registriert'],
         values: [unused, usedNoSignup, signedUp],
         colors: ['#6366f1', '#ec4899', '#10b981'],

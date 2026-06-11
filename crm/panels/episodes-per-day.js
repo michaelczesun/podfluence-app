@@ -177,7 +177,7 @@ export default {
         try {
           const s = cachedSeries
           if (!s) { toast('Daten noch nicht geladen', 'error'); return }
-          exportCsv(s.map(b => ({ Tag: b.day, Episoden: b.count })), 'episoden-pro-tag.csv')
+          exportCsv(s.map(b => ({ Tag: b.day, Episoden: b.count })), null, 'episoden-pro-tag.csv')
         } catch (e) { toast('CSV-Export fehlgeschlagen: ' + (e.message || ''), 'error') }
       })
 

@@ -383,7 +383,7 @@ function openDrawer(row) {
     </div>
   `
   const d = drawer({ title: 'Podcaster-Details', contentHtml: body, width: 520 })
-  const chartEl = d.el.querySelector('#drawer-chart')
+  const chartEl = d.root.querySelector('#drawer-chart')
   if (chartEl) {
     const categories = buildDayLabels(RANGES[state.range].days).map(l => l.slice(5))
     const series = METRICS.map(m => ({ name: m.label, data: row.series[m.key] || [] }))
@@ -394,11 +394,11 @@ function openDrawer(row) {
       height: 240
     })
   }
-  d.el.querySelector('[data-act="open-user"]')?.addEventListener('click', () => {
+  d.root.querySelector('[data-act="open-user"]')?.addEventListener('click', () => {
     showUserDetailModal(row.user_id)
   })
   // FIX #4: use audience instead of user_ids
-  d.el.querySelector('[data-act="thanks-one"]')?.addEventListener('click', async () => {
+  d.root.querySelector('[data-act="thanks-one"]')?.addEventListener('click', async () => {
     try {
       await sendBroadcastPush({
         audience: [row.user_id],
@@ -605,7 +605,7 @@ export default {
             likes: r.likes,
             score: Math.round(r.total)
           }))
-          exportCsv(`podcaster-engagement-${state.range}.csv`, rows)
+          exportCsv(rows, null, `podcaster-engagement-${state.range}.csv`)
         } catch (e) {
           toast('CSV-Export fehlgeschlagen: ' + (e?.message || e), 'error')
         }

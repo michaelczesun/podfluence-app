@@ -440,19 +440,19 @@ export default {
           bodyEl.querySelectorAll('.hero-val').forEach(el => {
             const target = Number(el.dataset.c) || 0
             const suffix = el.dataset.suffix || ''
-            if (typeof countUp === 'function') countUp(el, target, { duration: 900, suffix })
+            if (typeof countUp === 'function') countUp(el, 0, target, 900, suffix ? (v) => fmtNumber(v) + suffix : undefined)
             else el.textContent = fmtNumber(target) + suffix
           })
           bodyEl.querySelectorAll('.podium-count').forEach(el => {
             const target = Number(el.dataset.count) || 0
-            if (typeof countUp === 'function') countUp(el, target, { duration: 1100 })
+            if (typeof countUp === 'function') countUp(el, 0, target, 1100)
             else el.textContent = fmtNumber(target)
           })
 
           try {
             const areaEl = bodyEl.querySelector('#chart-area')
             if (areaEl && ts.length && typeof makeAreaChart === 'function') {
-              const chart = makeAreaChart({
+              const chart = makeAreaChart(areaEl, {
                 categories: ts.map(t => t.date),
                 series: [{ name: 'Einladungen', data: ts.map(t => t.count) }],
                 colors: ['#8b5cf6'],
@@ -468,7 +468,7 @@ export default {
               const labels = top5.map(r => r.display_name || ('@' + (r.username || '—')))
               const values = top5.map(r => r.total)
               if (others > 0) { labels.push('Übrige'); values.push(others) }
-              const chart = makeDonutChart({
+              const chart = makeDonutChart(donutEl, {
                 labels,
                 values,
                 colors: ['#8b5cf6', '#6366f1', '#a855f7', '#ec4899', '#f59e0b', '#64748b'],
@@ -524,7 +524,7 @@ export default {
             einladungen_gesamt: r.total,
             einladungen_30d: r.last_30d || 0,
             letzte_einladung: r.last_referral_at || '',
-          })), 'top-inviter.csv')
+          })), null, 'top-inviter.csv')
         } catch (e) {
           toast('CSV-Export fehlgeschlagen: ' + (e.message || e), { type: 'error' })
         }

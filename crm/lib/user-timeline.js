@@ -91,11 +91,11 @@ function safeStr(v, max = 80) {
 async function fetchAll(sb, userId) {
   const tasks = [
     sb.from('users').select('id, created_at, updated_at, email, full_name, username').eq('id', userId).maybeSingle(),
-    sb.from('updates').select('id, created_at, content, podcast_id').eq('user_id', userId).order('created_at', { ascending: false }).limit(FETCH_LIMIT),
+    sb.from('updates').select('id, created_at, content').eq('user_id', userId).order('created_at', { ascending: false }).limit(FETCH_LIMIT),
     sb.from('comments').select('id, created_at, content, update_id').eq('user_id', userId).order('created_at', { ascending: false }).limit(FETCH_LIMIT),
-    sb.from('listening_activity').select('id, created_at, podcast_title, episode_title, listened_ms').eq('user_id', userId).order('created_at', { ascending: false }).limit(FETCH_LIMIT),
-    sb.from('bug_reports').select('id, created_at, title, description, severity').eq('user_id', userId).order('created_at', { ascending: false }),
-    sb.from('admin_audit_log').select('id, created_at, action, actor_id, payload').eq('target_id', userId).order('created_at', { ascending: false }),
+    sb.from('listening_activity').select('id, created_at, podcast_title, episode_title, listened_ms').eq('listener_id', userId).order('created_at', { ascending: false }).limit(FETCH_LIMIT),
+    sb.from('bug_reports').select('id, created_at, description').eq('user_id', userId).order('created_at', { ascending: false }),
+    sb.from('admin_audit_log').select('id, created_at, action, admin_id, meta').eq('target_id', userId).order('created_at', { ascending: false }),
   ]
 
   const results = await Promise.allSettled(tasks)

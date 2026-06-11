@@ -461,7 +461,7 @@ export default {
           erstellt: p.created_at || ''
         })))
         if (!rows.length) return toast({ type: 'info', message: 'Keine Daten zum Export' })
-        try { exportCsv(rows, 'aktive-umfragen.csv') }
+        try { exportCsv(rows, null, 'aktive-umfragen.csv') }
         catch (e) { toast({ type: 'error', message: 'CSV-Export fehlgeschlagen' }) }
       })
 

@@ -861,7 +861,7 @@ export default {
       exportPanelAsPdf(container, { title: 'Push-Broadcasts' })
     container.querySelector('#btn-csv').onclick = async () => {
       const hist = await fetchHistory()
-      exportCsv('push-broadcasts.csv', hist.map(h => ({
+      exportCsv(hist.map(h => ({
         sent_at:    h.sent_at,
         audience:   audienceLabel(h.audience),
         title:      h.title,
@@ -871,7 +871,7 @@ export default {
         delivered:  h.delivered  || 0,
         opened:     h.opened     || 0,
         actor:      h.actor_name || ''
-      })))
+      })), null, 'push-broadcasts.csv')
     }
 
     await renderAll()

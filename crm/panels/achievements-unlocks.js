@@ -216,7 +216,7 @@ function openTypeDrawer(type, refreshAll) {
             display_name: u.full_name || '',
             unlocked_at: r.unlocked_at
           }
-        }), `achievement_${type}_users.csv`)
+        }), null, `achievement_${type}_users.csv`)
       })
     } catch (e) {
       listEl.innerHTML = `<div class="error-state" style="padding:24px;text-align:center;color:var(--danger)">
@@ -445,7 +445,7 @@ export default {
           count: a.count,
           unique_users: a.uniqueUsers,
           last_unlocked: a.last
-        })), 'achievement-unlocks.csv')
+        })), null, 'achievement-unlocks.csv')
       })
 
       // FIX LOW: await render() statt fire-and-forget — async-Fehler landen nun im äußeren catch

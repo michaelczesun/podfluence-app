@@ -348,7 +348,7 @@ export default {
           created_at: r.created_at,
         }))
         try {
-          exportCsv(rows, `signups-${new Date().toISOString().slice(0, 10)}.csv`)
+          exportCsv(rows, null, `signups-${new Date().toISOString().slice(0, 10)}.csv`)
           toast?.('CSV exportiert', 'success')
         } catch (e) {
           console.error(e)

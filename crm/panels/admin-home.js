@@ -326,7 +326,7 @@ async function fetchGrowthSeries() {
       sb.rpc('admin_daily_series', { p_metric: 'posts',   p_days: GROWTH_DAYS }),
       sb.rpc('admin_daily_series', { p_metric: 'listens', p_days: GROWTH_DAYS })
     ])
-    const labels = (signups.data || []).map(d => d.date.slice(5))
+    const labels = (signups.data || []).map(d => (d.day ?? d.date ?? '').slice(5))
     return {
       labels,
       signups: (signups.data || []).map(d => Number(d.value) || 0),

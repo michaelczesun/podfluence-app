@@ -641,7 +641,7 @@ export default {
                 'Gesamt-Conversion ab Signup (%)': overall
               }
             })
-            exportCsv(rows, 'onboarding-funnel.csv')
+            exportCsv(rows, null, 'onboarding-funnel.csv')
           } catch (e) {
             toast('CSV-Export fehlgeschlagen: ' + (e.message || ''), 'error')
           }

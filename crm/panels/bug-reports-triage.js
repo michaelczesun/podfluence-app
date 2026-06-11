@@ -379,7 +379,7 @@ export default {
       })
 
       container.querySelector('#tb-pdf').addEventListener('click', () => {
-        try { exportPanelAsPdf({ title: 'Bug-Reports Triage', element: container, filename: 'bug-reports-triage.pdf' }) }
+        try { exportPanelAsPdf(container, 'bug-reports-triage.pdf', { title: 'Bug-Reports Triage' }) }
         catch (e) { toast('PDF-Export fehlgeschlagen', 'error') }
       })
 
@@ -394,7 +394,7 @@ export default {
             created_at: r.created_at,
             resolved_at: r.resolved_at || '',
           }))
-          exportCsv(rows, 'bug-reports.csv')
+          exportCsv(rows, null, 'bug-reports.csv')
           toast(`${rows.length} Reports exportiert`, 'success')
         } catch (e) { toast('CSV-Export fehlgeschlagen', 'error') }
       })

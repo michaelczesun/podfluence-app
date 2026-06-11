@@ -575,7 +575,7 @@ export default {
         const rows = await fetchBroadcastHistory(200)
         if (!rows.length) { toast('Keine Daten zum Exportieren', 'warn'); return }
         try {
-          exportCsv('newsletter-broadcasts.csv', rows.map(b => ({
+          exportCsv(rows.map(b => ({
             id: b.id,
             subject: b.subject || '',
             sent_at: b.sent_at || '',
@@ -585,7 +585,7 @@ export default {
             clicked_count: b.clicked_count || 0,
             open_rate_pct: openRate(b.delivered_count || 0, b.opened_count || 0),
             click_rate_pct: clickRate(b.delivered_count || 0, b.clicked_count || 0)
-          })))
+          })), null, 'newsletter-broadcasts.csv')
         } catch (e) { toast('CSV-Export fehlgeschlagen: ' + (e.message || e), 'error') }
       })
 

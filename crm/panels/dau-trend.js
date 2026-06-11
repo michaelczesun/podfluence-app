@@ -369,13 +369,13 @@ async function openDayDrawer(dateKey) {
 
     dlg?.root?.querySelector('#day-export')?.addEventListener('click', () => {
       try {
-        exportCsv(`dau-${dateKey}.csv`, users.map(u => ({
+        exportCsv(users.map(u => ({
           id: u.id,
           username: u.username,
           display_name: u.display_name,
           verified: u.is_verified ? 'ja' : 'nein',
           last_seen: u.last_seen_at || ''
-        })))
+        })), null, `dau-${dateKey}.csv`)
         toast('CSV exportiert', 'success')
       } catch (e) {
         toast('CSV-Export fehlgeschlagen: ' + (e.message || ''), 'error')
@@ -480,10 +480,10 @@ export default {
           return
         }
         try {
-          exportCsv(`dau-trend-${state.range}t.csv`, state.series.map(p => ({
+          exportCsv(state.series.map(p => ({
             datum: p.date,
             aktive_nutzer: p.users
-          })))
+          })), null, `dau-trend-${state.range}t.csv`)
           toast('CSV exportiert', 'success')
         } catch (e) {
           toast('CSV-Export fehlgeschlagen: ' + (e.message || ''), 'error')
