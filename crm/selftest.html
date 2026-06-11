@@ -7,7 +7,8 @@
     body { font-family: -apple-system, sans-serif; background: #0e0b1f; color: #ddd; padding: 20px; }
     h1 { color: #fff; }
     table { width: 100%; border-collapse: collapse; margin-top: 20px; }
-    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #333; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #333; overflow-wrap: anywhere; word-break: break-word; }
+    td:nth-child(3), td:nth-child(4) { max-width: 480px; }
     th { background: #1a162e; color: #fff; }
     .ok { color: #4ade80; }
     .err { color: #f87171; }

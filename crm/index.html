@@ -513,6 +513,19 @@ const PANELS = Object.entries(PERMISSIONS.tabs || {}).map(([key, def]) => ({
 const VISIBLE_PANELS = PANELS.filter(p => p.access && p.access !== 'deny')
 const VISIBLE_IDS = new Set(VISIBLE_PANELS.map(p => p.id))
 
+// Subtab-Key → Eltern-Tab-Key. Viele KPI-Tiles/Links routen historisch auf
+// einen BAREN Hash wie '#dau-trend' statt '#pulse/dau-trend'. Ohne diese Map
+// landet so ein Hash im Role-Guard (kein Top-Tab) und wird "Kein Zugriff" —
+// sogar für owner. Damit lösen wir bare Subtab-Hashes zentral auf.
+const SUBTAB_TO_TAB = new Map()
+for (const p of PANELS) {
+  if (p.subtabs) {
+    for (const subKey of Object.keys(p.subtabs)) {
+      if (!SUBTAB_TO_TAB.has(subKey)) SUBTAB_TO_TAB.set(subKey, p.id)
+    }
+  }
+}
+
 // Default-Subtab pro Tab: erster Subtab auf den die Rolle Zugriff hat
 function defaultSubFor(tabKey) {
   const meta = PANELS.find(p => p.id === tabKey)
@@ -714,6 +727,17 @@ async function loadPanel() {
   // Default-Load: 'pulse' falls verfügbar, sonst erster sichtbarer Tab
   const fallback = (VISIBLE_PANELS.find(p => p.id === 'pulse') || VISIBLE_PANELS[0])?.id
   let id = rawTab || fallback
+
+  // Bare-Subtab-Hash auflösen: ist 'id' kein Top-Tab aber ein bekannter Subtab
+  // (z.B. '#dau-trend', '#settings', '#users-list'), auf '#<elternTab>/<subtab>'
+  // umbiegen statt fälschlich "Kein Zugriff" zu zeigen.
+  if (id && !VISIBLE_IDS.has(id) && SUBTAB_TO_TAB.has(id)) {
+    subFromHash = id
+    id = SUBTAB_TO_TAB.get(id)
+    rawTab = id
+    const target = '#' + id + '/' + subFromHash + (queryStr ? '?' + queryStr : '')
+    if (location.hash !== target) history.replaceState(null, '', target)
+  }
 
   // Role-Guard: nicht erlaubte Top-Tabs auf Fallback zurückbiegen
   if (id && !VISIBLE_IDS.has(id)) {
