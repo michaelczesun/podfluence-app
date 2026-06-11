@@ -2692,6 +2692,33 @@
     // ===== Social-Proof: Featured Podcasts (horizontal scroll) =====
     // Liest aus public-stats Edge-Function (umgeht RLS via SERVICE_ROLE).
     // Bei 0 echten Podcasts: ganze Section ausblenden statt Emoji-Platzhalter.
+    // Kleiner, nicht-springender Toast für Podcast-Klick (Issue: Kugel-Klick soll Info zeigen, nicht nur "markieren").
+    var _podToastTimer = null;
+    function showPodcastToast(text) {
+      var t = document.getElementById('sp-pod-toast');
+      if (!t) {
+        t = document.createElement('div');
+        t.id = 'sp-pod-toast';
+        t.setAttribute('role', 'status');
+        t.setAttribute('aria-live', 'polite');
+        t.style.cssText = 'position:fixed;left:50%;bottom:24px;transform:translateX(-50%) translateY(8px);' +
+          'max-width:88vw;padding:10px 16px;font-size:13px;font-weight:600;color:#fff;' +
+          'background:rgba(22,22,29,0.92);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);' +
+          'border:1px solid rgba(255,255,255,0.14);border-radius:999px;z-index:1000;pointer-events:none;' +
+          'opacity:0;transition:opacity .2s ease, transform .2s ease;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+        document.body.appendChild(t);
+      }
+      t.textContent = '🎙 ' + text;
+      // reflow → transition greift
+      void t.offsetWidth;
+      t.style.opacity = '1';
+      t.style.transform = 'translateX(-50%) translateY(0)';
+      if (_podToastTimer) clearTimeout(_podToastTimer);
+      _podToastTimer = setTimeout(function() {
+        t.style.opacity = '0';
+        t.style.transform = 'translateX(-50%) translateY(8px)';
+      }, 2600);
+    }
     function renderFeaturedPodcasts(items) {
       var row = document.getElementById('sp-podcasts-row');
       var container = document.getElementById('sp-podcast-bubbles');
@@ -2702,13 +2729,21 @@
       }
       row.classList.remove('is-empty');
       container.innerHTML = '';
-      items.forEach(function(pod) {
+      var prefersReduced = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      items.forEach(function(pod, i) {
         var div = document.createElement('div');
         div.className = 'sp-pbubble';
         div.title = pod.title || '';
         div.setAttribute('role', 'button');
         div.setAttribute('tabindex', '0');
-        div.setAttribute('aria-label', pod.title ? (pod.title + ' — in der Beta beitreten') : 'Podcast');
+        div.setAttribute('aria-label', pod.title ? (pod.title + ' — Podcast in der hozd-Beta') : 'Podcast');
+        // Float-Animation per JS für JEDE Bubble (CSS :nth-child deckte nur 1–8 ab → ab #9 statisch).
+        if (!prefersReduced) {
+          var anim = (i % 2 === 0) ? 'spFloatA' : 'spFloatB';
+          var dur = (5.2 + (i % 5) * 0.3).toFixed(1);
+          var delay = (i * 0.45).toFixed(2);
+          div.style.animation = anim + ' ' + dur + 's ease-in-out infinite ' + delay + 's';
+        }
         if (pod.cover_url) {
           var img = document.createElement('img');
           img.src = pod.cover_url;
@@ -2719,13 +2754,20 @@
         } else {
           div.textContent = '🎙';
         }
-        var goCta = function() {
-          var cta = document.querySelector('.cta-row, #cta, .sticky-cta');
-          if (cta && cta.scrollIntoView) cta.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        // Klick auf eine Kugel = ein Podcast. Es gibt (noch) keine Detail-URL in den Daten,
+        // also zeigen wir Titel (+ Host falls vorhanden) als Toast statt nur "markiert".
+        var openPodcast = function() {
+          // Falls die API künftig eine verlinkbare URL liefert, direkt dorthin.
+          var url = pod.url || pod.profile_url || pod.web_url || (pod.slug ? ('/podcast/' + pod.slug) : (pod.id ? ('/podcast/' + pod.id) : ''));
+          if (url) { window.location.href = url; return; }
+          var host = pod.host || pod.author || pod.owner_name || '';
+          var label = pod.title || 'Podcast';
+          if (host) label += ' · ' + host;
+          showPodcastToast(label);
         };
-        div.addEventListener('click', goCta);
+        div.addEventListener('click', openPodcast);
         div.addEventListener('keydown', function(e) {
-          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); goCta(); }
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPodcast(); }
         });
         container.appendChild(div);
       });
@@ -3167,8 +3209,16 @@
 (function(){
   try {
     if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    var isMobile = (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) || window.innerWidth < 768;
-    var count = isMobile ? 18 : 35;
+    var vw = window.innerWidth || document.documentElement.clientWidth || 0;
+    var isMobile = (window.matchMedia && window.matchMedia('(max-width: 768px)').matches) || vw < 768;
+    // Low-end-Erkennung: wenig RAM / wenige Kerne (Pixel 6 & schwächer) → Effekt ganz aus.
+    var lowEnd = (navigator.deviceMemory && navigator.deviceMemory <= 4) ||
+                 (navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4);
+    // Unter 600px oder auf low-end Geräten: Partikel komplett deaktivieren (kein Ruckeln auf Pixel 6).
+    if (vw < 600 || lowEnd) return;
+    // box-shadow-Blur pro animiertem Knoten ist der Performance-Killer → auf Mobile aus.
+    var useGlow = !isMobile;
+    var count = isMobile ? 8 : 28;
     var colors = ['rgba(167,139,250,', 'rgba(236,72,153,', 'rgba(96,165,250,', 'rgba(52,211,153,'];
     function build(){
       if (document.querySelector('.lv-particles')) return;
@@ -3191,7 +3241,8 @@
         p.style.left = left + '%';
         p.style.background = color + opacity + ')';
         p.style.opacity = opacity;
-        p.style.boxShadow = '0 0 ' + (size * 2) + 'px ' + color + (opacity * 0.6) + ')';
+        // Glow nur auf Desktop — box-shadow-Blur auf vielen animierten Knoten ruckelt auf Mobile.
+        if (useGlow) p.style.boxShadow = '0 0 ' + (size * 2) + 'px ' + color + (opacity * 0.6) + ')';
         p.style.animationDuration = duration + 's';
         p.style.animationDelay = delay + 's';
         container.appendChild(p);
