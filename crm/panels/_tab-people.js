@@ -18,9 +18,17 @@ const SUBTABS = [
 
 const STORAGE_KEY = 'crm.tab-people.active'
 
-function readActive() {
+// Initialen Subtab bestimmen. Priorität:
+//   1. ctx.sub (vom Top-Router; bereits auf internes People-Vokabular gemappt —
+//      users/leads/team/segments, siehe SUBTAB_KEY_ALIAS in index.html)
+//   2. zweites Hash-Segment (#people/<sub>) als Back-Compat
+//   3. localStorage (letzte Auswahl)
+//   4. 'users'
+function readActive(ctx = {}) {
   try {
-    const fromHash = (location.hash || '').match(/sub=([a-z]+)/)?.[1]
+    if (ctx?.sub && SUBTABS.some(t => t.key === ctx.sub)) return ctx.sub
+    const seg = (location.hash || '').replace(/^#/, '').split('?')[0].split('/').filter(Boolean)
+    const fromHash = seg[1]
     if (fromHash && SUBTABS.some(t => t.key === fromHash)) return fromHash
     const stored = localStorage.getItem(STORAGE_KEY)
     if (stored && SUBTABS.some(t => t.key === stored)) return stored
@@ -361,8 +369,8 @@ export default {
   title: 'People',
   category: 'people',
 
-  async mount(container) {
-    let active = readActive()
+  async mount(container, ctx = {}) {
+    let active = readActive(ctx)
 
     container.innerHTML = `
       <style>
@@ -427,6 +435,17 @@ export default {
         b.classList.toggle('active', on)
         b.setAttribute('aria-selected', on ? 'true' : 'false')
       })
+      // Deep-Link aktuell halten: internen Key (#people/<key>) per replaceState
+      // schreiben — kein zweiter loadPanel-Cycle.
+      try {
+        const raw = (location.hash || '').replace(/^#/, '')
+        const [path, query = ''] = raw.split('?')
+        const tab = path.split('/').filter(Boolean)[0] || 'people'
+        if (tab === 'people') {
+          const target = `#people/${key}${query ? '?' + query : ''}`
+          if (location.hash !== target) history.replaceState(null, '', target)
+        }
+      } catch (_) {}
       // Audit-Log (fire & forget)
       try { sb.rpc('admin_log_action', { p_action: 'people_subtab_switch', p_target_id: key, p_target_type: null, p_meta: null }) } catch {}
       await mountSubPanel(host, sub)

@@ -60,6 +60,14 @@ const SUBTABS = [
       { kind: 'panel', id: 'insta-approval-queue', title: 'Approval-Queue' },
       { kind: 'panel', id: 'insta-post-type-scores', title: 'Post-Type-Scores' }
     ]
+  },
+  {
+    key: 'discover',
+    label: 'Discover',
+    icon: '⭐',
+    tiles: [
+      { kind: 'panel', id: 'discover-control', title: 'Discover-Steuerpult' }
+    ]
   }
 ]
 
@@ -298,7 +306,7 @@ export default {
   title: 'Content',
   category: 'content',
 
-  async mount(container) {
+  async mount(container, ctx = {}) {
     state.panelRoot = container
     container.id = 'panel-tab-content'
 
@@ -361,9 +369,17 @@ export default {
       })
     })
 
-    // Initial sub-tab: from hash (?sub=...), else default 'posts'
-    const initial = getSubFromHash() || 'posts'
+    // Initial sub-tab. Priorität:
+    //   1. ctx.sub (vom Top-Router; bereits auf internes Content-Vokabular
+    //      gemappt — posts/podcasts/comments/reports/bot, siehe SUBTAB_KEY_ALIAS)
+    //   2. ?sub=... aus dem Hash (Back-Compat)
+    //   3. 'posts'
+    const ctxSub = (ctx?.sub && SUBTABS.some(s => s.key === ctx.sub)) ? ctx.sub : null
+    const initial = ctxSub || getSubFromHash() || 'posts'
     state.activeSub = initial
+    // Hash auf neues #content/<sub>-Format normalisieren (statt nur ?sub=),
+    // damit Deep-Links konsistent shareable sind.
+    if (ctxSub) setSubInHash(initial)
     await renderSubTab(initial)
   },
 

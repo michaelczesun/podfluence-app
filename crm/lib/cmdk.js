@@ -86,6 +86,8 @@ function injectStylesOnce() {
     .cmdk-item.sel { border-left: 2px solid var(--primary-2, #A78BFA); padding-left: 12px; }
     .cmdk-item.cmdk-sticky { background: rgba(139,92,246,0.07); }
     .cmdk-item.cmdk-sticky.sel { background: rgba(139,92,246,0.22); }
+    .cmdk-item.cmdk-disabled { opacity: 0.45; }
+    .cmdk-item.cmdk-disabled .cmdk-title { color: var(--text-muted, #9CA3AF); }
     .cmdk-shortcut {
       font-family: ui-monospace, monospace;
       font-size: 10px;
@@ -234,7 +236,8 @@ function buildItems(query) {
         cat: a.kind === 'action' ? 'Aktion' : a.kind === 'navigation' ? 'Navigation' : a.kind === 'settings' ? 'Settings' : a.kind === 'help' ? 'Hilfe' : 'Aktion',
         icon: a.icon || '•',
         match: (a._score ?? 1) + 5,
-        action: a
+        action: a,
+        disabled: !!a.disabled
       }))
     } catch (e) {
       console.warn('[cmdk] action search failed', e)
@@ -316,7 +319,7 @@ function render(query) {
       ? `<span class="cmdk-shortcut">${sc.map(k => k === 'mod' ? '⌘' : k === 'shift' ? '⇧' : k.toUpperCase()).join('')}</span>`
       : ''
     return groupHead + `
-    <div class="cmdk-item ${i === 0 ? 'sel' : ''} ${it.sticky ? 'cmdk-sticky' : ''}" data-idx="${i}">
+    <div class="cmdk-item ${i === 0 ? 'sel' : ''} ${it.sticky ? 'cmdk-sticky' : ''} ${it.disabled ? 'cmdk-disabled' : ''}" data-idx="${i}"${it.disabled ? ' aria-disabled="true"' : ''}>
       <span style="font-size:14px">${it.icon}</span>
       <span class="cmdk-title">${escapeHtml(it.title)}</span>
       ${shortcutBadge}
@@ -377,14 +380,22 @@ function renderUserRow(it, i, selected) {
     </div>`
 }
 
-// View / Verify / Note Handler. Lazy-importiert panel-actions, damit cmdk.js
+// View / Verify / Note Handler. Lazy-importiert panel-actions/modal, damit cmdk.js
 // keine harten Top-Level-Imports von Panel-Code braucht (cmdk wird sehr früh geladen).
 async function runUserAction(action, userId, btn) {
   try {
     if (action === 'view') {
-      // Schließt Modal und navigiert zur Users-Liste mit Detail-Modal-Auto-Open.
+      // Detail-Modal direkt öffnen. Das alte '#people/users?u=<id>' wurde von
+      // niemandem gelesen (kein Listener) -> stattdessen showUserDetailModal aus
+      // panel-actions.js (verifizierte Signatur: showUserDetailModal(userId)).
       closeCmdK()
-      location.hash = '#people/users?u=' + encodeURIComponent(userId)
+      const mod = await import('/lib/panel-actions.js?v=20260610q').catch(() => null)
+      if (mod?.showUserDetailModal) {
+        await mod.showUserDetailModal(userId)
+      } else {
+        console.warn('[cmdk] showUserDetailModal nicht verfügbar')
+        window.toast?.('User-Detail konnte nicht geöffnet werden')
+      }
     } else if (action === 'verify') {
       const mod = await import('/lib/panel-actions.js?v=20260610q').catch(() => null)
       if (mod?.verifyUser) {
@@ -401,13 +412,69 @@ async function runUserAction(action, userId, btn) {
         btn.textContent = '✓'
       }
     } else if (action === 'note') {
-      // Andere Module hören auf dieses Event und öffnen den Notiz-Composer.
-      window.dispatchEvent(new CustomEvent('cmdk:open-note', { detail: { userId } }))
+      // Kleiner Inline-Notiz-Composer statt totem 'cmdk:open-note'-Event (kein Listener).
+      // Schreibt via admin_add_user_note(p_user_id, p_note) in user_notes(body).
       closeCmdK()
+      await openNoteComposer(userId)
     }
   } catch (err) {
     console.warn('[cmdk] user-action', action, 'failed:', err)
+    window.toast?.(err?.message || 'Aktion fehlgeschlagen')
   }
+}
+
+// Kleiner Notiz-Composer (zentralisierte modal.js-Lib). Speichert die Notiz über
+// die DEPLOYTE RPC admin_add_user_note(p_user_id, p_note) -> user_notes(body).
+// (Live verifiziert: P0001 admin_required = vorhanden + admin-gated.)
+async function openNoteComposer(userId) {
+  const modMod = await import('/crm/lib/modal.js?v=20260610q').catch(() => null)
+  const openModal = modMod?.openModal
+  if (!openModal) {
+    window.toast?.('Notiz-Dialog konnte nicht geladen werden')
+    return
+  }
+  const bodyEl = document.createElement('div')
+  const ta = document.createElement('textarea')
+  ta.placeholder = 'Interne Notiz…'
+  ta.rows = 4
+  ta.maxLength = 500
+  ta.style.cssText = 'width:100%;box-sizing:border-box;background:rgba(255,255,255,0.05);' +
+    'border:1px solid rgba(255,255,255,0.12);border-radius:10px;color:#E4E4E7;' +
+    'font-family:inherit;font-size:14px;line-height:1.5;padding:10px 12px;resize:vertical;outline:none;'
+  bodyEl.appendChild(ta)
+
+  let saving = false
+  const api = openModal({
+    title: 'Notiz hinzufügen',
+    body: bodyEl,
+    width: 480,
+    hasUnsavedChanges: () => !saving && !!ta.value.trim(),
+    footerActions: [
+      { label: 'Abbrechen', variant: 'ghost', onClick: (a) => a.close(true) },
+      {
+        label: 'Speichern',
+        variant: 'primary',
+        closeOnClick: false,
+        onClick: async (a) => {
+          const note = (ta.value || '').trim()
+          if (!note) { ta.focus(); return }
+          if (!_sb) { window.toast?.('Kein Supabase-Client'); return }
+          saving = true
+          try {
+            const { error } = await _sb.rpc('admin_add_user_note', { p_user_id: userId, p_note: note })
+            if (error) throw error
+            window.toast?.('Notiz gespeichert')
+            a.close(true)
+          } catch (err) {
+            saving = false
+            window.toast?.(err?.message || 'Notiz konnte nicht gespeichert werden')
+          }
+        }
+      }
+    ]
+  })
+  setTimeout(() => { try { ta.focus() } catch {} }, 40)
+  return api
 }
 
 function updateSel() {
@@ -427,8 +494,15 @@ function activate(it) {
     return
   }
   if (it.type === 'user') {
-    location.hash = '#people/users?u=' + it.id
+    // Enter/Klick auf eine User-Zeile -> Detail-Modal direkt öffnen (gleicher Weg
+    // wie der 'View'-Button). Das alte '#people/users?u=<id>' las niemand.
     closeCmdK()
+    const uid = it.id || it.user?.id
+    if (uid) {
+      import('/lib/panel-actions.js?v=20260610q')
+        .then(mod => mod?.showUserDetailModal?.(uid))
+        .catch(err => console.warn('[cmdk] user-activate showUserDetailModal failed', err))
+    }
     return
   }
   if (it.type === 'action') {

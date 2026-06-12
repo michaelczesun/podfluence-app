@@ -1233,7 +1233,8 @@ async function doSwipeNote(uid, body, container) {
     let res = await sb.rpc('admin_add_user_note', { p_user_id: uid, p_note: note.trim() })
     if (res.error) {
       // Fallback: direkter Insert (Tabelle muss existieren; sonst landet das im catch)
-      res = await sb.from('user_notes').insert({ user_id: uid, note: note.trim() })
+      // Schema-Wahrheit: Spalte heißt body (nicht note) — live verifiziert 12.6.
+      res = await sb.from('user_notes').insert({ user_id: uid, body: note.trim() })
       if (res.error) throw res.error
     }
     toast('Notiz hinzugefügt', 'success')

@@ -532,6 +532,94 @@ for (const p of PANELS) {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────
+// SUBTAB_KEY_ALIAS — die EINE Wahrheit für Subtab-Deep-Links.
+//
+// Problem: permissions.json definiert FEINGRANULARE Subtab-Keys pro Tab
+// (z.B. pulse → admin-home / kpi-live-totals / dau-trend …), aber die
+// _tab-*.js-Module rendern INTERNE, gröbere Sub-Segmente mit ANDEREN Keys
+// (pulse → now / today / alerts / stream). Ohne Übersetzung landet jeder
+// Deep-Link auf dem Default-Subtab des Moduls (ctx.sub passt auf keinen
+// internen Key → Fallback).
+//
+// Diese Map übersetzt permissions-Key → internen Modul-Subtab-Key. Der
+// Router (loadPanel) reicht den GEMAPPTEN Key als ctx.sub an tab.mount().
+// Keys die hier fehlen werden 1:1 durchgereicht (für Tabs deren permissions-
+// Keys bereits = interne Keys sind gibt es keinen Eintrag nötig).
+//
+// Internes Vokabular je Modul (Quelle: SUB_TABS/SUBTABS-Registry im jeweiligen _tab-*.js):
+//   pulse   : live-ops / now / today / alerts / stream
+//   people  : users / leads / team / segments
+//   growth  : funnel / cohorts / retention / forecast / dau
+//   content : posts / podcasts / comments / reports / bot
+//   system  : settings / tasks / audit / api-health / backups
+const SUBTAB_KEY_ALIAS = {
+  pulse: {
+    'live-ops':          'live-ops',
+    'admin-home':        'now',
+    'kpi-live-totals':   'today',
+    'dau-trend':         'today',
+    'new-signups-7d':    'today',
+    'crash-rate':        'alerts'
+  },
+  people: {
+    'users-list':             'users',
+    'user-type-split':        'users',
+    'verified-premium-flags': 'users',
+    'onboarding-funnel':      'users',
+    'client-build-versions':  'users',
+    'top-listeners':          'users',
+    'leads-pipeline':         'leads',
+    'team-management':        'team'
+  },
+  growth: {
+    'posts-per-day':           'funnel',
+    'episodes-per-day':        'funnel',
+    'trending-hashtags':       'funnel',
+    'podcaster-engagement-7d': 'funnel',
+    'listens-per-day':         'dau',
+    'top-listened-podcasts':   'funnel',
+    'vibe-distribution':       'funnel',
+    'users-by-country':        'funnel',
+    'referral-leaderboard':    'funnel',
+    'referral-overview':       'funnel',
+    'invite-codes-usage':      'funnel',
+    'trending-podcasters':     'funnel',
+    'achievements-unlocks':    'funnel'
+  },
+  content: {
+    'recent-updates-feed':        'posts',
+    'active-polls':               'comments',
+    'open-bug-reports':           'reports',
+    'bug-reports-triage':         'reports',
+    'podcast-verification-queue': 'podcasts',
+    'insta-approval-queue':       'bot',
+    'insta-post-type-scores':     'bot',
+    'newsletter-audience-sync':   'bot',
+    'push-broadcast':             'bot',
+    'discover-control':           'discover'
+  },
+  system: {
+    'settings':     'settings',
+    'app-settings': 'settings',
+    'audit-log':    'audit',
+    'tasks-inbox':  'tasks',
+    'storage-ops':  'settings'
+  }
+}
+
+// Übersetzt einen permissions-Subtab-Key in den internen Modul-Subtab-Key.
+// Fällt auf den Original-Key zurück (manche Module nutzen bereits identische
+// Keys, oder der Aufrufer hat schon einen internen Key übergeben).
+function mapSubKey(tabKey, subKey) {
+  if (!subKey) return subKey
+  const tabMap = SUBTAB_KEY_ALIAS[tabKey]
+  if (tabMap && Object.prototype.hasOwnProperty.call(tabMap, subKey)) {
+    return tabMap[subKey]
+  }
+  return subKey
+}
+
 // Default-Subtab pro Tab: erster Subtab auf den die Rolle Zugriff hat
 function defaultSubFor(tabKey) {
   const meta = PANELS.find(p => p.id === tabKey)
@@ -813,12 +901,18 @@ async function loadPanel() {
     if (!panel || typeof panel.mount !== 'function') {
       throw new Error('Panel-Modul exportiert kein mount()')
     }
-    // Subtab (zweites Hash-Segment) + zusätzliche Query-Params an mount() weitergeben
-    // sub = 'users' (Subtab-Key), params = 'u=abc&x=1' (alles nach '?')
+    // Subtab (zweites Hash-Segment) + zusätzliche Query-Params an mount() weitergeben.
+    // WICHTIG: subFromHash ist ein permissions.json-Key (z.B. 'admin-home',
+    // 'users-list'). Das _tab-Modul versteht aber nur seine INTERNEN Keys
+    // (z.B. 'now', 'users'). mapSubKey() übersetzt zentral, damit Deep-Links
+    // wirklich auf dem gewünschten Subtab landen statt auf dem Default.
+    // subRaw bleibt als Original erhalten (für Cmd-K/?u=-Params etc.).
+    const mappedSub = mapSubKey(id, subFromHash)
     await panel.mount(mount, {
       role,
       access: meta.access,
-      sub: subFromHash,
+      sub: mappedSub,
+      subRaw: subFromHash,
       params: queryStr,
       permissions: PERMISSIONS
     })

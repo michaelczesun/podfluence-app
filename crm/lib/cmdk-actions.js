@@ -53,7 +53,8 @@ export const ACTIONS = [
     kind: 'navigation',
     icon: 'activity',
     keywords: ['pulse', 'live', 'dashboard', 'overview', 'jetzt', 'now'],
-    run: () => _go('#pulse/overview')
+    // permissions-Subtab-Key 'admin-home' → Router (SUBTAB_KEY_ALIAS) mappt auf internes 'now'.
+    run: () => _go('#pulse/admin-home')
   },
   {
     id: 'goto-pulse-live',
@@ -61,7 +62,8 @@ export const ACTIONS = [
     kind: 'navigation',
     icon: 'radio',
     keywords: ['pulse', 'live', 'realtime', 'now', 'jetzt'],
-    run: () => _go('#pulse/live')
+    // Live-Aktivität = Now/Smart-Alerts-Hero → 'admin-home' → internes 'now'.
+    run: () => _go('#pulse/admin-home')
   },
   {
     id: 'goto-pulse-alerts',
@@ -69,7 +71,8 @@ export const ACTIONS = [
     kind: 'navigation',
     icon: 'bell',
     keywords: ['alerts', 'alarme', 'pulse', 'warnings'],
-    run: () => _go('#pulse/alerts')
+    // permissions-Subtab-Key 'crash-rate' → Router mappt auf internes 'alerts'.
+    run: () => _go('#pulse/crash-rate')
   },
 
   // ─────────────────────── NAVIGATION · People ───────────────────────
@@ -79,7 +82,8 @@ export const ACTIONS = [
     kind: 'navigation',
     icon: 'users',
     keywords: ['users', 'nutzer', 'liste', 'list', 'people', 'übersicht'],
-    run: () => _go('#people/users')
+    // permissions-Subtab-Key 'users-list' → Router mappt auf internes 'users'.
+    run: () => _go('#people/users-list')
   },
   {
     id: 'goto-team',
@@ -88,7 +92,8 @@ export const ACTIONS = [
     icon: 'shield',
     keywords: ['team', 'staff', 'mitarbeiter', 'rollen', 'rbac'],
     scope: ['owner', 'admin'],
-    run: () => _go('#people/team')
+    // permissions-Subtab-Key 'team-management' → Router mappt auf internes 'team'.
+    run: () => _go('#people/team-management')
   },
   {
     id: 'goto-reports',
@@ -96,7 +101,9 @@ export const ACTIONS = [
     kind: 'navigation',
     icon: 'flag',
     keywords: ['reports', 'meldungen', 'triage', 'bugs', 'flag'],
-    run: () => _go('#people/reports')
+    // Reports/Triage sind ein CONTENT-Subtab (people hat keinen 'reports').
+    // permissions-Subtab-Key 'open-bug-reports' → Router mappt auf internes 'reports'.
+    run: () => _go('#content/open-bug-reports')
   },
 
   // ─────────────────────── NAVIGATION · Growth ───────────────────────
@@ -148,7 +155,8 @@ export const ACTIONS = [
     kind: 'navigation',
     icon: 'file-text',
     keywords: ['content', 'reports', 'meldungen', 'beiträge'],
-    run: () => _go('#content/reports')
+    // permissions-Subtab-Key 'open-bug-reports' → Router mappt auf internes 'reports'.
+    run: () => _go('#content/open-bug-reports')
   },
   {
     id: 'goto-content-bot',
@@ -157,7 +165,8 @@ export const ACTIONS = [
     icon: 'bot',
     keywords: ['bot', 'newsletter', 'auto-post', 'tante', 'content'],
     scope: ['owner', 'admin', 'marketing'],
-    run: () => _go('#content/bot')
+    // permissions-Subtab-Key 'insta-approval-queue' → Router mappt auf internes 'bot'.
+    run: () => _go('#content/insta-approval-queue')
   },
   {
     id: 'goto-content-podcasts',
@@ -165,7 +174,8 @@ export const ACTIONS = [
     kind: 'navigation',
     icon: 'mic',
     keywords: ['podcasts', 'verify', 'queue', 'verifizierung', 'pending'],
-    run: () => _go('#content/podcasts')
+    // permissions-Subtab-Key 'podcast-verification-queue' → Router mappt auf internes 'podcasts'.
+    run: () => _go('#content/podcast-verification-queue')
   },
 
   // ─────────────────────── NAVIGATION · System ───────────────────────
@@ -175,7 +185,8 @@ export const ACTIONS = [
     kind: 'navigation',
     icon: 'history',
     keywords: ['audit', 'log', 'history', 'verlauf', 'system'],
-    run: () => _go('#system/audit')
+    // permissions-Subtab-Key 'audit-log' → Router mappt auf internes 'audit'.
+    run: () => _go('#system/audit-log')
   },
   {
     id: 'goto-system-audit-1h',
@@ -184,16 +195,19 @@ export const ACTIONS = [
     icon: 'clock',
     keywords: ['audit', 'log', 'stunde', '1h', 'recent'],
     shortcut: ['mod', 'shift', 'a'],
-    run: () => _go('#system/audit?range=1h')
+    run: () => _go('#system/audit-log?range=1h')
   },
   {
     id: 'goto-system-flags',
-    label: 'Feature-Flags',
+    label: 'App-Konfiguration',
     kind: 'navigation',
     icon: 'flag',
-    keywords: ['flags', 'features', 'toggle', 'system'],
+    keywords: ['flags', 'features', 'toggle', 'system', 'config', 'konfiguration', 'app-settings'],
     scope: ['owner', 'admin'],
-    run: () => _go('#system/flags')
+    // 'flags' war KEIN gültiger system-Subtab → landete auf Default. System hat
+    // settings/app-settings/audit-log/tasks-inbox/storage-ops. 'app-settings'
+    // (App-Konfiguration) → Router mappt auf internes 'settings'.
+    run: () => _go('#system/app-settings')
   },
 
   // ─────────────────────── SETTINGS ───────────────────────
@@ -258,7 +272,8 @@ export const ACTIONS = [
     pinned: true,
     pinnedOrder: 1,
     run: () => {
-      _go('#leads-pipeline')
+      // permissions-Subtab-Key 'leads-pipeline' → Router (people) mappt auf internes 'leads'.
+      _go('#people/leads-pipeline')
       // Add-Modal nach Hash-Switch öffnen (Panel-Mount-Hooks lauschen darauf)
       setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-modal', {
         detail: { panel: 'leads-pipeline', component: 'NewLeadModal' }
@@ -275,7 +290,8 @@ export const ACTIONS = [
     pinned: true,
     pinnedOrder: 2,
     run: () => {
-      _go('#tasks-inbox')
+      // permissions-Subtab-Key 'tasks-inbox' → Router (system) mappt auf internes 'tasks'.
+      _go('#system/tasks-inbox')
       setTimeout(() => window.dispatchEvent(new CustomEvent('crm:open-modal', {
         detail: { panel: 'tasks-inbox', component: 'NewTaskModal' }
       })), 50)
@@ -290,7 +306,8 @@ export const ACTIONS = [
     shortcut: ['mod', 'shift', 'a'],
     pinned: true,
     pinnedOrder: 3,
-    run: () => _go('#audit-log?range=1h')
+    // permissions-Subtab-Key 'audit-log' → Router (system) mappt auf internes 'audit'.
+    run: () => _go('#system/audit-log?range=1h')
   },
   {
     id: 'bulk-verify-pending',
@@ -303,9 +320,12 @@ export const ACTIONS = [
     pinnedOrder: 4,
     scope: ['owner', 'admin', 'mod'],
     run: () => {
-      _go('#verification-queue')
+      // 'verification-queue' war KEIN gültiger Subtab-Key → "Kein Zugriff".
+      // Korrekt: permissions-Subtab-Key 'podcast-verification-queue'
+      // (content) → Router mappt auf internes 'podcasts'.
+      _go('#content/podcast-verification-queue')
       setTimeout(() => window.dispatchEvent(new CustomEvent('crm:bulk-action', {
-        detail: { panel: 'verification-queue', action: 'select-all' }
+        detail: { panel: 'podcast-verification-queue', action: 'select-all' }
       })), 50)
     }
   },
@@ -319,7 +339,8 @@ export const ACTIONS = [
     pinned: true,
     pinnedOrder: 5,
     scope: ['owner', 'admin', 'marketing'],
-    run: () => _go('#push-broadcast?audience=premium')
+    // permissions-Subtab-Key 'push-broadcast' → Router (content) mappt auf internes 'bot'.
+    run: () => _go('#content/push-broadcast?audience=premium')
   },
 
   // ─────────────────────── USER-ACTIONS (template) ───────────────────────
@@ -423,7 +444,11 @@ export const ACTIONS = [
     argSchema: { username: 'string', note: 'string' },
     run: async ({ username, note }) => {
       if (!note?.trim()) throw new Error('Notiz darf nicht leer sein.')
-      await _rpc('crm_add_user_note_by_username', { p_username: username, p_note: note.trim() })
+      // crm_add_user_note_by_username existiert in der DB NICHT (PGRST202).
+      // Username -> user_id auflösen und an die DEPLOYTE, admin-gated RPC
+      // admin_add_user_note(p_user_id, p_note) delegieren -> user_notes(body).
+      const _id = await _userIdByUsername(username)
+      await _rpc('admin_add_user_note', { p_user_id: _id, p_note: note.trim() })
       _toast('Notiz gespeichert.')
     }
   },
@@ -434,7 +459,8 @@ export const ACTIONS = [
     icon: 'user',
     keywords: ['user', 'profil', 'profile', 'open', 'detail'],
     argSchema: { username: 'string' },
-    run: ({ username }) => _go(`#people/users?u=${encodeURIComponent(username)}`)
+    // permissions-Subtab-Key 'users-list' → Router (people) mappt auf internes 'users'.
+    run: ({ username }) => _go(`#people/users-list?u=${encodeURIComponent(username)}`)
   },
   {
     id: 'send-password-reset',
@@ -452,15 +478,22 @@ export const ACTIONS = [
   },
   {
     id: 'send-verify-email',
-    label: 'Verify-Mail erneut senden …',
+    // Ehrlich deaktiviert: es gibt KEINEN passenden Backend-Pfad für eine
+    // "Account-Verify-Mail an einen User per Username".
+    //  - crm_resend_verify_email_by_username -> existiert nicht (PGRST202, live geprüft).
+    //  - Edge-Function send-rss-verify-mail erwartet { podcast_id } und ist
+    //    PODCAST-RSS-Owner-Verifikation (Auth = Podcast-Author/Co-Host, Mail an
+    //    RSS owner_email). Passt NICHT zu diesem User-Action-Use-Case (würde 403/400).
+    // Daher sichtbar als "noch nicht verfügbar" statt kaputt feuern.
+    label: 'Verify-Mail erneut senden (noch nicht verfügbar)',
     kind: 'user-action',
     icon: 'mail',
     keywords: ['verify', 'email', 'resend', 'verification', 'user'],
     scope: ['owner', 'admin', 'support'],
+    disabled: true,
     argSchema: { username: 'string' },
-    run: async ({ username }) => {
-      await _rpc('crm_resend_verify_email_by_username', { p_username: username })
-      _toast('Verify-Mail rausgeschickt.')
+    run: async () => {
+      _toast('Verify-Mail-Versand ist noch nicht verfügbar (kein Backend-Endpoint).')
     }
   },
 

@@ -13,6 +13,7 @@ import { glassCard, pullToRefresh } from '/lib/layout-extras.js?v=20260610q'
 
 import adminHome from '/crm/panels/admin-home.js?v=20260610q'
 import auditLog  from '/crm/panels/audit-log.js?v=20260610q'
+import liveOps   from '/crm/panels/live-ops.js?v=20260610q'
 
 // ---------- STYLES ----------
 
@@ -345,20 +346,38 @@ async function mountAlerts(host) {
 // ---------- SUB-TAB DISPATCH ----------
 
 const SUB_TABS = [
-  { id:'now',    label:'Now',    live:true,  icon:'⚡' },
-  { id:'today',  label:'Today',  live:false, icon:'📅' },
-  { id:'alerts', label:'Alerts', live:false, icon:'🚨' },
-  { id:'stream', label:'Stream', live:true,  icon:'📜' }
+  { id:'now',      label:'Now',      live:true,  icon:'⚡' },
+  { id:'live-ops', label:'Live-Ops', live:true,  icon:'📡' },
+  { id:'today',    label:'Today',    live:false, icon:'📅' },
+  { id:'alerts',   label:'Alerts',   live:false, icon:'🚨' },
+  { id:'stream',   label:'Stream',   live:true,  icon:'📜' }
 ]
 
+// Zuletzt gemountetes reused-Panel mit eigenem unmount() (z.B. live-ops mit
+// Realtime-Channels + Polling-Interval). Beim Subtab-Wechsel sauber abräumen,
+// sonst leaken Subscriptions/Intervalle (Lesson: statische Channels + Leaks).
+let activeSubPanel = null
+
+function teardownActiveSubPanel() {
+  if (activeSubPanel && typeof activeSubPanel.unmount === 'function') {
+    try { activeSubPanel.unmount() } catch (_) {}
+  }
+  activeSubPanel = null
+}
+
 async function mountSubTab(id, host) {
+  // vorheriges reused-Panel abräumen (Realtime/Interval) bevor neu gemountet wird
+  teardownActiveSubPanel()
   // jeder Sub-Tab bekommt frischen Container — vorheriger wird verworfen
   host.innerHTML = ''
   const inner = document.createElement('div')
   host.appendChild(inner)
 
   try {
-    if (id === 'now') {
+    if (id === 'live-ops') {
+      await liveOps.mount(inner)
+      activeSubPanel = liveOps
+    } else if (id === 'now') {
       await adminHome.mount(inner)
     } else if (id === 'today') {
       await mountToday(inner)
@@ -380,7 +399,16 @@ export default {
   title: 'Pulse',
   category: 'pulse',
 
-  async mount(container) {
+  async mount(container, ctx = {}) {
+    // Initial-Subtab aus dem Top-Router (crm/index.html). ctx.sub ist bereits
+    // auf das interne Pulse-Vokabular gemappt (live-ops/now/today/alerts/stream)
+    // — siehe SUBTAB_KEY_ALIAS in index.html. Fällt auf den ersten registrierten
+    // Subtab zurück (= Registry-Default, derzeit 'live-ops'), nicht auf einen
+    // hartkodierten Key — so bleibt Default an EINER Stelle definiert.
+    const initialSub = (ctx?.sub && SUB_TABS.some(t => t.id === ctx.sub))
+      ? ctx.sub
+      : SUB_TABS[0].id
+
     container.innerHTML = `${styles()}
       <div class="pulse-shell">
         <div class="pulse-head">
@@ -389,8 +417,8 @@ export default {
         </div>
 
         <div class="pulse-seg" role="tablist" id="pulse-seg">
-          ${SUB_TABS.map((t, i) => `
-            <button data-sub="${t.id}" class="${i === 0 ? 'active' : ''}" role="tab">
+          ${SUB_TABS.map((t) => `
+            <button data-sub="${t.id}" class="${t.id === initialSub ? 'active' : ''}" role="tab">
               <span>${t.icon}</span><span>${t.label}</span>
               ${t.live ? `<span class="dot" aria-hidden="true"></span>` : ''}
             </button>
@@ -404,7 +432,7 @@ export default {
 
     const seg  = container.querySelector('#pulse-seg')
     const body = container.querySelector('#pulse-body')
-    let current = 'now'
+    let current = initialSub
 
     const switchTo = async (id) => {
       if (id === current) return
@@ -412,6 +440,17 @@ export default {
       seg.querySelectorAll('button').forEach(b => {
         b.classList.toggle('active', b.dataset.sub === id)
       })
+      // Deep-Link aktuell halten: internen Key in den Hash schreiben (replaceState,
+      // damit kein zweiter loadPanel-Cycle ausgelöst wird).
+      try {
+        const raw = (location.hash || '').replace(/^#/, '')
+        const [path, query = ''] = raw.split('?')
+        const tab = path.split('/').filter(Boolean)[0] || 'pulse'
+        if (tab === 'pulse') {
+          const target = `#pulse/${id}${query ? '?' + query : ''}`
+          if (location.hash !== target) history.replaceState(null, '', target)
+        }
+      } catch (_) {}
       await mountSubTab(id, body)
     }
 
@@ -421,8 +460,8 @@ export default {
       switchTo(btn.dataset.sub).catch(e => toast?.('Fehler: ' + (e.message || e), 'error'))
     })
 
-    // initial: Now
-    await mountSubTab('now', body)
+    // initial: aus ctx.sub gewählter Subtab
+    await mountSubTab(initialSub, body)
 
     // Pull-to-Refresh: re-mountet aktuellen Sub-Tab
     try {
@@ -430,5 +469,11 @@ export default {
         await mountSubTab(current, body)
       })
     } catch (_) {}
+  },
+
+  // Beim Top-Tab-Wechsel: aktives reused-Panel (z.B. live-ops mit Realtime +
+  // Polling) abräumen, damit keine Subscriptions/Intervalle weiterlaufen.
+  unmount() {
+    teardownActiveSubPanel()
   }
 }

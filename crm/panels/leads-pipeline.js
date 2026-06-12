@@ -186,6 +186,7 @@ function wireDnD(board, container) {
           p_user_id:        lead.user_id ?? null,
           p_assigned_to:    lead.assigned_to ?? null,
           p_next_action_at: lead.next_action_at ?? null,
+          p_note:           lead.note ?? null,
         })
         if (error) throw error
         toast(`Lead → ${statusMeta(newStatus).label}`, 'success')
@@ -242,12 +243,11 @@ function openNewLeadModal(container, reload) {
     const note   = (get('#nl-note')  || document.querySelector('#nl-note')).value.trim()
     if (!email || !email.includes('@')) { toast('Gültige Email nötig', 'error'); return }
     try {
-      // p_note existiert NICHT in der DB-Funktion (leads-Tabelle hat keine
-      // note-Spalte) → Notiz-Feld wird aktuell nicht persistiert.
       const { error } = await sb.rpc('admin_lead_upsert', {
         p_id: null, p_external_email: email, p_external_name: name || null,
         p_source: source, p_status: status,
         p_user_id: null, p_assigned_to: null, p_next_action_at: null,
+        p_note: note || null,
       })
       if (error) throw error
       toast('Lead angelegt', 'success')
@@ -431,8 +431,9 @@ export default {
             email: (r.external_email ?? r.email) || '', name: (r.external_name ?? r.name) || '', source: r.source || '', status: r.status || '',
             assigned_to: r.assigned_to_name || r.assigned_to || '',
             next_action_at: r.next_action_at || '', created_at: r.created_at || '',
+            note: r.note || '',
           }))
-          exportCsv(rows, ['email','name','source','status','assigned_to','next_action_at','created_at'], `leads-${new Date().toISOString().slice(0,10)}.csv`)
+          exportCsv(rows, ['email','name','source','status','assigned_to','next_action_at','created_at','note'], `leads-${new Date().toISOString().slice(0,10)}.csv`)
         } catch (_) { toast('CSV-Export fehlgeschlagen', 'error') }
       })
 
