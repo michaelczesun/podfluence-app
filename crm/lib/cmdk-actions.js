@@ -32,6 +32,19 @@ async function _rpc(name, args = {}) {
   return data
 }
 
+// Username -> user_id, EXAKT (eq, kein Fuzzy/ilike -> nie der falsche User).
+// Die crm_*_by_username-RPCs existieren in der DB NICHT; wir loesen den Username
+// hier auf und delegieren an die verifizierten admin_*-RPCs (p_user_id).
+async function _userIdByUsername(username) {
+  if (!window.sb) throw new Error('Supabase client (window.sb) not initialised')
+  const uname = String(username || '').trim().replace(/^@/, '')
+  if (!uname) throw new Error('Username fehlt')
+  const { data, error } = await window.sb.from('users').select('id').eq('username', uname).maybeSingle()
+  if (error) throw new Error('User-Lookup fehlgeschlagen: ' + (error.message || error))
+  if (!data?.id) throw new Error(`@${uname} nicht gefunden`)
+  return data.id
+}
+
 export const ACTIONS = [
   // ─────────────────────── NAVIGATION · Pulse ───────────────────────
   {
@@ -321,7 +334,8 @@ export const ACTIONS = [
     run: async ({ username }) => {
       if (!username) throw new Error('username required')
       if (!(await _confirm({ title: `@${username} verifizieren?`, message: 'Der User bekommt das Verified-Badge.', confirmLabel: 'Verifizieren' }))) return
-      const data = await _rpc('crm_verify_user_by_username', { p_username: username })
+      const _id = await _userIdByUsername(username)
+      const data = await _rpc('admin_set_user_verified', { p_user_id: _id, p_verified: true })
       _toast(`@${username} verifiziert.`)
       return data
     }
@@ -336,7 +350,8 @@ export const ACTIONS = [
     argSchema: { username: 'string' },
     run: async ({ username }) => {
       if (!(await _confirm({ title: `Verifizierung entziehen?`, message: `Das Verified-Badge von @${username} wird entfernt.`, confirmLabel: 'Entziehen', danger: true }))) return
-      await _rpc('crm_unverify_user_by_username', { p_username: username })
+      const _id = await _userIdByUsername(username)
+      await _rpc('admin_set_user_verified', { p_user_id: _id, p_verified: false })
       _toast(`@${username} unverified.`)
     }
   },
@@ -350,7 +365,8 @@ export const ACTIONS = [
     argSchema: { username: 'string', reason: 'string' },
     run: async ({ username, reason }) => {
       if (!(await _confirm({ title: `@${username} bannen?`, message: `Grund: ${reason || '(keiner)'}`, confirmLabel: 'Bannen', danger: true }))) return
-      await _rpc('crm_ban_user_by_username', { p_username: username, p_reason: reason || null })
+      const _id = await _userIdByUsername(username)
+      await _rpc('admin_ban_user', { p_user_id: _id, p_reason: reason || null })
       _toast(`@${username} gebannt.`)
     }
   },
@@ -364,7 +380,8 @@ export const ACTIONS = [
     argSchema: { username: 'string' },
     run: async ({ username }) => {
       if (!(await _confirm({ title: `@${username} entbannen?`, message: 'Der User kann sich wieder einloggen.', confirmLabel: 'Entbannen' }))) return
-      await _rpc('crm_unban_user_by_username', { p_username: username })
+      const _id = await _userIdByUsername(username)
+      await _rpc('admin_unban_user', { p_user_id: _id })
       _toast(`@${username} entbannt.`)
     }
   },
@@ -377,8 +394,9 @@ export const ACTIONS = [
     scope: ['owner', 'admin'],
     argSchema: { username: 'string' },
     run: async ({ username }) => {
-      await _rpc('crm_set_premium_by_username', { p_username: username, p_value: true })
-      _toast(`@${username} ist jetzt Premium.`)
+      const _id = await _userIdByUsername(username)
+      await _rpc('admin_grant_premium', { p_user_id: _id, p_duration_days: 365 })
+      _toast(`@${username} ist jetzt Premium (365 Tage).`)
     }
   },
   {
@@ -391,7 +409,8 @@ export const ACTIONS = [
     argSchema: { username: 'string' },
     run: async ({ username }) => {
       if (!(await _confirm({ title: `Premium entziehen?`, message: `@${username} verliert Premium-Features.`, confirmLabel: 'Entziehen', danger: true }))) return
-      await _rpc('crm_set_premium_by_username', { p_username: username, p_value: false })
+      const _id = await _userIdByUsername(username)
+      await _rpc('admin_revoke_premium', { p_user_id: _id })
       _toast(`@${username} Premium entzogen.`)
     }
   },
