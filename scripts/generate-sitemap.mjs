@@ -22,11 +22,22 @@ const TODAY = new Date().toISOString().slice(0, 10)
 const STATIC_PAGES = [
   { path: '/', changefreq: 'daily', priority: '1.0' },
   { path: '/app', changefreq: 'monthly', priority: '0.8' },
+  { path: '/agb/', changefreq: 'monthly', priority: '0.5' },
+  { path: '/transparenz/', changefreq: 'monthly', priority: '0.5' },
   { path: '/datenschutz/', changefreq: 'monthly', priority: '0.5' },
   { path: '/impressum/', changefreq: 'monthly', priority: '0.5' },
 ]
 
-const SKIP_USERNAMES = new Set(['applereview', 'reviewbot', 'test', 'demo'])
+const SKIP_USERNAMES = new Set(['applereview', 'reviewbot', 'test', 'demo', 'rewrite'])
+
+// Test-/E2E-Accounts raus (kein SEO-Wert, würden sonst die Sitemap verwässern).
+function isTestAccount(n) {
+  const low = n.toLowerCase()
+  if (/^e2e/.test(low)) return true            // e2etest..., e2ever..., e2epost...
+  if (/\d{10,}$/.test(low)) return true        // Timestamp-Suffix: bomb1780..., grace1780...
+  if (/^user_[0-9a-f]{6,}$/.test(low)) return true // anonyme user_<hash>
+  return false
+}
 
 function isSafe(n) {
   if (!n) return false
@@ -70,6 +81,7 @@ async function main() {
     const n = (u.username || '').trim()
     if (!isSafe(n)) continue
     if (SKIP_USERNAMES.has(n.toLowerCase())) continue
+    if (isTestAccount(n)) continue
     if (seen.has(n.toLowerCase())) continue
     seen.add(n.toLowerCase())
     userPaths.push(n)
