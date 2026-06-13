@@ -107,7 +107,7 @@
       hidden.appendChild(container)
 
       try {
-        const mod = await import(`/crm/panels/${id}.js?t=${Date.now()}`)
+        const mod = await import(`/hq-4b320813c307/panels/${id}.js?t=${Date.now()}`)
         if (mod.default && typeof mod.default.mount === 'function') {
           await mod.default.mount(container)
           // 1.5s warten, damit async fetches/render durchlaufen

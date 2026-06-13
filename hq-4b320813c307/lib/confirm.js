@@ -4,7 +4,7 @@
  * Drop-in-Ersatz für window.confirm() — gibt Promise<boolean> zurück.
  *
  * Verwendung:
- *   import { openConfirm } from '/crm/lib/confirm.js'
+ *   import { openConfirm } from '/hq-4b320813c307/lib/confirm.js'
  *   if (await openConfirm({ title: 'Wirklich löschen?', message: '...', danger: true })) {
  *     // … do it
  *   }

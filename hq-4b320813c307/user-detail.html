@@ -7,7 +7,7 @@
 <meta name="robots" content="noindex,nofollow" />
 <meta name="theme-color" content="#0B0B0F" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E%F0%9F%91%A4%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="/crm/lib/mobile.css?v=20260607-cards" />
+<link rel="stylesheet" href="/hq-4b320813c307/lib/mobile.css?v=20260607-cards" />
 <style>
   :root {
     --bg-deep: #07070A;
@@ -254,7 +254,7 @@ const root = document.getElementById('ud-root')
 try {
   const { data: { session } } = await sb.auth.getSession()
   if (!session) {
-    location.replace('/login/?next=/crm/user-detail.html' + location.hash)
+    location.replace('/login/?next=/hq-4b320813c307/user-detail.html' + location.hash)
     throw new Error('no session')
   }
   const { data: profile } = await sb.from('users').select('is_app_admin').eq('id', session.user.id).maybeSingle()
@@ -269,9 +269,9 @@ try {
 
 document.getElementById('back-btn').addEventListener('click', () => {
   if (history.length > 1) history.back()
-  else location.href = '/crm/#people/users'
+  else location.href = '/hq-4b320813c307/#people/users'
 })
-document.getElementById('open-crm').addEventListener('click', () => { location.href = '/crm/' })
+document.getElementById('open-crm').addEventListener('click', () => { location.href = '/hq-4b320813c307/' })
 
 // ---- Hash-Routing: #user/<uuid>[/<tab>] ----
 function parseHash() {
@@ -664,7 +664,7 @@ function paneActions(pane, u) {
 async function bootstrap() {
   const { uuid, tab } = parseHash()
   if (!uuid || !/^[0-9a-f-]{16,}$/i.test(uuid)) {
-    root.innerHTML = `<div class="empty"><div class="ico">❓</div>Keine User-ID im URL-Hash.<br><br><a href="/crm/#people/users">Zur Nutzer-Liste</a></div>`
+    root.innerHTML = `<div class="empty"><div class="ico">❓</div>Keine User-ID im URL-Hash.<br><br><a href="/hq-4b320813c307/#people/users">Zur Nutzer-Liste</a></div>`
     return
   }
   _state.uuid = uuid
@@ -676,7 +676,7 @@ async function bootstrap() {
     return
   }
   if (!_state.user) {
-    root.innerHTML = `<div class="empty"><div class="ico">😕</div>Nutzer nicht gefunden.<br><br><a href="/crm/#people/users">Zur Nutzer-Liste</a></div>`
+    root.innerHTML = `<div class="empty"><div class="ico">😕</div>Nutzer nicht gefunden.<br><br><a href="/hq-4b320813c307/#people/users">Zur Nutzer-Liste</a></div>`
     return
   }
   renderShell()

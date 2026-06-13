@@ -3,7 +3,7 @@ import { toast, fmtNumber, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, d
 import { makeSparkline, makeAreaChart } from '/lib/charts.js?v=20260610q'
 import { countUp, fadeIn, pulse } from '/lib/animations.js?v=20260610q'
 import { glassCard } from '/lib/layout-extras.js?v=20260610q'
-import { skeletonCard, skeletonGrid, skeletonChart } from '/crm/lib/skeleton.js?v=20260610q'
+import { skeletonCard, skeletonGrid, skeletonChart } from '/hq-4b320813c307/lib/skeleton.js?v=20260610q'
 
 // Schema-Truth: siehe CLAUDE-Memory. Diese Datei nutzt NUR existierende Tabellen/Felder:
 //  - users(id,email,is_premium,is_verified,is_admin,created_at,full_name,username,avatar_url,is_banned)

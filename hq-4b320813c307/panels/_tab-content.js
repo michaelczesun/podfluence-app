@@ -6,7 +6,7 @@
 // CACHE-BUST: ?v=20260610q
 
 import { sb } from '/lib/supabase.js?v=20260610q'
-import { emptyState } from '/crm/lib/empty.js?v=20260610q'
+import { emptyState } from '/hq-4b320813c307/lib/empty.js?v=20260610q'
 import {
   toast, htmlEscape, fmtRelativeTime, fmtNumber, iconHtml, spinnerHtml
 } from '/lib/ui.js?v=20260610q'

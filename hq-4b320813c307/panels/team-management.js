@@ -1,6 +1,6 @@
 import { sb } from '/lib/supabase.js?v=20260610q'
 import { toast, confirmDialog, fmtDateTime, fmtRelativeTime, htmlEscape, iconHtml, debounce } from '/lib/ui.js?v=20260610q'
-import { openModal } from '/crm/lib/modal.js?v=20260610q'
+import { openModal } from '/hq-4b320813c307/lib/modal.js?v=20260610q'
 import { exportPanelAsPdf, exportCsv } from '/lib/export.js?v=20260610q'
 import { countUp, fadeIn } from '/lib/animations.js?v=20260610q'
 import { drawer, glassCard } from '/lib/layout-extras.js?v=20260610q'

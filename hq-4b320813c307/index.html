@@ -8,8 +8,8 @@
 <meta name="robots" content="noindex,nofollow" />
 <meta name="theme-color" content="#0B0B0F" />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E🎧%3C/text%3E%3C/svg%3E" />
-<link rel="stylesheet" href="/crm/lib/mobile.css?v=20260610q-cards" />
-<link rel="stylesheet" href="/crm/lib/theme.css?v=20260610q-tabcolor" />
+<link rel="stylesheet" href="/hq-4b320813c307/lib/mobile.css?v=20260610q-cards" />
+<link rel="stylesheet" href="/hq-4b320813c307/lib/theme.css?v=20260610q-tabcolor" />
 <style>
   :root {
     --bg-deep: #07070A;
@@ -280,8 +280,8 @@
   .leaderboard .val { color: #A78BFA; font-weight: 600; }
   .chip { display: inline-block; background: rgba(139,92,246,0.15); color: #A78BFA; padding: 3px 10px; border-radius: 12px; font-size: 11px; margin-right: 4px; }
   .chips { display: flex; flex-wrap: wrap; gap: 4px; }
-  /* Toast-Stile werden von /crm/lib/toast.js Modul injiziert */
-  /* Cmd-K Modal-Styles werden vom /crm/lib/cmdk.js Modul injiziert */
+  /* Toast-Stile werden von /hq-4b320813c307/lib/toast.js Modul injiziert */
+  /* Cmd-K Modal-Styles werden vom /hq-4b320813c307/lib/cmdk.js Modul injiziert */
 
   /* Sidebar-toggle (mobile + cmd+/) */
   #sidebar-toggle { display: none; }
@@ -405,10 +405,10 @@
 </style>
 <!-- Components Layer: definiert ~200 in Panels benutzte aber nie gestylte Klassen
      (Badges, Chips, Cards, Charts, Drawer, KPI-Heroes, Tabellen, Avatare). -->
-<link rel="stylesheet" href="/crm/lib/components.css?v=20260612comp1" />
+<link rel="stylesheet" href="/hq-4b320813c307/lib/components.css?v=20260612comp1" />
 <!-- Futuristic Neon-Glas Layer (additiv, folgt Tab-Farbe, reversibel). NACH dem
      Inline-Style + Components geladen, damit die Overrides per Source-Order greifen. -->
-<link rel="stylesheet" href="/crm/lib/futuristic.css?v=20260612neon1" />
+<link rel="stylesheet" href="/hq-4b320813c307/lib/futuristic.css?v=20260612neon1" />
 </head>
 <body>
 
@@ -445,8 +445,8 @@
 
 <script type="module">
 import { sb } from '/lib/supabase.js?v=20260610q'
-import { openCmdK, closeCmdK, toggleCmdK, isCmdKOpen, installCmdK } from '/crm/lib/cmdk.js?v=20260610q-micfab'
-import '/crm/lib/toast.js?v=20260610q-toast'
+import { openCmdK, closeCmdK, toggleCmdK, isCmdKOpen, installCmdK } from '/hq-4b320813c307/lib/cmdk.js?v=20260610q-micfab'
+import '/hq-4b320813c307/lib/toast.js?v=20260610q-toast'
 
 // ---- Auth-Guard (Admin-Only) ----
 const mountEl = document.getElementById('panel-mount')
@@ -454,7 +454,7 @@ try {
   const { data: { session }, error: sessionError } = await sb.auth.getSession()
   if (sessionError) throw sessionError
   if (!session) {
-    location.replace('/login/?next=/crm/')
+    location.replace('/login/?next=/hq-4b320813c307/')
     throw new Error('no session — redirecting')
   }
   const { data: profile, error: profileError } = await sb
@@ -493,7 +493,7 @@ const TAB_ICONS = {
 // Permissions-Layer: aus lib/permissions.json
 let PERMISSIONS = null
 try {
-  const permRes = await fetch('/crm/lib/permissions.json?v=20260610q', { cache: 'no-store' })
+  const permRes = await fetch('/hq-4b320813c307/lib/permissions.json?v=20260610q', { cache: 'no-store' })
   PERMISSIONS = await permRes.json()
 } catch (e) {
   console.error('[crm] permissions.json load error', e)
@@ -693,7 +693,7 @@ if (bottomTabs.length) {
   document.body.classList.add('has-bottom-bar')
 }
 
-// ---- Toast ---- (Lib lädt window.toast via /crm/lib/toast.js)
+// ---- Toast ---- (Lib lädt window.toast via /hq-4b320813c307/lib/toast.js)
 
 // ---- Sidebar Toggle (mobile + Cmd+/) ----
 const shellEl = document.getElementById('shell')
@@ -861,7 +861,7 @@ async function loadPanel() {
   })
 
   // Color-Language pro Top-Tab: setzt CSS-Custom-Props via [data-active-tab="…"]-Selektor
-  // (siehe /crm/lib/theme.css). --tab-accent / --tab-glow steuern Sidebar-Glow,
+  // (siehe /hq-4b320813c307/lib/theme.css). --tab-accent / --tab-glow steuern Sidebar-Glow,
   // Section-Title-Border und Hero-Tile-Hover-Border.
   if (id) document.body.setAttribute('data-active-tab', id)
 

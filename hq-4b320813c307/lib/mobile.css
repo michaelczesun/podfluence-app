@@ -88,7 +88,7 @@
 
 /* ============================================================
  * Touch-Targets-Sweep (7.6.26)
- * Sweep über /crm/panels/*.js: Buttons/Tabs/Pills/Chips/Icon-
+ * Sweep über /hq-4b320813c307/panels/*.js: Buttons/Tabs/Pills/Chips/Icon-
  * Buttons/Actions haben oft padding<12px oder height<44px.
  * iOS HIG / Apple-Guideline: 44pt minimum tap target.
  * Nur Mobile (≤767px) — Desktop unverändert.

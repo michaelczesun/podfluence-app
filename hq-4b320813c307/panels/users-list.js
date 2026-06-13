@@ -6,8 +6,8 @@ import { countUp, fadeIn } from '/lib/animations.js?v=20260610q'
 import { drawer, statHero } from '/lib/layout-extras.js?v=20260610q'
 // FIX #6: added unverifyUser import; FIX #7: added unbanUser import
 import { showUserDetailModal, verifyUser, unverifyUser, banUser, unbanUser, grantPremium } from '/lib/panel-actions.js?v=20260610q'
-import { openModal } from '/crm/lib/modal.js?v=20260610q'
-import { skeletonRow, skeletonGrid, skeletonChart, skeletonCard } from '/crm/lib/skeleton.js?v=20260610q'
+import { openModal } from '/hq-4b320813c307/lib/modal.js?v=20260610q'
+import { skeletonRow, skeletonGrid, skeletonChart, skeletonCard } from '/hq-4b320813c307/lib/skeleton.js?v=20260610q'
 
 const PAGE_SIZE = 50
 
@@ -1229,14 +1229,13 @@ async function doSwipeNote(uid, body, container) {
   if (note === null) return // abgebrochen
   if (!note.trim()) return
   try {
-    // Best-Effort: zuerst dedizierte RPC, sonst Fallback in user_notes Tabelle
-    let res = await sb.rpc('admin_add_user_note', { p_user_id: uid, p_note: note.trim() })
-    if (res.error) {
-      // Fallback: direkter Insert (Tabelle muss existieren; sonst landet das im catch)
-      // Schema-Wahrheit: Spalte heißt body (nicht note) — live verifiziert 12.6.
-      res = await sb.from('user_notes').insert({ user_id: uid, body: note.trim() })
-      if (res.error) throw res.error
-    }
+    // Notizen gehen AUSSCHLIESSLICH über die admin-gated RPC (deployed, live
+    // verifiziert). Der frühere Raw-Insert-Fallback konnte nie funktionieren:
+    // user_notes verlangt admin_id NOT NULL (und die Spalte heißt body) —
+    // er hätte mit 23502/42703 geworfen. Fehler ehrlich anzeigen statt
+    // einen kaputten zweiten Pfad zu probieren.
+    const res = await sb.rpc('admin_add_user_note', { p_user_id: uid, p_note: note.trim() })
+    if (res.error) throw res.error
     toast('Notiz hinzugefügt', 'success')
   } catch (e) {
     toast(e?.message || 'Notiz konnte nicht gespeichert werden', 'error')

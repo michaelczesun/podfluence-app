@@ -106,7 +106,7 @@ document.getElementById('run').addEventListener('click', async () => {
     hidden.innerHTML = '';
     hidden.appendChild(cont);
     try {
-      const mod = await import(`/crm/panels/${id}.js?v=20260608k&t=${Date.now()}`);
+      const mod = await import(`/hq-4b320813c307/panels/${id}.js?v=20260608k&t=${Date.now()}`);
       const panel = mod.default || mod;
       if (panel && typeof panel.mount === 'function') {
         await panel.mount(cont);

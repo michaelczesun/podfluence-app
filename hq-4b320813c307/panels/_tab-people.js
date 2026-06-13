@@ -7,7 +7,7 @@ import { toast, iconHtml } from '/lib/ui.js?v=20260610q'
 import { fadeIn } from '/lib/animations.js?v=20260610q'
 import { pullToRefresh } from '/lib/layout-extras.js?v=20260610q'
 import { sendTestPush } from '/lib/panel-actions.js?v=20260610q'
-import { emptyState } from '/crm/lib/empty.js?v=20260610q'
+import { emptyState } from '/hq-4b320813c307/lib/empty.js?v=20260610q'
 
 const SUBTABS = [
   { key: 'users',    label: 'Users',    panel: 'users-list',      icon: 'users' },
@@ -187,7 +187,7 @@ async function mountPowerUsers(rootEl) {
     listEl.querySelectorAll('.pu-row').forEach(row => {
       row.addEventListener('click', () => {
         const uid = row.dataset.uid
-        if (uid) location.href = `/crm/user-detail.html?id=${encodeURIComponent(uid)}`
+        if (uid) location.href = `/hq-4b320813c307/user-detail.html?id=${encodeURIComponent(uid)}`
       })
     })
   } catch (e) {
@@ -277,7 +277,7 @@ async function mountChurnRisk(rootEl) {
     listEl.querySelectorAll('.cr-row').forEach(row => {
       const uid = row.dataset.uid
       row.querySelector('[data-act="open"]')?.addEventListener('click', () => {
-        if (uid) location.href = `/crm/user-detail.html?id=${encodeURIComponent(uid)}`
+        if (uid) location.href = `/hq-4b320813c307/user-detail.html?id=${encodeURIComponent(uid)}`
       })
       row.querySelector('[data-act="push"]')?.addEventListener('click', async (e) => {
         e.stopPropagation()

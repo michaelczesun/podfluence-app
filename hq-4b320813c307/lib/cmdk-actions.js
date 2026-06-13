@@ -19,7 +19,7 @@
  * RPC / Edge nutzen den globalen `window.sb` Supabase-Client.
  */
 
-import { openConfirm } from '/crm/lib/confirm.js'
+import { openConfirm } from '/hq-4b320813c307/lib/confirm.js'
 
 const _go = (hash) => { location.hash = hash }
 const _confirm = (opts) => openConfirm(typeof opts === 'string' ? { title: opts } : opts)

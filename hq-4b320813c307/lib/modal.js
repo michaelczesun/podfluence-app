@@ -1,4 +1,4 @@
-// /crm/lib/modal.js
+// /hq-4b320813c307/lib/modal.js
 // Zentralisierte Modal-Lib für alle CRM-Panels.
 //
 // Features:

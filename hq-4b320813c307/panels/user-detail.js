@@ -1,4 +1,4 @@
-// /crm/panels/user-detail.js
+// /hq-4b320813c307/panels/user-detail.js
 // Voll-funktionale Admin-Aktionen-Modal für einen User.
 // Sektionen: Header · Rolle · Status (Verified/Premium) · Moderation (Ban/Unban) · Reset · Footer-Stats.
 //
@@ -11,7 +11,7 @@
 
 import { sb } from '/lib/supabase.js?v=20260610q'
 import { toast, htmlEscape } from '/lib/ui.js?v=20260610q'
-import { openModal } from '/crm/lib/modal.js?v=20260610q'
+import { openModal } from '/hq-4b320813c307/lib/modal.js?v=20260610q'
 
 // ---------------------------------------------------------------------------
 // One-time style injection

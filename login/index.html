@@ -165,7 +165,7 @@
   async function routeAfterLogin() {
     const ctx = await currentUserContext();
     if (!ctx) return;
-    window.location.href = ctx.isAdmin ? '/crm/' : '/app/';
+    window.location.href = ctx.isAdmin ? '/hq-4b320813c307/' : '/app/';
   }
 
   // Auto-Redirect wenn schon eingeloggt

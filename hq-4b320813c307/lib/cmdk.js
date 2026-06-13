@@ -6,7 +6,7 @@
 // Sticky Quick-Actions: 5 pinned items aus cmdk-actions.js bleiben IMMER sichtbar wenn der
 // Input leer ist. Reihenfolge per pinnedOrder. Sortiert vor allen Panels.
 
-import { searchActions, getActionById } from '/crm/lib/cmdk-actions.js?v=20260610q-sticky1'
+import { searchActions, getActionById } from '/hq-4b320813c307/lib/cmdk-actions.js?v=20260610q-sticky1'
 
 let _sb = null
 let _panels = []
@@ -427,7 +427,7 @@ async function runUserAction(action, userId, btn) {
 // die DEPLOYTE RPC admin_add_user_note(p_user_id, p_note) -> user_notes(body).
 // (Live verifiziert: P0001 admin_required = vorhanden + admin-gated.)
 async function openNoteComposer(userId) {
-  const modMod = await import('/crm/lib/modal.js?v=20260610q').catch(() => null)
+  const modMod = await import('/hq-4b320813c307/lib/modal.js?v=20260610q').catch(() => null)
   const openModal = modMod?.openModal
   if (!openModal) {
     window.toast?.('Notiz-Dialog konnte nicht geladen werden')

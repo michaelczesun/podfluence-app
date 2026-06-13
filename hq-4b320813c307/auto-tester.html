@@ -1,6 +1,7 @@
 <!doctype html>
 <html lang="de">
 <head>
+  <meta name="robots" content="noindex, nofollow">
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Auto-Tester · hozd CRM</title>
@@ -247,7 +248,7 @@ async function runAll() {
     hidden.appendChild(cont);
 
     try {
-      const mod = await import(`/crm/panels/${id}.js?${CACHE_BUST}&t=${Date.now()}`);
+      const mod = await import(`/hq-4b320813c307/panels/${id}.js?${CACHE_BUST}&t=${Date.now()}`);
       const panel = mod.default || mod;
       if (panel && typeof panel.mount === 'function') {
         await panel.mount(cont);
