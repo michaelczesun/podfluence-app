@@ -150,6 +150,12 @@
           "new": true
         },
         {
+          "key": "kosten",
+          "label": "Kosten",
+          "panels": ["cost-overview"],
+          "new": true
+        },
+        {
           "key": "backups",
           "label": "Backups",
           "panels": ["storage-ops"],
@@ -194,6 +200,7 @@
     "bug-reports-triage": "content/reports",
     "push-broadcast": "system/tasks",
     "storage-ops": "system/backups",
+    "cost-overview": "system/kosten",
     "podcast-verification-queue": "content/podcasts",
     "tasks-inbox": "system/tasks",
     "team-management": "people/team",

@@ -21,6 +21,7 @@ const SUB_TABS = [
   { key: 'tasks',      label: 'Tasks',      icon: 'inbox',     panel: 'tasks-inbox' },
   { key: 'audit',      label: 'Audit',      icon: 'shield',    panel: 'audit-log' },
   { key: 'api-health', label: 'API-Health', icon: 'gauge',     panel: null /* inline */ },
+  { key: 'kosten',     label: 'Kosten',     icon: 'bar-chart', panel: 'cost-overview' },
   { key: 'backups',    label: 'Backups',    icon: 'database',  panel: null /* inline */ }
 ]
 
