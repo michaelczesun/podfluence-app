@@ -48,8 +48,17 @@ const SUBTABS = [
     label: 'Reports',
     icon: '🐞',
     tiles: [
+      { kind: 'panel', id: 'moderation', title: 'Moderation (gemeldete Inhalte)' },
       { kind: 'panel', id: 'open-bug-reports', title: 'Offene Bug-Reports' },
       { kind: 'panel', id: 'bug-reports-triage', title: 'Triage' }
+    ]
+  },
+  {
+    key: 'announcements',
+    label: 'Ankündigungen',
+    icon: '📢',
+    tiles: [
+      { kind: 'panel', id: 'announcements', title: 'Ankündigungen' }
     ]
   },
   {

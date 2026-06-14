@@ -120,7 +120,13 @@
         {
           "key": "reports",
           "label": "Reports",
-          "panels": ["open-bug-reports", "bug-reports-triage"]
+          "panels": ["moderation", "open-bug-reports", "bug-reports-triage"]
+        },
+        {
+          "key": "announcements",
+          "label": "Ankündigungen",
+          "panels": ["announcements"],
+          "new": true
         },
         {
           "key": "bot",
@@ -227,6 +233,8 @@
     "newsletter-audience-sync": "content/bot",
     "audit-log": "system/audit",
     "ads-manager": "content/ads",
+    "moderation": "content/reports",
+    "announcements": "content/announcements",
     "follower-growth": "people/fan-growth",
     "leads-pipeline": "people/leads",
     "bug-reports-triage": "content/reports",
