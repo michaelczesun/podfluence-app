@@ -31,7 +31,16 @@ const SUBTABS = [
     icon: '🎙️',
     tiles: [
       { kind: 'panel', id: 'trending-podcasters', title: 'Trending Podcaster' },
-      { kind: 'panel', id: 'podcast-verification-queue', title: 'Verification-Queue' }
+      { kind: 'panel', id: 'podcast-verification-queue', title: 'Verification-Queue' },
+      { kind: 'panel', id: 'podcast-resolver', title: 'Podcast-Resolver' }
+    ]
+  },
+  {
+    key: 'events',
+    label: 'Events',
+    icon: '📅',
+    tiles: [
+      { kind: 'panel', id: 'events', title: 'Event-Moderation' }
     ]
   },
   {

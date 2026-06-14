@@ -110,7 +110,13 @@
         {
           "key": "podcasts",
           "label": "Podcasts",
-          "panels": ["trending-podcasters", "podcast-verification-queue", "top-listened-podcasts", "podcaster-engagement-7d", "vibe-distribution"]
+          "panels": ["trending-podcasters", "podcast-verification-queue", "podcast-resolver", "top-listened-podcasts", "podcaster-engagement-7d", "vibe-distribution"]
+        },
+        {
+          "key": "events",
+          "label": "Events",
+          "panels": ["events"],
+          "new": true
         },
         {
           "key": "comments",
@@ -235,6 +241,8 @@
     "ads-manager": "content/ads",
     "moderation": "content/reports",
     "announcements": "content/announcements",
+    "events": "content/events",
+    "podcast-resolver": "content/podcasts",
     "follower-growth": "people/fan-growth",
     "leads-pipeline": "people/leads",
     "bug-reports-triage": "content/reports",
