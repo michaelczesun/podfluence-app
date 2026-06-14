@@ -24,6 +24,7 @@ const SUB_TABS = [
   { key: 'kosten',     label: 'Kosten',     icon: 'bar-chart', panel: 'cost-overview' },
   { key: 'ki-medien',  label: 'KI & Medien', icon: 'sparkles', panel: 'ai-media-ops' },
   { key: 'push',       label: 'Push-Zustellung', icon: 'bell', panel: 'push-delivery' },
+  { key: 'notif-impact', label: 'Notif-Wirkung', icon: 'activity', panel: 'notification-impact' },
   { key: 'backups',    label: 'Backups',    icon: 'database',  panel: null /* inline */ }
 ]
 
