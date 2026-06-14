@@ -13,6 +13,7 @@ const SUBTABS = [
   { key: 'users',    label: 'Users',    panel: 'users-list',      icon: 'users' },
   { key: 'leads',    label: 'Leads',    panel: 'leads-pipeline',  icon: 'target' },
   { key: 'team',     label: 'Team',     panel: 'team-management', icon: 'shield' },
+  { key: 'fan-growth', label: 'Follower-Growth', panel: 'follower-growth', icon: 'trending-up' },
   { key: 'segments', label: 'Segments', panel: null,              icon: 'pie-chart', phase: 3 },
 ]
 

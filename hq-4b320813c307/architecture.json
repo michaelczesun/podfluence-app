@@ -49,6 +49,12 @@
           "panels": ["team-management"]
         },
         {
+          "key": "fan-growth",
+          "label": "Follower-Growth",
+          "panels": ["follower-growth"],
+          "new": true
+        },
+        {
           "key": "segments",
           "label": "Segments",
           "panels": ["top-listeners", "users-by-country"],
@@ -214,6 +220,7 @@
     "insta-post-type-scores": "content/bot",
     "newsletter-audience-sync": "content/bot",
     "audit-log": "system/audit",
+    "follower-growth": "people/fan-growth",
     "leads-pipeline": "people/leads",
     "bug-reports-triage": "content/reports",
     "push-broadcast": "system/tasks",
