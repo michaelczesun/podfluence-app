@@ -184,6 +184,38 @@ function renderEmpty(body) {
   `
 }
 
+// Crashes nach Runtime/App-Version aufschlüsseln (zeigt ob eine alte Runtime
+// überproportional crasht → OTA fällig). Quelle: data.raw (alle crash_logs-Rows).
+function crashVersionBreakdown(raw) {
+  if (!raw || !raw.length) return '<div style="color:var(--text-muted);font-size:13px">Keine Crash-Daten im Fenster.</div>'
+  const byVer = {}, byPlat = {}
+  for (const c of raw) {
+    // app_version = echte Version (1.4.0 etc.). runtime_version enthält leider
+    // nur den Policy-String {"policy":"appVersion"}, also NICHT nutzen.
+    const v = c.app_version || '?'
+    if (!byVer[v]) byVer[v] = { total: 0, fatal: 0 }
+    byVer[v].total++; if (c.is_fatal) byVer[v].fatal++
+    const p = (c.platform || '?').toLowerCase()
+    byPlat[p] = (byPlat[p] || 0) + 1
+  }
+  const vers = Object.entries(byVer).sort((a, b) => b[1].total - a[1].total)
+  const max = Math.max(...vers.map(v => v[1].total), 1)
+  const platStr = Object.entries(byPlat).sort((a, b) => b[1] - a[1]).map(([p, n]) => `${p}: ${n}`).join(' · ')
+  const bars = vers.map(([v, s]) => {
+    const w = Math.max(3, Math.round(s.total / max * 100))
+    const fatalPct = s.total ? Math.round(s.fatal / s.total * 100) : 0
+    const col = fatalPct >= 50 ? '#ef4444' : fatalPct >= 20 ? '#f59e0b' : '#7C5CFF'
+    return `<div style="margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:3px">
+        <span style="font-family:'SF Mono',monospace;color:var(--text)">${htmlEscape(v)}</span>
+        <span style="color:var(--text-muted)">${s.total}${s.fatal ? ` · <span style="color:#ef4444">${s.fatal} fatal</span>` : ''}</span>
+      </div>
+      <div style="height:7px;border-radius:5px;background:rgba(255,255,255,0.06);overflow:hidden"><div style="height:100%;width:${w}%;background:${col};border-radius:5px"></div></div>
+    </div>`
+  }).join('')
+  return `<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px">Plattform: ${htmlEscape(platStr)}</div>${bars}`
+}
+
 function renderContent(body, data) {
   const rateKnown = data.crashFreeRate != null
   const heroColor = !rateKnown ? 'var(--text-muted)'
@@ -263,6 +295,14 @@ function renderContent(body, data) {
           <span style="font-size:12px;color:var(--text-muted)">letzte 7 Tage</span>
         </div>
         <div id="area-chart" style="min-height:240px"></div>
+      </section>
+
+      <section class="glass-card" style="padding:20px">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;gap:10px;flex-wrap:wrap">
+          <h3 style="margin:0;font-size:15px">Crashes nach App-Version</h3>
+          <span style="font-size:12px;color:var(--text-muted)">alte Builds crashen oft → OTA/Update-Prio</span>
+        </div>
+        ${crashVersionBreakdown(data.raw)}
       </section>
 
       <section class="glass-card" style="padding:20px">
