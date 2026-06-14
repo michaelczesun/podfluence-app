@@ -230,6 +230,59 @@ function render(container, d) {
       </div>
     </div>
 
+    <div class="grid-2">
+      <div class="panel-section" data-jump="kiusage" style="cursor:pointer">
+        <div class="card-header"><strong>KI-Nutzung (Whisper/Groq)</strong><span class="card-sub">heute</span></div>
+        ${(() => {
+          const ki = d.kiUsage || {}, med = d.media || {}
+          const today = num(ki.today_requests), lim = num(ki.groq_req_per_day) || 2000
+          const p = today != null ? Math.min(100, Math.round((today / lim) * 100)) : null
+          const users = Array.isArray(ki.per_user_today) ? ki.per_user_today.length : null
+          const cache = num((med.cache || {}).entries) ?? num(ki.cache_total)
+          const stale = num((med.cache || {}).stale)
+          const stalePct = (cache && stale != null) ? Math.round((stale / cache) * 100) : null
+          const aspd = num(ki.groq_audio_sec_per_day) || 28800
+          const pc = p == null ? COL.grey : p > 95 ? COL.red : p > 80 ? COL.amber : COL.green
+          if (today == null) return '<div class="card-sub" style="padding:10px 0">KI-Daten nicht erreichbar.</div>'
+          return `
+            <div style="display:flex;gap:18px;flex-wrap:wrap;margin:4px 0 10px">
+              <div><div style="font-size:24px;font-weight:800;line-height:1">${fmtNumber(today)}</div><div style="font-size:11px;color:var(--text-muted,#9CA3AF)">Transkriptionen</div></div>
+              <div><div style="font-size:24px;font-weight:800;line-height:1;color:${pc}">${p}%</div><div style="font-size:11px;color:var(--text-muted,#9CA3AF)">von ${fmtNumber(lim)}/Tag</div></div>
+              <div><div style="font-size:24px;font-weight:800;line-height:1">${users == null ? '—' : fmtNumber(users)}</div><div style="font-size:11px;color:var(--text-muted,#9CA3AF)">aktive Nutzer</div></div>
+              <div><div style="font-size:24px;font-weight:800;line-height:1">${cache == null ? '—' : fmtNumber(cache)}</div><div style="font-size:11px;color:var(--text-muted,#9CA3AF)">cached${stalePct != null ? ` · ${stalePct}% alt` : ''}</div></div>
+            </div>
+            <div style="height:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden;margin-bottom:7px"><div style="height:100%;width:${p}%;background:${pc}"></div></div>
+            <div style="font-size:11px;color:var(--text-muted,#9CA3AF)">2. hartes Limit: <strong>${fmtNumber(aspd)} Audio-Sek/Tag (ASPD)</strong> — nicht getrackt, daher nie bulk re-transkribieren. › KI-Nutzer</div>`
+        })()}
+      </div>
+
+      <div class="panel-section" data-jump="cost" style="cursor:pointer">
+        <div class="card-header"><strong>Ressourcen & Limits</strong><span class="card-sub">Free-/Pro-Headroom</span></div>
+        ${(() => {
+          const cost = d.cost || {}, deepl = (d.health && d.health.deepl) || {}, GB = 1024 ** 3
+          const rows = []
+          const bar = (label, used, total, unit) => {
+            if (used == null) return ''
+            const pct = Math.min(100, (used / total) * 100)
+            const c = pct > 90 ? COL.red : pct > 70 ? COL.amber : COL.green
+            return `<div style="margin-bottom:11px">
+              <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:4px"><span>${label}</span><span style="color:${c};font-weight:600">${pct.toFixed(1)}%</span></div>
+              <div style="height:7px;border-radius:999px;background:rgba(255,255,255,.07);overflow:hidden"><div style="height:100%;width:${pct}%;background:${c}"></div></div>
+              <div style="font-size:10.5px;color:var(--text-muted,#9CA3AF);margin-top:3px">${unit}</div>
+            </div>`
+          }
+          const sBytes = num(cost.storage_bytes), dBytes = num(cost.db_size_bytes ?? (d.health && d.health.db && d.health.db.size_bytes))
+          const dUsed = num(deepl.chars_used), dLim = num(deepl.limit) || 480000
+          rows.push(bar('Storage (Pro 100 GB)', sBytes, 100 * GB, sBytes != null ? `${(sBytes / GB).toFixed(2)} GB belegt` : ''))
+          rows.push(bar('DB-Größe (Pro 8 GB)', dBytes, 8 * GB, dBytes != null ? `${(dBytes / GB).toFixed(2)} GB` : ''))
+          rows.push(bar('DeepL-Übersetzung', dUsed, dLim, dUsed != null ? `${fmtNumber(dUsed)} / ${fmtNumber(dLim)} Zeichen` : ''))
+          const out = rows.filter(Boolean).join('')
+          return out || '<div class="card-sub" style="padding:10px 0">Ressourcen-Daten nicht erreichbar.</div>'
+        })()}
+        <div style="font-size:11px;color:var(--text-muted,#9CA3AF);margin-top:2px">› Kosten-Details</div>
+      </div>
+    </div>
+
     <div class="panel-section">
       <div class="card-header" style="display:flex;justify-content:space-between;align-items:center">
         <strong>Wachstum</strong>
@@ -240,6 +293,8 @@ function render(container, d) {
         <div><div style="font-size:20px;font-weight:700;color:${COL.green}">+${fmtNumber(new7 || 0)}</div><div style="font-size:11px;color:var(--text-muted,#9CA3AF)">neue Follows 7d</div></div>
         <div><div style="font-size:20px;font-weight:700">${fmtNumber(num(st.total_posts) || d.posts24 || 0)}</div><div style="font-size:11px;color:var(--text-muted,#9CA3AF)">Beiträge gesamt</div></div>
         <div><div style="font-size:20px;font-weight:700">${fmtNumber(num(st.total_podcasts) || 0)}</div><div style="font-size:11px;color:var(--text-muted,#9CA3AF)">Podcasts</div></div>
+        ${num(st.verified_users ?? st.verified) != null ? `<div><div style="font-size:20px;font-weight:700">${fmtNumber(num(st.verified_users ?? st.verified))}</div><div style="font-size:11px;color:var(--text-muted,#9CA3AF)">verifiziert</div></div>` : ''}
+        ${num(st.premium_users ?? st.premium) != null ? `<div><div style="font-size:20px;font-weight:700;color:#FCD34D">${fmtNumber(num(st.premium_users ?? st.premium))}</div><div style="font-size:11px;color:var(--text-muted,#9CA3AF)">Premium</div></div>` : ''}
       </div>
       ${Array.isArray(fol.top_7d) && fol.top_7d.length ? `<div style="margin-top:12px"><div style="font-size:11px;color:var(--text-muted,#9CA3AF);margin-bottom:5px">Top-Gainer 7d</div>${fol.top_7d.slice(0, 5).map(u => `<span style="display:inline-block;margin:0 6px 6px 0;padding:4px 10px;border-radius:999px;background:rgba(124,92,255,.14);color:#b9a6ff;font-size:12px">@${htmlEscape(u.username || '?')} +${fmtNumber(u.gained || u.new_followers || 0)}</span>`).join('')}</div>` : ''}
     </div>
