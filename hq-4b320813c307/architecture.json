@@ -156,6 +156,12 @@
           "new": true
         },
         {
+          "key": "ki-medien",
+          "label": "KI & Medien",
+          "panels": ["ai-media-ops"],
+          "new": true
+        },
+        {
           "key": "backups",
           "label": "Backups",
           "panels": ["storage-ops"],

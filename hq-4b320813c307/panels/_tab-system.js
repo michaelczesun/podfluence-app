@@ -22,6 +22,7 @@ const SUB_TABS = [
   { key: 'audit',      label: 'Audit',      icon: 'shield',    panel: 'audit-log' },
   { key: 'api-health', label: 'API-Health', icon: 'gauge',     panel: null /* inline */ },
   { key: 'kosten',     label: 'Kosten',     icon: 'bar-chart', panel: 'cost-overview' },
+  { key: 'ki-medien',  label: 'KI & Medien', icon: 'sparkles', panel: 'ai-media-ops' },
   { key: 'backups',    label: 'Backups',    icon: 'database',  panel: null /* inline */ }
 ]
 
