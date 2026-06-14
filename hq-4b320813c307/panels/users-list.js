@@ -226,6 +226,28 @@ export default {
     try {
       container.innerHTML = `
         <style>
+          /* 14.6. Fix Summary-Layout: .ul-grid (components.css) war generisch
+             auto-fill -> alle 4 Karten in 1 Zeile + gleich-hoch gestretcht,
+             .ul-stats gequetscht, .ul-chart ungestyled/ueberlappend.
+             Sauberes panel-scoped 2-Zeilen-Grid. */
+          .users-list-panel .ul-grid {
+            display:grid;
+            grid-template-columns: minmax(190px,1fr) minmax(210px,1.5fr) minmax(170px,0.9fr);
+            grid-template-areas: "hero stats stats" "chart chart donut";
+            gap:14px; align-items:stretch; margin-bottom:18px;
+          }
+          .users-list-panel .ul-hero { grid-area:hero; }
+          .users-list-panel .ul-stats { grid-area:stats; display:grid; grid-template-columns:repeat(2,1fr); gap:12px; font-size:inherit; color:inherit; }
+          .users-list-panel .ul-chart { grid-area:chart; min-height:200px; display:flex; flex-direction:column; }
+          .users-list-panel .ul-chart .chart-host { flex:1; min-height:150px; }
+          .users-list-panel .ul-donut { grid-area:donut; }
+          .users-list-panel .mini-stat { padding:14px 16px; border-radius:14px; display:flex; flex-direction:column; gap:6px; justify-content:center; min-height:78px; }
+          .users-list-panel .mini-stat-label { font-size:12px; color:var(--text-muted,#9CA3AF); }
+          .users-list-panel .mini-stat-val { font-size:26px; font-weight:700; font-variant-numeric:tabular-nums; line-height:1; }
+          @media (max-width:900px) {
+            .users-list-panel .ul-grid { grid-template-columns:1fr 1fr; grid-template-areas:"hero hero" "stats stats" "chart chart" "donut donut"; }
+          }
+          @media (max-width:560px) { .users-list-panel .ul-stats { grid-template-columns:1fr 1fr; } }
           .ul-fbuilder { display:flex; gap:6px; flex-wrap:wrap; margin-top:10px; }
           .ul-fbuilder select, .ul-fbuilder input { padding:6px 8px; border-radius:7px; border:1px solid var(--border, rgba(255,255,255,0.08)); background:var(--surface-elev, rgba(255,255,255,0.04)); color:inherit; font-size:12px; }
           .ul-inline-actions { display:flex; gap:4px; align-items:center; justify-content:flex-end; }
