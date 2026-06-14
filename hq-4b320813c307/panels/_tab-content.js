@@ -75,6 +75,7 @@ const SUBTABS = [
     label: 'Bot',
     icon: '🤖',
     tiles: [
+      { kind: 'panel', id: 'bot-feedback', title: 'Bot-Feedback (unbeantwortet)' },
       { kind: 'panel', id: 'insta-approval-queue', title: 'Approval-Queue' },
       { kind: 'panel', id: 'insta-post-type-scores', title: 'Post-Type-Scores' }
     ]

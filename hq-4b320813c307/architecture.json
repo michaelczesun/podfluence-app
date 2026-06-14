@@ -137,7 +137,7 @@
         {
           "key": "bot",
           "label": "Bot",
-          "panels": ["insta-approval-queue", "insta-post-type-scores", "newsletter-audience-sync"]
+          "panels": ["bot-feedback", "insta-approval-queue", "insta-post-type-scores", "newsletter-audience-sync"]
         },
         {
           "key": "ads",
@@ -243,6 +243,7 @@
     "announcements": "content/announcements",
     "events": "content/events",
     "podcast-resolver": "content/podcasts",
+    "bot-feedback": "content/bot",
     "follower-growth": "people/fan-growth",
     "leads-pipeline": "people/leads",
     "bug-reports-triage": "content/reports",
