@@ -188,8 +188,11 @@ function render(container, d) {
     </div>
 
     <div class="panel-section">
-      <div class="card-header"><strong>Video-Cleanup-Kandidaten</strong><span class="card-sub">${fmtNumber(v.cleanup_count || 0)} · fehlgeschlagen oder >60 Tage</span></div>
-      <div style="font-size:11.5px;color:var(--text-muted,#9CA3AF);margin-bottom:10px">${fmtNumber(v.done || 0)} fertige Videos im Storage (<code>updates-images/audiogram-videos</code>). Kandidaten unten können gefahrlos entfernt werden — Löschung erfolgt manuell (Storage-Schutz).</div>
+      <div class="card-header" style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <span><strong>Video-Cleanup-Kandidaten</strong> <span class="card-sub">${fmtNumber(v.cleanup_count || 0)} · fehlgeschlagen oder >60 Tage</span></span>
+        ${(v.cleanup_count || 0) > 0 ? `<button class="btn" id="aim-cleanup" style="background:#EF4444;color:#fff;border:none">${iconHtml('trash')} ${fmtNumber(v.cleanup_count)} aufräumen</button>` : ''}
+      </div>
+      <div style="font-size:11.5px;color:var(--text-muted,#9CA3AF);margin-bottom:10px">${fmtNumber(v.done || 0)} fertige Videos im Storage (<code>updates-images/audiogram-videos</code>). „Aufräumen" löscht fehlgeschlagene + sehr alte Videos (Datei + Job-Eintrag) — nach Rückfrage.</div>
       ${cleanupRows(v.cleanup_candidates)}
     </div>
   `
@@ -210,6 +213,25 @@ function render(container, d) {
       toast('Self-Heal fehlgeschlagen: ' + (e?.message || e), 'error')
       heal.disabled = false
       heal.innerHTML = `${iconHtml('refresh')} Self-Heal`
+    }
+  })
+
+  const cleanup = container.querySelector('#aim-cleanup')
+  if (cleanup) cleanup.addEventListener('click', async () => {
+    const n = (d.videos?.cleanup_count) || 0
+    if (!window.confirm(`${n} fehlgeschlagene/alte Video(s) endgültig löschen (Datei + Job-Eintrag)? Kann nicht rückgängig gemacht werden.`)) return
+    cleanup.disabled = true
+    cleanup.innerHTML = '⏳ Räume auf…'
+    try {
+      const { data, error } = await sb.functions.invoke('cleanup-renders', { body: { mode: 'execute' } })
+      if (error) throw error
+      if (data?.error) throw new Error(data.error)
+      toast(`${data?.deleted_rows ?? 0} Job(s) + ${data?.deleted_files ?? 0} Datei(en) gelöscht`, 'success')
+      await load(container)
+    } catch (e) {
+      toast('Cleanup fehlgeschlagen: ' + (e?.message || e), 'error')
+      cleanup.disabled = false
+      cleanup.innerHTML = `${iconHtml('trash')} ${n} aufräumen`
     }
   })
 }
