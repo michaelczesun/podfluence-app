@@ -122,6 +122,17 @@
 @media (max-width: 600px) {
   .panel-section { padding: 12px !important; }
   .hero-row { margin-bottom: 14px !important; }
+  /* Hero-STAT-Kacheln (kleine Zahlen) auf dem Handy 2-spaltig statt 1 —
+   * mobile.css zwang sie auf 1 Spalte → bei 4-6 Kacheln endloses Scrollen.
+   * Dieser Layer lädt nach mobile.css, gewinnt also. Nur .hero-row (kleine
+   * stat-hero-Tiles), NICHT .hero-section/.kpi-grid (größere Inhalte). */
+  .hero-row { grid-template-columns: repeat(2, 1fr) !important; gap: 10px !important; }
+  .hero-row .stat-hero { padding: 12px !important; }
+  .hero-row .stat-value { font-size: 22px !important; }
+}
+/* Sehr schmal (<360px): doch 1 Spalte, sonst quetscht's */
+@media (max-width: 359px) {
+  .hero-row { grid-template-columns: 1fr !important; }
 }
 
 /* ---- 6. MODALS auf Mobile auf Viewport begrenzen ----
