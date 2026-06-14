@@ -186,6 +186,12 @@
           "new": true
         },
         {
+          "key": "ki-usage",
+          "label": "KI-Usage",
+          "panels": ["ai-usage"],
+          "new": true
+        },
+        {
           "key": "push",
           "label": "Push-Zustellung",
           "panels": ["push-delivery"],
@@ -244,6 +250,7 @@
     "events": "content/events",
     "podcast-resolver": "content/podcasts",
     "bot-feedback": "content/bot",
+    "ai-usage": "system/ki-usage",
     "follower-growth": "people/fan-growth",
     "leads-pipeline": "people/leads",
     "bug-reports-triage": "content/reports",
