@@ -13,6 +13,19 @@
   "nullRoleAccess": false,
   "denyMessage": "CRM-Zugriff verweigert. Bitte mit Admin-Konto anmelden.",
   "tabs": {
+    "cockpit": {
+      "label": "Cockpit",
+      "icon": "🛰️",
+      "access": {
+        "owner": "rw",
+        "admin": "rw",
+        "manager": "rw",
+        "support": "rw",
+        "mod": "rw",
+        "marketing": "rw"
+      },
+      "subtabs": null
+    },
     "pulse": {
       "label": "Pulse",
       "icon": "📊",

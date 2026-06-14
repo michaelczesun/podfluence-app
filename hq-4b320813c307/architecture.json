@@ -2,6 +2,18 @@
   "version": "2.0",
   "topLevel": [
     {
+      "key": "cockpit",
+      "label": "Cockpit",
+      "icon": "🛰️",
+      "subTabs": [
+        {
+          "key": "cockpit",
+          "label": "Cockpit",
+          "panels": ["cockpit"]
+        }
+      ]
+    },
+    {
       "key": "pulse",
       "label": "Pulse",
       "icon": "📊",
