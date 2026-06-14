@@ -6,12 +6,23 @@ import { countUp, fadeIn, skeletonLoader } from '/lib/animations.js?v=20260610q'
 import { drawer, segmentedControl } from '/lib/layout-extras.js?v=20260610q'
 import { showUserDetailModal, grantPremium } from '/lib/panel-actions.js?v=20260610q'
 
-// Local broadcast-push helper (sendBroadcastPush is not exported from panel-actions)
+// Local broadcast-push helper.
+// 14.6. Fix: die Edge-Function 'send-broadcast-push' existiert NICHT (404) →
+// "Push an Top-Hörer" warf immer. Stattdessen die echten RPCs (wie push-broadcast.js):
+// gezielte user_ids → admin_push_to_users(p_user_ids,p_title,p_message);
+// ohne user_ids → Legacy send_broadcast_push(p_title,p_body,p_audience).
 async function sendBroadcastPush({ title, body, audience = 'custom', user_ids = [] }) {
-  const { data, error } = await sb.functions.invoke('send-broadcast-push', {
-    body: { title, body, audience, user_ids },
+  if (user_ids && user_ids.length) {
+    const { data, error } = await sb.rpc('admin_push_to_users', {
+      p_user_ids: user_ids, p_title: title, p_message: body,
+    })
+    if (error) throw new Error(error.message || 'admin_push_to_users fehlgeschlagen')
+    return data
+  }
+  const { data, error } = await sb.rpc('send_broadcast_push', {
+    p_title: title, p_body: body, p_audience: audience,
   })
-  if (error) throw error
+  if (error) throw new Error(error.message || 'send_broadcast_push fehlgeschlagen')
   return data
 }
 

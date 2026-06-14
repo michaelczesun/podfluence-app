@@ -162,6 +162,12 @@
           "new": true
         },
         {
+          "key": "push",
+          "label": "Push-Zustellung",
+          "panels": ["push-delivery"],
+          "new": true
+        },
+        {
           "key": "backups",
           "label": "Backups",
           "panels": ["storage-ops"],
