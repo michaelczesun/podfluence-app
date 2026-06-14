@@ -1,0 +1,125 @@
+/* ============================================================
+ * CRM CONSISTENCY LAYER (14.6.2026)
+ * ------------------------------------------------------------
+ * Michael: "auf mobil ist das CRM jede Seite fast unterschiedlich
+ * von den Headern her, Randbereichen und so weiter."
+ * Ursache (Audit 14.6.): jedes Tab-Modul + viele Panels bringen
+ * EIGENE Shell-Paddings (8/12/16/20/24px) + EIGENE Header-Titel-
+ * Größen (16/21/22/24px/1.4rem) mit. Mehrere Shells (pulse/sys)
+ * hatten GAR KEIN Mobile-Override → blieben am Handy auf Desktop-Rand.
+ *
+ * Diese Schicht lädt ALS LETZTE (nach components/theme/mobile/
+ * futuristic) und zwingt ALLE bekannten Varianten auf EINE
+ * responsive Skala. Rein Layout/Spacing — keine Farben/Logik.
+ * ============================================================ */
+
+/* ---- 1. EINHEITLICHES SEITEN-PADDING (alle Shell-Wrapper) ----
+ * Eine Skala für jede Top-Tab- + Panel-Shell. So hat jede Seite
+ * exakt denselben Randabstand, Desktop wie Mobile. */
+.panel-shell, .pulse-shell, .sys-shell, .settings-shell, .ti-shell,
+.tm-shell, .brt-shell, .lp-shell, .lo-shell, .ah-shell, .audit-shell,
+.cr-shell, .growth-shell, .people-shell, .content-shell {
+  padding: 22px 24px !important;
+  min-height: 100%;
+}
+
+@media (max-width: 1024px) {
+  .panel-shell, .pulse-shell, .sys-shell, .settings-shell, .ti-shell,
+  .tm-shell, .brt-shell, .lp-shell, .lo-shell, .ah-shell, .audit-shell,
+  .cr-shell, .growth-shell, .people-shell, .content-shell {
+    padding: 18px 18px !important;
+  }
+}
+
+@media (max-width: 600px) {
+  .panel-shell, .pulse-shell, .sys-shell, .settings-shell, .ti-shell,
+  .tm-shell, .brt-shell, .lp-shell, .lo-shell, .ah-shell, .audit-shell,
+  .cr-shell, .growth-shell, .people-shell, .content-shell {
+    padding: 14px 14px calc(16px + env(safe-area-inset-bottom, 0px)) !important;
+  }
+}
+
+/* ---- 2. EINHEITLICHE SEITEN-HEADER-TITEL ----
+ * Alle Top-/Panel-Header-Titel auf eine Größe (egal ob h2 oder
+ * .panel-title). Vorher: 16–24px bunt gemischt. */
+.panel-head h2, .pulse-head h2, .sys-head h2, .settings-head h2,
+.ti-head h2, .brt-head h2, .lp-head h2, .ah-head h2, .lo-head h2,
+.growth-head h2, .panel-head .panel-title, .panel-title {
+  font-size: 19px !important;
+  font-weight: 700 !important;
+  line-height: 1.25 !important;
+  letter-spacing: -0.2px !important;
+}
+.panel-sub, .pulse-head .sub, .sys-head .sub, .panel-head-left .panel-sub {
+  font-size: 12.5px !important;
+  line-height: 1.4 !important;
+}
+/* Seiten-Header-Titel flach + bündig: der tab-farbene Akzent-Balken (theme.css
+ * .panel-head h2) erschien NUR auf Alt-h2-Panels, nicht auf .panel-title →
+ * Inkonsistenz. Balken hier neutralisieren, damit ALLE Seiten-Header identisch
+ * sind (der Balken bleibt für echte .section-title-Section-Header erhalten). */
+.panel-head h2, .pulse-head h2, .sys-head h2, .settings-head h2,
+.ti-head h2, .brt-head h2, .lp-head h2, .ah-head h2, .lo-head h2, .growth-head h2 {
+  border-left: 0 !important;
+  padding-left: 0 !important;
+}
+
+@media (max-width: 600px) {
+  .panel-head h2, .pulse-head h2, .sys-head h2, .settings-head h2,
+  .ti-head h2, .brt-head h2, .lp-head h2, .ah-head h2, .lo-head h2,
+  .growth-head h2, .panel-head .panel-title, .panel-title {
+    font-size: 17px !important;
+  }
+}
+
+/* ---- 3. EINHEITLICHER HEADER-ABSTAND + MOBILE-WRAP ----
+ * Gleicher Abstand unter jedem Seiten-Header; auf Mobile dürfen
+ * Header-Action-Buttons unter den Titel umbrechen statt zu quetschen. */
+.panel-head, .pulse-head, .sys-head, .settings-head, .ti-head,
+.brt-head, .lp-head, .ah-head, .lo-head, .growth-head {
+  margin-bottom: 16px !important;
+  gap: 12px !important;
+}
+/* divergente Header-Eigen-Paddings neutralisieren, damit Titel
+ * bündig mit dem Shell-Rand sitzt (vorher pulse-head: padding 4px). */
+.pulse-head { padding: 0 !important; }
+
+@media (max-width: 600px) {
+  .panel-head, .sys-head, .settings-head, .ti-head, .brt-head,
+  .lp-head, .ah-head, .lo-head, .growth-head {
+    flex-wrap: wrap !important;
+    align-items: flex-start !important;
+    margin-bottom: 14px !important;
+    row-gap: 10px !important;
+  }
+  /* Header-Action-Buttons dürfen auf eigene Zeile, volle Breite-Tendenz */
+  .panel-head > .btn, .panel-head > button,
+  .sys-head > .btn, .sys-head > button {
+    flex-shrink: 0;
+  }
+}
+
+/* ---- 4. EINHEITLICHE SEGMENT-/SUBTAB-LEISTEN ----
+ * pulse-seg / sys-seg / Subtab-Pills: gleicher Abstand, auf Mobile
+ * horizontal scrollbar statt umbrechen/quetschen. */
+.pulse-seg, .sys-subtabs, .sys-seg, .seg-control, .subtab-bar {
+  margin-bottom: 16px !important;
+}
+@media (max-width: 600px) {
+  .pulse-seg, .sys-subtabs, .sys-seg, .seg-control, .subtab-bar {
+    flex-wrap: nowrap !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    margin-left: -2px; margin-right: -2px;
+  }
+  .pulse-seg::-webkit-scrollbar, .sys-subtabs::-webkit-scrollbar { display: none; }
+}
+
+/* ---- 5. PANEL-SECTION-ABSTÄNDE VEREINHEITLICHEN ----
+ * Gleicher vertikaler Rhythmus zwischen Karten auf jeder Seite. */
+.panel-section + .panel-section { margin-top: 14px; }
+@media (max-width: 600px) {
+  .panel-section { padding: 12px !important; }
+  .hero-row { margin-bottom: 14px !important; }
+}
