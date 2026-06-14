@@ -123,3 +123,44 @@
   .panel-section { padding: 12px !important; }
   .hero-row { margin-bottom: 14px !important; }
 }
+
+/* ---- 6. MODALS auf Mobile auf Viewport begrenzen ----
+ * modal() in lib/ui.js setzt inline width:600px → läuft am Handy über.
+ * Hier hart auf Viewport-Breite kappen + Body scrollbar + Höhe deckeln.
+ * Greift für pf-modal (Haupt), generische Modal-Karten + Action-Modals. */
+@media (max-width: 600px) {
+  .pf-overlay, .modal-overlay, .lx-modal-overlay { padding: 10px !important; box-sizing: border-box; }
+  .pf-modal, .modal-card, .crm-modal, .lx-modal, .ul-push-modal, .audit-modal, .tp-drawer {
+    width: calc(100vw - 20px) !important;
+    max-width: calc(100vw - 20px) !important;
+    max-height: 88vh !important;
+    box-sizing: border-box !important;
+    display: flex !important;
+    flex-direction: column !important;
+  }
+  .pf-modal-body, .modal-body { overflow-wrap: anywhere; }
+  .pf-modal-body, .modal-body, .crm-modal-body { overflow-y: auto !important; -webkit-overflow-scrolling: touch; }
+  /* Modal-Header-Zeilen dürfen umbrechen statt zu quetschen */
+  .pf-modal-header, .modal-head, .ul-push-modal-head, .audit-modal-head { flex-wrap: wrap; gap: 8px; }
+}
+
+/* ---- 7. TABELLEN auf Mobile: horizontal scrollbar statt Überlauf ----
+ * 10 Panels rendern <table> OHNE overflow-Wrapper → liefen am Handy aus dem
+ * Karten-Rand. Sektion mit Tabelle wird scrollbar (:has, iOS 15.4+), plus
+ * direkter data-table-Fallback (kompaktere Zellen, nowrap). */
+@media (max-width: 600px) {
+  .data-table-wrap, .table-wrap, .table-scroll,
+  .panel-section:has(table), .panel-section:has(.data-table) {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .data-table, table.data-table, .panel-section table {
+    font-size: 12px;
+    width: 100%;
+  }
+  .data-table th, .data-table td,
+  .panel-section table th, .panel-section table td {
+    padding: 7px 9px !important;
+    white-space: nowrap;
+  }
+}
