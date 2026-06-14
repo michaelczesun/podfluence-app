@@ -135,6 +135,18 @@
   .hero-row { grid-template-columns: 1fr !important; }
 }
 
+/* ---- 8. KARTEN-OVERFLOW auf Mobile abhärten ----
+ * Klassischer Flexbox-Bug: Flex-Kinder haben default min-width:auto und
+ * schrumpfen NICHT unter ihre Inhaltsbreite -> flex-wrap greift nicht,
+ * Aktions-Button-Reihen + lange Texte sprengen die Karte nach rechts
+ * (z.B. moderation, bug-reports). min-width:0 erlaubt Schrumpfen+Umbruch. */
+@media (max-width: 600px) {
+  .panel-section { overflow-wrap: anywhere; }
+  .panel-section > * { min-width: 0; }
+  /* Button-Reihen in Karten brechen voll um statt rauszulaufen */
+  .panel-section [style*="flex-wrap"] { width: 100%; box-sizing: border-box; }
+}
+
 /* ---- 6. MODALS auf Mobile auf Viewport begrenzen ----
  * modal() in lib/ui.js setzt inline width:600px → läuft am Handy über.
  * Hier hart auf Viewport-Breite kappen + Body scrollbar + Höhe deckeln.
