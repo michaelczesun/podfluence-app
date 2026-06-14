@@ -549,6 +549,45 @@ function renderGrowthCard(series) {
   </div>`
 }
 
+// ── Free-Tier / Audiogramm-Budget (Daten: admin_cost_overview) ──
+function ftBytes(n) {
+  if (!n || n < 0) return '0'
+  const u = ['B', 'KB', 'MB', 'GB', 'TB']; let i = 0, v = n
+  while (v >= 1024 && i < u.length - 1) { v /= 1024; i++ }
+  return `${v.toFixed(v >= 100 ? 0 : v >= 10 ? 1 : 2)} ${u[i]}`
+}
+function ftPct(used, total) { if (!total) return 0; return Math.min(100, Math.round((used / total) * 1000) / 10) }
+function ftBar(label, usedTxt, p, freeTxt) {
+  const col = p >= 85 ? '#EF4444' : p >= 60 ? '#F59E0B' : '#22C55E'
+  return `<div style="min-width:0">
+    <div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;margin-bottom:4px">
+      <span style="color:var(--text,#fff);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${label}</span>
+      <span style="color:var(--text-muted,#9CA3AF);white-space:nowrap">${usedTxt}</span>
+    </div>
+    <div style="height:7px;border-radius:5px;background:rgba(255,255,255,0.08);overflow:hidden">
+      <div style="height:100%;width:${p}%;background:${col};border-radius:5px"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;margin-top:3px;font-size:11px">
+      <span style="color:${col};font-weight:600">${p}% genutzt</span>
+      <span style="color:var(--text-muted,#9CA3AF)">${freeTxt}</span>
+    </div>
+  </div>`
+}
+function renderFreeTierCard(d) {
+  const GBV = 1024 * 1024 * 1024
+  const wT = d.whisper_today || 0, wLim = 2000
+  const vids = d.render_jobs_30d || 0, vLim = 5400
+  const dbB = d.db_size_bytes || 0, dbLim = 8 * GBV
+  const stB = d.storage_bytes || 0, stLim = 100 * GBV
+  return `<div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:18px">
+    ${ftBar('🎙️ KI-Clip-Auswahl heute', `${fmtNumber(wT)} / ${fmtNumber(wLim)}`, ftPct(wT, wLim), `${fmtNumber(Math.max(0, wLim - wT))} heute frei`)}
+    ${ftBar('🎬 Audiogramm-Videos (30 T)', `${fmtNumber(vids)} / ~${fmtNumber(vLim)}`, ftPct(vids, vLim), 'Cloud-Run Free-Tier')}
+    ${ftBar('🗄️ Datenbank', `${ftBytes(dbB)} / 8 GB`, ftPct(dbB, dbLim), `${ftBytes(dbLim - dbB)} frei`)}
+    ${ftBar('📦 Storage', `${ftBytes(stB)} / 100 GB`, ftPct(stB, stLim), `${ftBytes(stLim - stB)} frei`)}
+  </div>
+  <div style="font-size:11px;color:var(--text-muted,#9CA3AF);margin-top:12px">Volle Aufschlüsselung: <a href="#system/ki-medien" style="color:#7C5CFF;text-decoration:none">System → KI &amp; Medien</a> · <a href="#system/kosten" style="color:#7C5CFF;text-decoration:none">Kosten</a></div>`
+}
+
 function styles() {
   return `<style>
     .ah-shell { display:flex; flex-direction:column; gap:22px; padding:20px; }
@@ -718,6 +757,11 @@ export default {
 
         <div id="ah-hero">
           ${skeletonGrid({ tiles: 4, minTileWidth: 230, height: 160, radius: 16 })}
+        </div>
+
+        <div class="section" id="ah-freetier-section">
+          <div class="head"><h3>Free-Tier &amp; Audiogramm-Budget</h3><span class="badge" id="ah-ft-badge">heute</span></div>
+          <div id="ah-freetier">${skeletonCard({ height: 90 })}</div>
         </div>
 
         <div class="ah-grid">
@@ -910,6 +954,19 @@ export default {
       }
     }
 
+    // ---- Free-Tier / Audiogramm-Budget ----
+    const renderFreeTier = async () => {
+      const el = container.querySelector('#ah-freetier')
+      if (!el) return
+      try {
+        const { data, error } = await sb.rpc('admin_cost_overview')
+        if (error) throw error
+        el.innerHTML = renderFreeTierCard(data)
+      } catch (e) {
+        el.innerHTML = `<div style="padding:12px;color:var(--text-muted,#9CA3AF);font-size:12.5px">Free-Tier-Daten nicht ladbar (<code>admin_cost_overview</code>). Details: <a href="#system/ki-medien" style="color:#7C5CFF">KI &amp; Medien</a> · <a href="#system/kosten" style="color:#7C5CFF">Kosten</a></div>`
+      }
+    }
+
     // ---- Quick actions ----
     container.querySelectorAll('.qa-btn').forEach(b => {
       b.addEventListener('click', async () => {
@@ -927,14 +984,14 @@ export default {
 
     // ---- Refresh button ----
     const debouncedRefresh = debounce(async () => {
-      await Promise.all([renderHero(), renderAlerts(), renderAudit(false), renderGrowth()])
+      await Promise.all([renderHero(), renderAlerts(), renderAudit(false), renderGrowth(), renderFreeTier()])
       if (lastUpd) lastUpd.textContent = `Aktualisiert: ${fmtDateTime(new Date())} · Auto 45s`
       try { toast('Admin-Home aktualisiert', 'success') } catch (_) {}
     }, 300)
     container.querySelector('#ah-refresh')?.addEventListener('click', debouncedRefresh)
 
     // ---- Initial load ----
-    await Promise.all([renderHero(), renderAlerts(), renderAudit(false), renderGrowth()])
+    await Promise.all([renderHero(), renderAlerts(), renderAudit(false), renderGrowth(), renderFreeTier()])
     if (lastUpd) lastUpd.textContent = `Aktualisiert: ${fmtDateTime(new Date())} · Auto 45s`
 
     // ---- Realtime: Audit-Log Live-Updates ----

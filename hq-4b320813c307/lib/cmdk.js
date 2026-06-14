@@ -67,6 +67,15 @@ function injectStylesOnce() {
     .cmdk-mic-btn:hover { background: rgba(255,255,255,0.05); color: #fff; }
     .cmdk-mic-btn.recording { color: #F87171; animation: cmdk-pulse 1.2s ease-in-out infinite; }
     @keyframes cmdk-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.45; } }
+    .cmdk-close-btn {
+      background: transparent; border: none;
+      color: var(--text-muted, #9CA3AF);
+      cursor: pointer; padding: 6px 10px; border-radius: 8px; margin-left: 2px;
+      display: inline-flex; align-items: center; justify-content: center;
+    }
+    .cmdk-close-btn:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    /* Am Handy groesser/auffaelliger antippbar machen (Vollbild-Modal). */
+    @media (max-width: 767px) { .cmdk-close-btn { padding: 8px 12px; } .cmdk-close-btn svg { width: 22px; height: 22px; } }
     .cmdk-list { flex: 1; overflow-y: auto; padding: 6px; }
     .cmdk-group-head {
       font-size: 10px; text-transform: uppercase; letter-spacing: 0.08em;
@@ -570,6 +579,9 @@ export function openCmdK() {
         <button class="cmdk-mic-btn" type="button" title="Sprache (de-DE)" aria-label="Spracheingabe">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0"/><path d="M12 18v3"/></svg>
         </button>
+        <button class="cmdk-close-btn" type="button" title="Schließen" aria-label="Schließen">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
       </div>
       <div class="cmdk-list"></div>
       <div class="cmdk-footer">
@@ -614,6 +626,10 @@ export function openCmdK() {
     if (recognition) { stopSpeech(); micBtn.classList.remove('recording'); return }
     startSpeech(input, micBtn)
   })
+  // Schließen-Button: am Handy ist das Modal Vollbild (kein Backdrop-Tap, kein
+  // Escape) -> ohne X kommt man nicht mehr raus.
+  const closeBtn = backdrop.querySelector('.cmdk-close-btn')
+  closeBtn?.addEventListener('click', e => { e.preventDefault(); closeCmdK() })
   backdrop.addEventListener('click', e => {
     if (e.target === backdrop) closeCmdK()
   })
