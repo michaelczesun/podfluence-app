@@ -126,6 +126,12 @@
           "key": "bot",
           "label": "Bot",
           "panels": ["insta-approval-queue", "insta-post-type-scores", "newsletter-audience-sync"]
+        },
+        {
+          "key": "ads",
+          "label": "Ads",
+          "panels": ["ads-manager"],
+          "new": true
         }
       ]
     },
@@ -220,6 +226,7 @@
     "insta-post-type-scores": "content/bot",
     "newsletter-audience-sync": "content/bot",
     "audit-log": "system/audit",
+    "ads-manager": "content/ads",
     "follower-growth": "people/fan-growth",
     "leads-pipeline": "people/leads",
     "bug-reports-triage": "content/reports",

@@ -68,6 +68,14 @@ const SUBTABS = [
     tiles: [
       { kind: 'panel', id: 'discover-control', title: 'Discover-Steuerpult' }
     ]
+  },
+  {
+    key: 'ads',
+    label: 'Ads',
+    icon: '📣',
+    tiles: [
+      { kind: 'panel', id: 'ads-manager', title: 'Ads-Manager' }
+    ]
   }
 ]
 
