@@ -271,15 +271,18 @@ function render(container, d) {
               <div style="font-size:10.5px;color:var(--text-muted,#9CA3AF);margin-top:3px">${unit}</div>
             </div>`
           }
+          const ki = d.kiUsage || {}
           const sBytes = num(cost.storage_bytes), dBytes = num(cost.db_size_bytes ?? (d.health && d.health.db && d.health.db.size_bytes))
           const dUsed = num(deepl.chars_used), dLim = num(deepl.limit) || 480000
+          const gReq = num(ki.today_requests), gLim = num(ki.groq_req_per_day) || 2000
           rows.push(bar('Storage (Pro 100 GB)', sBytes, 100 * GB, sBytes != null ? `${(sBytes / GB).toFixed(2)} GB belegt` : ''))
           rows.push(bar('DB-Größe (Pro 8 GB)', dBytes, 8 * GB, dBytes != null ? `${(dBytes / GB).toFixed(2)} GB` : ''))
+          rows.push(bar('Groq Whisper (heute)', gReq, gLim, gReq != null ? `${fmtNumber(gReq)} / ${fmtNumber(gLim)} Anfragen heute` : ''))
           rows.push(bar('DeepL-Übersetzung', dUsed, dLim, dUsed != null ? `${fmtNumber(dUsed)} / ${fmtNumber(dLim)} Zeichen` : ''))
           const out = rows.filter(Boolean).join('')
           return out || '<div class="card-sub" style="padding:10px 0">Ressourcen-Daten nicht erreichbar.</div>'
         })()}
-        <div style="font-size:11px;color:var(--text-muted,#9CA3AF);margin-top:2px">› Kosten-Details</div>
+        <div style="font-size:11px;color:#A78BFA;margin-top:4px;font-weight:600">→ Alle Ressourcen & Limits</div>
       </div>
     </div>
 

@@ -21,7 +21,7 @@ const SUB_TABS = [
   { key: 'tasks',      label: 'Tasks',      icon: 'inbox',     panel: 'tasks-inbox' },
   { key: 'audit',      label: 'Audit',      icon: 'shield',    panel: 'audit-log' },
   { key: 'api-health', label: 'API-Health', icon: 'gauge',     panel: null /* inline */ },
-  { key: 'kosten',     label: 'Kosten',     icon: 'bar-chart', panel: 'cost-overview' },
+  { key: 'kosten',     label: 'Ressourcen & Limits', icon: 'bar-chart', panel: 'cost-overview' },
   { key: 'ki-medien',  label: 'KI & Medien', icon: 'sparkles', panel: 'ai-media-ops' },
   { key: 'ki-usage',   label: 'KI-Nutzer',  icon: 'activity',  panel: 'ai-usage' },
   { key: 'push',       label: 'Push-Zustellung', icon: 'bell', panel: 'push-delivery' },
@@ -310,7 +310,7 @@ function mountBackups(container) {
 
 // ---------- Sub-panel loader (lazy import + mount) ----------
 
-const CACHE_BUST = '20260608f'
+const CACHE_BUST = '20260615a'
 
 async function mountSubPanel(paneEl, panelId, opts = {}) {
   try {
