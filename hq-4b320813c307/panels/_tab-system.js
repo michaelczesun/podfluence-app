@@ -19,6 +19,7 @@ import { fadeIn } from '/lib/animations.js?v=20260610q'
 const SUB_TABS = [
   { key: 'settings',   label: 'Settings',   icon: 'settings',  panel: 'app-settings' },
   { key: 'tasks',      label: 'Tasks',      icon: 'inbox',     panel: 'tasks-inbox' },
+  { key: 'team',       label: 'Team-Aktivität', icon: 'user',  panel: 'team-activity' },
   { key: 'audit',      label: 'Audit',      icon: 'shield',    panel: 'audit-log' },
   { key: 'api-health', label: 'API-Health', icon: 'gauge',     panel: null /* inline */ },
   { key: 'kosten',     label: 'Ressourcen & Limits', icon: 'bar-chart', panel: 'cost-overview' },
