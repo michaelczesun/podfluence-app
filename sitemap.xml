@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://hozd.app/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
-  <url><loc>https://hozd.app/u/jule</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/Papas.Musikgeschichten</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://hozd.app/u/jule</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/dermulec</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/user_527b464e</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/eileen</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
@@ -16,9 +16,9 @@
   <url><loc>https://hozd.app/u/thesanniside</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/marenm</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/diephoenixseele</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://hozd.app/u/michaelczesun</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/bgagvat</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/karinjanner</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://hozd.app/u/michaelczesun</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/derkrankenpfleger</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/jasi</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/ilhanyunusoezcan</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
@@ -53,8 +53,8 @@
   <url><loc>https://hozd.app/u/oaad</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/podfluence</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/anmacha</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://hozd.app/u/machmalrichtig</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/rewrite</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://hozd.app/u/machmalrichtig</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/mariechristine</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/nerdi</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/anschi</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
