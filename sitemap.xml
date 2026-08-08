@@ -2,9 +2,9 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url><loc>https://hozd.app/</loc><changefreq>daily</changefreq><priority>1.0</priority></url>
   <url><loc>https://hozd.app/u/chronikderschattenpodcast</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://hozd.app/u/thomas</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/dermulec</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/Papas.Musikgeschichten</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://hozd.app/u/thomas</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/jule</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/user_527b464e</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/eileen</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
@@ -34,9 +34,8 @@
   <url><loc>https://hozd.app/u/marcel_mcfly</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/millcast2000</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/blutvergiessen</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://hozd.app/u/truecrimebrothers</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/sogehtpodcast</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
-  <url><loc>https://hozd.app/u/jahnsi</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://hozd.app/u/truecrimebrothers</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/iggymel</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/Markus3Meinungen</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/lifeloveandparenting</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
@@ -45,6 +44,7 @@
   <url><loc>https://hozd.app/u/leipziglauscht</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/szenerie</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/flimmerkiste_mit_marco</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
+  <url><loc>https://hozd.app/u/jahnsi</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/streamkaffee</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/jobfluesterer</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
   <url><loc>https://hozd.app/u/quentara</loc><changefreq>weekly</changefreq><priority>0.7</priority></url>
