@@ -1,0 +1,131 @@
+<!doctype html>
+<!--
+  2026-09-11: Neu angelegt fuer den Play-Store-Release. Google verlangt neben dem
+  In-App-Loeschpfad zwingend eine ausserhalb der App erreichbare Web-Ressource zur
+  Konto-Loeschung (support.google.com/googleplay/android-developer/answer/13327111);
+  diese URL wird im Data-Safety-Formular unter "Data deletion" hinterlegt.
+  Inhalt deckt sich mit dem App-Flow (settings.tsx -> RPC request_account_deletion,
+  30 Tage Frist, danach Hard-Delete via cleanup-old-data).
+-->
+<html lang="de">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Konto löschen · hozd</title>
+<meta name="description" content="So löschst du dein hozd-Konto: direkt in der App oder per E-Mail — inklusive Übersicht, welche Daten gelöscht werden und welche 30 Tage aufbewahrt bleiben." />
+<link rel="canonical" href="https://hozd.app/konto-loeschen/" />
+<meta name="robots" content="index,follow" />
+<meta name="theme-color" content="#0B0B0F" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E🎧%3C/text%3E%3C/svg%3E" />
+<style>
+  :root {
+    --bg-deep: #07070A;
+    --surface: #16161D;
+    --border: #2A2A33;
+    --primary-2: #A78BFA;
+    --text: #FFFFFF;
+    --text-muted: #9CA3AF;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-deep); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    line-height: 1.6;
+  }
+  body {
+    background:
+      radial-gradient(ellipse 80% 60% at 50% 0%, rgba(139, 92, 246, 0.18), transparent 60%),
+      var(--bg-deep);
+    min-height: 100vh;
+  }
+  main { max-width: 720px; margin: 0 auto; padding: 56px 24px 64px; }
+  h1 { font-size: 32px; margin: 0 0 8px; }
+  h2 { font-size: 20px; margin: 32px 0 8px; color: var(--primary-2); }
+  p, li { color: var(--text-muted); }
+  strong { color: var(--text); }
+  a { color: var(--primary-2); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  .back { display: inline-block; margin-bottom: 24px; font-size: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 20px 24px; margin: 16px 0; }
+  .note { background: rgba(245, 158, 11, 0.10); border: 1px solid rgba(245, 158, 11, 0.30); padding: 12px 14px; border-radius: 10px; color: #FCD34D; font-size: 13px; margin: 16px 0; }
+  .btn { display: inline-block; margin-top: 8px; padding: 12px 18px; border-radius: 10px; background: var(--primary-2); color: #17121F; font-weight: 600; font-size: 15px; }
+  .btn:hover { text-decoration: none; opacity: 0.9; }
+  ul { padding-left: 20px; }
+  .en { font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <a class="back" href="/">← zurück zu hozd.app</a>
+  <h1>Konto löschen</h1>
+  <p>Du kannst dein hozd-Konto jederzeit selbst löschen — in der App oder, falls du sie nicht mehr installiert hast, per E-Mail.</p>
+
+  <div class="card">
+    <h2>Weg 1: direkt in der App</h2>
+    <p>
+      hozd öffnen → <strong>Einstellungen</strong> → Bereich <strong>Konto</strong> → <strong>Konto löschen</strong> → bestätigen.
+      Das Konto wird sofort gesperrt und ist für andere nicht mehr sichtbar.
+    </p>
+  </div>
+
+  <div class="card">
+    <h2>Weg 2: per E-Mail (ohne App)</h2>
+    <p>
+      Schreib uns an <a href="mailto:hello@hozd.app">hello@hozd.app</a>
+      mit dem Betreff <strong>Konto löschen</strong> und deinem hozd-Benutzernamen.
+    </p>
+    <p>
+      <strong>Identitätsprüfung:</strong> Schick die Anfrage von der E-Mail-Adresse, mit der dein Konto registriert ist.
+      Kommt sie von einer anderen Adresse, senden wir einen Bestätigungscode an die im Konto hinterlegte Adresse — erst nach
+      dessen Rücksendung löschen wir. Wir fragen nie nach deinem Passwort.
+    </p>
+    <p>Wir bestätigen den Eingang und starten die Löschung innerhalb von 30 Tagen ab Anfrage.</p>
+    <a class="btn" href="mailto:hello@hozd.app?subject=Konto%20l%C3%B6schen&amp;body=Bitte%20l%C3%B6scht%20mein%20hozd-Konto.%0A%0ABenutzername%3A%20%0AE-Mail%20des%20Kontos%3A%20%0A">E-Mail zur Löschung schreiben</a>
+  </div>
+
+  <div class="card">
+    <h2>Was gelöscht wird</h2>
+    <ul>
+      <li>Kontodaten: Benutzername, Name, E-Mail-Adresse, Profilbild, Bio, Einstellungen</li>
+      <li>Alle eigenen Inhalte: Beiträge, Sprachnachrichten und hochgeladene Audios, Kommentare, Umfragen</li>
+      <li>Interaktionen: Likes, Follows, Umfrage-Stimmen, Lesezeichen, Playlists</li>
+      <li>Nutzungsdaten: Hörverlauf, Benachrichtigungen, Chat-Nachrichten, Push-Token</li>
+    </ul>
+    <p>Die Löschung erfasst alle Datensätze, die mit deinem Konto verknüpft sind. Sie ist danach nicht wiederherstellbar.</p>
+  </div>
+
+  <div class="card">
+    <h2>Was 30 Tage aufbewahrt wird</h2>
+    <p>
+      Nach deiner Anfrage wird das Konto sofort gesperrt und ausgeblendet, die Daten aber noch <strong>30 Tage</strong> vorgehalten —
+      als Schutz vor versehentlicher oder fremdveranlasster Löschung. In dieser Frist kannst du die Löschung per E-Mail an
+      <a href="mailto:hello@hozd.app">hello@hozd.app</a> stoppen. Nach Ablauf der 30 Tage wird das Konto samt Inhalten endgültig entfernt.
+    </p>
+    <p>
+      Unabhängig davon: technische Server-Logs werden maximal 30 Tage gespeichert. Rein statistische Kennzahlen ohne Personenbezug
+      (z. B. Gesamtzahl der Abrufe) bleiben bestehen, lassen sich dir aber nicht mehr zuordnen.
+    </p>
+  </div>
+
+  <div class="note">
+    Inhalte, die andere Nutzerinnen und Nutzer außerhalb von hozd gespeichert oder geteilt haben (z. B. Screenshots), liegen außerhalb unseres Zugriffs.
+  </div>
+
+  <div class="card">
+    <h2 class="en">English: delete your account</h2>
+    <p class="en">
+      In the app: <strong>Settings → Account → Delete account</strong>. Without the app: email
+      <a href="mailto:hello@hozd.app">hello@hozd.app</a> with the subject “Konto löschen” and your hozd username, sent from the
+      address your account is registered with. Your account is suspended immediately and permanently deleted after a 30-day
+      recovery window, including profile data, posts, voice messages, comments, likes, follows, listening history, chats and push tokens.
+    </p>
+  </div>
+
+  <p style="margin-top: 32px; font-size: 13px;">
+    <a href="/datenschutz/">→ Datenschutzerklärung</a> &nbsp;·&nbsp; <a href="/impressum/">→ Impressum</a>
+  </p>
+</main>
+</body>
+</html>
