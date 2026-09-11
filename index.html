@@ -973,6 +973,15 @@
   @keyframes lv-float-slow { 0%, 100% { transform: translate(0,0) scale(1); } 33% { transform: translate(40px,-60px) scale(1.08); } 66% { transform: translate(-30px,40px) scale(0.95); } }
   @keyframes lv-float-blob { 0%, 100% { transform: translate(0,0) rotate(0deg); } 50% { transform: translate(-80px,-50px) rotate(180deg); } }
   @media (prefers-reduced-motion: reduce) { .lv-aurora__blob { animation: none; } }
+  /* 12.9.2026 Handy-Ladezeit: 80-px-Filter-Blur auf zwei 600-px-Blobs plus 30+ Backdrop-Blurs
+     sind auf Mobil-GPUs das teuerste Element der Seite (Lesson: Blur > 14 px ruckelt). Auf
+     kleinen Screens Blur halbieren und den Kugel-Backdrop-Blur weglassen — optisch kaum
+     sichtbar, Render-Kosten sinken deutlich. */
+  @media (max-width: 768px) {
+    .lv-aurora__blob { filter: blur(36px); width: 420px; height: 420px; }
+    .sp-pbubble { backdrop-filter: none; -webkit-backdrop-filter: none; }
+    .bubble.glow { box-shadow: none; }
+  }
   .lv-scroll-progress { position: fixed; top: 0; left: 0; right: 0; height: 3px; z-index: 200; background: linear-gradient(90deg, #8B5CF6, #EC4899, #06B6D4); transform: scaleX(0); transform-origin: 0 0; transition: transform 0.1s linear; pointer-events: none; }
 
   /* ============ Reveal (scroll-triggered) ============ */
@@ -2748,11 +2757,27 @@
           div.style.animation = anim + ' ' + dur + 's ease-in-out infinite ' + delay + 's';
         }
         if (pod.cover_url) {
+          // 12.9.2026 (Michael: "die Seite lädt extrem lang am Handy"): die Cover kamen als
+          // Original-Artwork (3000x3000, ~1 MB je Kugel, 12 Kugeln) für 56-px-Kreise.
+          // letscast liefert eine 300x300-Variante (wie thumbUrl in der App), alle anderen
+          // Hosts über wsrv.nl (200 px WebP, ~10 KB). Fällt das Thumbnail aus → Original.
           var img = document.createElement('img');
-          img.src = pod.cover_url;
+          var original = pod.cover_url;
+          var thumb = original;
+          if (/lcdn\.letscast\.fm\//.test(original)) {
+            thumb = original.replace(/artwork-\d+x\d+\./, 'artwork-300x300.');
+          } else if (/^https:\/\//.test(original)) {
+            thumb = 'https://wsrv.nl/?url=' + encodeURIComponent(original.replace(/^https?:\/\//, '')) + '&w=200&h=200&fit=cover&output=webp';
+          }
+          img.src = thumb;
           img.alt = pod.title || 'Podcast-Cover';
           img.loading = 'lazy';
-          img.onerror = function() { div.removeChild(img); div.textContent = '🎙'; };
+          img.decoding = 'async';
+          img.width = 200; img.height = 200;
+          img.onerror = function() {
+            if (img.src !== original) { img.src = original; return; }
+            div.removeChild(img); div.textContent = '🎙';
+          };
           div.appendChild(img);
         } else {
           div.textContent = '🎙';
