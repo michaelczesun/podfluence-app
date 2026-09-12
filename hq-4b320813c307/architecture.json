@@ -156,6 +156,12 @@
           "label": "Ads",
           "panels": ["ads-manager"],
           "new": true
+        },
+        {
+          "key": "hozdcast",
+          "label": "hozd-cast",
+          "panels": ["hozdcast-sessions", "hozdcast-render-queue", "hozdcast-moderation"],
+          "new": true
         }
       ]
     },
@@ -188,7 +194,7 @@
         {
           "key": "kosten",
           "label": "Kosten",
-          "panels": ["cost-overview"],
+          "panels": ["cost-overview", "hozdcast-storage"],
           "new": true
         },
         {
@@ -273,6 +279,10 @@
     "tasks-inbox": "system/tasks",
     "team-management": "people/team",
     "app-settings": "system/settings",
-    "settings": "system/settings"
+    "settings": "system/settings",
+    "hozdcast-sessions": "content/hozdcast",
+    "hozdcast-render-queue": "content/hozdcast",
+    "hozdcast-moderation": "content/hozdcast",
+    "hozdcast-storage": "system/kosten"
   }
 }

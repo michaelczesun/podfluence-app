@@ -412,6 +412,33 @@
           "support": "r",
           "mod": "r",
           "marketing": "r"
+        },
+        "hozdcast-sessions": {
+          "label": "hozd-cast Sessions",
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "r",
+          "support": "r",
+          "mod": "deny",
+          "marketing": "deny"
+        },
+        "hozdcast-render-queue": {
+          "label": "hozd-cast Render-Queue",
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "r",
+          "support": "r",
+          "mod": "deny",
+          "marketing": "deny"
+        },
+        "hozdcast-moderation": {
+          "label": "hozd-cast Moderation",
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "r",
+          "support": "r",
+          "mod": "rw",
+          "marketing": "deny"
         }
       }
     },
@@ -465,6 +492,15 @@
         },
         "storage-ops": {
           "label": "Storage & Ops",
+          "owner": "rw",
+          "admin": "rw",
+          "manager": "r",
+          "support": "deny",
+          "mod": "deny",
+          "marketing": "deny"
+        },
+        "hozdcast-storage": {
+          "label": "hozd-cast Speicher & Kosten",
           "owner": "rw",
           "admin": "rw",
           "manager": "r",

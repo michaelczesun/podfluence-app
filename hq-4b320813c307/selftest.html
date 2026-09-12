@@ -34,7 +34,10 @@
   <script type="module">
     const PANELS = [
       // Nur die 5 Top-Tab-Bundles (mounten je Sub-Panels intern):
-      '_tab-pulse','_tab-people','_tab-growth','_tab-content','_tab-system'
+      '_tab-pulse','_tab-people','_tab-growth','_tab-content','_tab-system',
+      // hozd-cast (2026-09-12, Paket F) — einzeln, da noch nicht in jedem
+      // Bundle verdrahtet (siehe architecture.json panelMigration):
+      'hozdcast-sessions','hozdcast-render-queue','hozdcast-moderation','hozdcast-storage'
     ]
 
     // Zusätzliche Pages, die via Iframe getestet werden (kein Module-Mount):
