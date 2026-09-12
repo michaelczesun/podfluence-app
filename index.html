@@ -9,16 +9,20 @@
 <link rel="canonical" href="https://hozd.app/" />
 <meta property="og:title" content="hozd — die soziale Podcast-App" />
 <meta property="og:description" content="Die soziale Podcast-App. Hör, kommentier, vernetz dich. iOS + Android als Beta — online ab 31.05.2026 auf hozd.app." />
-<meta property="og:image" content="https://media.giphy.com/media/3o6Zt6ML6BklcajjsA/giphy.gif" />
+<meta property="og:image" content="https://hozd.app/i/og-image.png" />
+<meta property="og:image:width" content="1024" />
+<meta property="og:image:height" content="500" />
 <meta property="og:url" content="https://hozd.app/" />
 <meta property="og:site_name" content="hozd" />
 <meta property="og:type" content="website" />
 <meta name="twitter:card" content="summary_large_image" />
 <meta name="twitter:title" content="hozd — die soziale Podcast-App · hozd.app" />
 <meta name="twitter:description" content="Hör, kommentier, vernetz dich. Beta-Download für iOS + Android." />
-<meta name="twitter:image" content="https://media.giphy.com/media/3o6Zt6ML6BklcajjsA/giphy.gif" />
+<meta name="twitter:image" content="https://hozd.app/i/og-image.png" />
 <meta name="theme-color" content="#0B0B0F" />
-<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='80' font-size='80'%3E🎧%3C/text%3E%3C/svg%3E" />
+<link rel="icon" type="image/png" sizes="32x32" href="/i/favicon-32.png" />
+<link rel="icon" type="image/png" sizes="64x64" href="/i/favicon-64.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="/i/apple-touch-icon.png" />
 <style>
   :root {
     --bg: #0B0B0F;
@@ -927,6 +931,7 @@
     h1 { font-size: 60px; }
     .tagline { font-size: 19px; max-width: 480px; }
     .logo { width: 110px; height: 110px; font-size: 56px; border-radius: 30px; }
+.logo img { width: 100%; height: 100%; border-radius: 30px; display: block; object-fit: cover; }
     .cards { flex-direction: row; gap: 14px; }
     .cards .card { flex: 1; }
     .platform-hint, .install-note { width: 100%; }
@@ -1065,7 +1070,8 @@
   <section class="hero">
     <div class="logo-wrap">
       <div class="logo-glow"></div>
-      <div class="logo">🎧</div>
+      <!-- 12.9.2026: echtes App-Icon (Bubble Pro) statt Emoji, Quelle expo/assets/images/icon.png -->
+      <div class="logo"><img src="/i/hozd-icon-512.png" alt="hozd App-Icon" width="110" height="110" /></div>
     </div>
     <h1 data-i18n="hero.title">hozd</h1>
     <div class="hero-live" id="hero-live" hidden>
